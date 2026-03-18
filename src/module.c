@@ -29,9 +29,9 @@ static fe_Object* load_module(fe_Context *ctx, fe_Object *args, int is_local) {
 
   /* 2. Construction du chemin */
   if (is_local) {
-    sprintf(file_path, "./%s.fe", path_buf);
+    sprintf(file_path, "./%s.gjs", path_buf);
   } else {
-    sprintf(file_path, "/usr/local/lib/goscript/%s.fe", path_buf);
+    sprintf(file_path, "/usr/local/lib/goscript/%s.gjs", path_buf);
   }
 
   /* 3. Ouverture */

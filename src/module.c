@@ -1,3 +1,7 @@
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+
 static fe_Object* load_module(fe_Context *ctx, fe_Object *args, int is_local) {
   /* Récupérer le premier argument (symbole ou string) */
   fe_Object *arg = fe_nextarg(ctx, &args);

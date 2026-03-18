@@ -23,6 +23,10 @@
 #include <string.h>
 #include "fe.h"
 
+extern fe_Object* f_use(fe_Context *ctx, fe_Object *args);
+extern fe_Object* f_nm(fe_Context *ctx, fe_Object *args);
+
+
 #define unused(x)     ( (void) (x) )
 #define car(x)        ( (x)->car.o )
 #define cdr(x)        ( (x)->cdr.o )

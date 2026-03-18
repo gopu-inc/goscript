@@ -7,7 +7,7 @@ typedef enum {
     TOKEN_USE, TOKEN_EXPORT, TOKEN_IF, TOKEN_ELSE, TOKEN_ASYNC, TOKEN_AWAIT,
     TOKEN_WHILE, TOKEN_FOR, TOKEN_RETURN,
     TOKEN_TRUE, TOKEN_FALSE,  // <-- AJOUTER CES LIGNES
-    TOKEN_NIL,                 // Optionnel
+    TOKEN_NIL, TOKEN_RETURN,                // Optionnel
     
     // Identifiants et valeurs
     TOKEN_IDENTIFIER, TOKEN_STRING, TOKEN_NUMBER,

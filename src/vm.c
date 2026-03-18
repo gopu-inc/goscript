@@ -334,30 +334,23 @@ static void execute_statement(VM* vm, Node* node) {
             break;
         }
         
-        case NODE_FOR_STMT: {
-            if (node->left) {
-                execute_statement(vm, node->left);
-            }
-            
-            Node* for_extra = node->extra;
-            
-            while (!vm->had_error && !vm->return_flag) {
-                double condition = 1.0;
-                if (node->right) {
-                    condition = evaluate(vm, node->right);
-                }
-                if (condition == 0) break;
-                
-                if (for_extra && for_extra->left) {
-                    execute_statement(vm, for_extra->left);
-                }
-                
-                if (for_extra && for_extra->right) {
-                    evaluate(vm, for_extra->right);
-                }
-            }
-            break;
+case NODE_FOR_STMT: {
+    if (node->left) execute_statement(vm, node->left); // Initialiseur
+
+    while (!vm->had_error && !vm->return_flag) {
+        if (node->right) { // Condition
+            if (evaluate(vm, node->right) == 0) break;
         }
+
+        execute_statement(vm, node->extra); // LE CORPS DU FOR (souvent stocké dans extra ou body)
+
+        if (node->extra && node->extra->right) { // Incrément
+            evaluate(vm, node->extra->right);
+        }
+    }
+    break;
+}
+
         
         case NODE_RETURN_STMT: {
             if (node->left) {

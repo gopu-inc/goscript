@@ -808,6 +808,10 @@ fe_Context* fe_open(void *ptr, int size) {
     ctx->freelist = obj;
   }
 
+   /* gestion de import de module complet: */
+  fe_set(ctx, fe_symbol(ctx, "use"), fe_cfunc(ctx, f_use));
+  fe_set(ctx, fe_symbol(ctx, "nm"),  fe_cfunc(ctx, f_nm));
+
   /* init objects */
   ctx->t = fe_symbol(ctx, "t");
   fe_set(ctx, ctx->t, ctx->t);

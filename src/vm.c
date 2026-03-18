@@ -414,70 +414,70 @@ static void execute_statement(VM* vm, Node* node) {
             break;
         }
         
-        case NODE_FUNCTION_CALL: {
-            // Find function
-            Function* func = vm->functions;
-            while (func) {
-                if (strcmp(func->name, node->data.identifier) == 0) break;
-                func = func->next;
-            }
-            
-            if (!func) {
-                fprintf(stderr, "Error: Undefined function '%s'\n", node->data.identifier);
-                vm->had_error = true;
-                break;
-            }
-            
-            // Create new frame for local variables
-            Frame frame;
-            frame.locals = (Value*)allocate(sizeof(Value) * LOCALS_MAX);
-            frame.local_count = 0;
-            frame.parent = vm->current_frame;
-            
-            vm->current_frame = &frame;
-            
-            // Pass arguments
-            Node* arg = node->left;
-            Node* param = func->params;
-            
-            while (arg && param) {
-                double arg_value = evaluate(vm, arg);
-                
-                Value val;
-                val.type = TYPE_NUMBER;
-                val.value.number = arg_value;
-                val.is_initialized = true;
-                
-                // Add to frame locals
-                frame.locals[frame.local_count] = val;
-                frame.locals[frame.local_count].name = strdup(param->data.identifier);
-                frame.local_count++;
-                
-                arg = arg->right;
-                param = param->right;
-            }
-            
-            // Execute function body
-            vm->return_flag = false;
-            execute_statement(vm, func->body);
-            
-            // Clean up frame
-            for (int i = 0; i < frame.local_count; i++) {
-                if (frame.locals[i].name) free(frame.locals[i].name);
-            }
-            free(frame.locals);
-            
-            vm->current_frame = frame.parent;
-            
-            // Push return value
-            if (vm->return_flag) {
-                push(vm, vm->return_value);
-                vm->return_flag = false;
-            } else {
-                push(vm, 0);
-            }
-            break;
-        }
+case NODE_FUNCTION_CALL: {
+    // Find function
+    Function* func = vm->functions;
+    while (func) {
+        if (strcmp(func->name, node->data.identifier) == 0) break;
+        func = func->next;
+    }
+    
+    if (!func) {
+        fprintf(stderr, "Error: Undefined function '%s'\n", node->data.identifier);
+        vm->had_error = true;
+        break;
+    }
+    
+    // Create new frame for local variables
+    Frame frame;
+    frame.locals = (Value*)allocate(sizeof(Value) * LOCALS_MAX);
+    frame.local_count = 0;
+    frame.parent = vm->current_frame;
+    
+    vm->current_frame = &frame;
+    
+    // Pass arguments
+    Node* arg = node->left;
+    Node* param = func->params;
+    
+    while (arg && param) {
+        double arg_value = evaluate(vm, arg);
+        
+        Value val;
+        val.type = TYPE_NUMBER;
+        val.value.number = arg_value;
+        val.is_initialized = true;
+        val.name = strdup(param->data.identifier);  // Ajouter le nom
+        
+        frame.locals[frame.local_count] = val;
+        frame.local_count++;
+        
+        arg = arg->right;
+        param = param->right;
+    }
+    
+    // Execute function body
+    vm->return_flag = false;
+    vm->return_value = 0;  // Initialiser la valeur de retour
+    execute_statement(vm, func->body);
+    
+    // Clean up frame
+    for (int i = 0; i < frame.local_count; i++) {
+        if (frame.locals[i].name) free(frame.locals[i].name);
+    }
+    free(frame.locals);
+    
+    vm->current_frame = frame.parent;
+    
+    // Push return value
+    if (vm->return_flag) {
+        push(vm, vm->return_value);
+        vm->return_flag = false;
+    } else {
+        push(vm, 0);
+    }
+    break;
+}
         
         default:
             // Ignore other types

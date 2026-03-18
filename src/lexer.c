@@ -103,24 +103,7 @@ static TokenType identifier_type() {
                 }
             }
             break;
-        case 'r':
-            if (scanner.current - scanner.start > 1) {
-                switch (scanner.start[1]) {
-                    case 'n':  // <---  important
-                        if (scanner.current - scanner.start == 2) {
-                            return TOKEN_RN;  // "rn"
-                        }
-                        break;
-                    case 'e':
-                        if (scanner.current - scanner.start > 2) {
-                            if (strncmp(scanner.start, "return", 6) == 0) {
-                                return TOKEN_RETURN;  // garder "return" aussi
-                            }
-                        }
-                        break;
-                }
-            }
-            break;
+            
         case 'c':
             if (scanner.current - scanner.start > 1) {
                 switch (scanner.start[1]) {
@@ -136,6 +119,7 @@ static TokenType identifier_type() {
                 }
             }
             break;
+            
         case 'e':
             if (scanner.current - scanner.start > 1) {
                 switch (scanner.start[1]) {
@@ -144,29 +128,106 @@ static TokenType identifier_type() {
                 }
             }
             break;
+            
         case 'f':
             if (scanner.current - scanner.start > 1) {
                 switch (scanner.start[1]) {
-                    case 'n': return check_keyword(2, 0, "", TOKEN_FN);
+                    case 'n': 
+                        if (scanner.current - scanner.start == 2) {
+                            return TOKEN_FN;  // "fn"
+                        }
+                        break;
                     case 'o': return check_keyword(2, 1, "r", TOKEN_FOR);
+                    case 'a': return check_keyword(2, 4, "lse", TOKEN_FALSE);
                 }
             }
             break;
-        case 'g': return check_keyword(1, 4, "etlf", TOKEN_GETLF);
+            
+        case 'g':
+            if (scanner.current - scanner.start > 1) {
+                if (strncmp(scanner.start, "getlf", 5) == 0) {
+                    return TOKEN_GETLF;
+                }
+            }
+            break;
+            
         case 'i':
             if (scanner.current - scanner.start > 1) {
                 switch (scanner.start[1]) {
-                    case 'f': return check_keyword(2, 0, "", TOKEN_IF);
+                    case 'f': 
+                        if (scanner.current - scanner.start == 2) {
+                            return TOKEN_IF;  // "if"
+                        }
+                        break;
                     case 'n': return check_keyword(2, 3, "put", TOKEN_INPUT);
                 }
             }
             break;
-        case 'l': return check_keyword(1, 2, "et", TOKEN_LET);
-        case 'p': return check_keyword(1, 4, "rint", TOKEN_PRINT);
-        case 'r': return check_keyword(1, 5, "eturn", TOKEN_RETURN);
-        case 'u': return check_keyword(1, 2, "se", TOKEN_USE);
-        case 'w': return check_keyword(1, 4, "hile", TOKEN_WHILE);
+            
+        case 'l':
+            if (scanner.current - scanner.start > 1) {
+                if (strncmp(scanner.start, "let", 3) == 0) {
+                    return TOKEN_LET;
+                }
+            }
+            break;
+            
+        case 'p':
+            if (scanner.current - scanner.start > 1) {
+                if (strncmp(scanner.start, "print", 5) == 0) {
+                    return TOKEN_PRINT;
+                }
+            }
+            break;
+            
+        case 'r':
+            if (scanner.current - scanner.start > 1) {
+                switch (scanner.start[1]) {
+                    case 'n':  // "rn" - mot-clé de retour
+                        if (scanner.current - scanner.start == 2) {
+                            return TOKEN_RN;
+                        }
+                        break;
+                    case 'e':
+                        if (scanner.current - scanner.start > 2) {
+                            if (strncmp(scanner.start, "return", 6) == 0) {
+                                return TOKEN_RETURN;
+                            }
+                        }
+                        break;
+                }
+            }
+            break;
+            
+        case 't':
+            if (scanner.current - scanner.start > 1) {
+                if (scanner.start[1] == 'r' && scanner.current - scanner.start > 2) {
+                    if (scanner.start[2] == 'u' && scanner.current - scanner.start > 3) {
+                        if (scanner.start[3] == 'e') {
+                            return TOKEN_TRUE;
+                        }
+                    }
+                }
+            }
+            break;
+            
+        case 'u':
+            if (scanner.current - scanner.start > 1) {
+                if (strncmp(scanner.start, "use", 3) == 0) {
+                    return TOKEN_USE;
+                }
+            }
+            break;
+            
+        case 'w':
+            if (scanner.current - scanner.start > 1) {
+                if (strncmp(scanner.start, "while", 5) == 0) {
+                    return TOKEN_WHILE;
+                }
+            }
+            break;
     }
+    
     return TOKEN_IDENTIFIER;
 }
 
@@ -193,11 +254,18 @@ static Token string() {
         advance();
     }
     
-    if (is_at_end()) return error_token("Chaîne non terminée");
+    if (is_at_end()) {
+        return error_token("Unterminated string");
+    }
     
     // Le guillemet fermant
     advance();
-    return make_token(TOKEN_STRING);
+    
+    Token token = make_token(TOKEN_STRING);
+    // Ajuster pour enlever les guillemets
+    token.start++;
+    token.length -= 2;
+    return token;
 }
 
 Token scan_token() {
@@ -226,18 +294,26 @@ Token scan_token() {
         case '-': return make_token(TOKEN_MINUS);
         case '*': return make_token(TOKEN_STAR);
         case '/': return make_token(TOKEN_SLASH);
-        case '!': return make_token(match('=') ? TOKEN_BANG_EQUAL : TOKEN_BANG);
-        case '=': return make_token(match('=') ? TOKEN_EQUAL_EQUAL : TOKEN_EQUAL);
-        case '<': return make_token(match('=') ? TOKEN_LESS_EQUAL : TOKEN_LESS);
-        case '>': return make_token(match('=') ? TOKEN_GREATER_EQUAL : TOKEN_GREATER);
-        case '"': {
-            Token str = string();
-            // Enlève les guillemets pour le stockage
-            str.start++;
-            str.length -= 2;
-            return str;
-        }
+        
+        case '!':
+            if (match('=')) return make_token(TOKEN_BANG_EQUAL);
+            return make_token(TOKEN_BANG);
+            
+        case '=':
+            if (match('=')) return make_token(TOKEN_EQUAL_EQUAL);
+            return make_token(TOKEN_EQUAL);
+            
+        case '<':
+            if (match('=')) return make_token(TOKEN_LESS_EQUAL);
+            return make_token(TOKEN_LESS);
+            
+        case '>':
+            if (match('=')) return make_token(TOKEN_GREATER_EQUAL);
+            return make_token(TOKEN_GREATER);
+            
+        case '"':
+            return string();
     }
     
-    return error_token("Caractère inattendu");
+    return error_token("Unexpected character");
 }

@@ -1,7 +1,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include "fe.h"
+#include "gsc.h"
 
 static fe_Object* load_module(fe_Context *ctx, fe_Object *args, int is_local) {
   fe_Object *arg = fe_nextarg(ctx, &args);

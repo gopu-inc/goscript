@@ -21,7 +21,7 @@
 */
 
 #include <string.h>
-#include "fe.h"
+#include "gsc.h"
 
 extern fe_Object* f_use(fe_Context *ctx, fe_Object *args);
 extern fe_Object* f_nm(fe_Context *ctx, fe_Object *args);

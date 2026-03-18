@@ -227,6 +227,7 @@ case NODE_FUNCTION_CALL: {
     }
     return 0;
 }
+    }
         }
         
         default:

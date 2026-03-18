@@ -46,6 +46,17 @@ struct gs_Object {
     gs_Value car;
     gs_Value cdr;
 };
+// Ajouter cette structure et fonction en haut du fichier, après les includes
+struct StringReader {
+    const char *p;
+};
+
+static char string_read_char(gs_Context *ctx, void *udata) {
+    (void)ctx;
+    struct StringReader *r = (struct StringReader*)udata;
+    return *r->p ? *r->p++ : EOF;
+}
+
 
 // Marqueur de bit pour le GC
 #define GC_MARK_BIT 0x2
@@ -688,9 +699,10 @@ gs_Object* gs_read(gs_Context *ctx, char (*read_fn)(gs_Context*, void*), void *u
 }
 
 gs_Object* gs_read_string(gs_Context *ctx, const char *input) {
-    struct StringReader {
-        const char *p;
-    } reader = { input };
+    struct StringReader reader;
+    reader.p = input;
+    return gs_read(ctx, string_read_char, &reader);
+}
     
     char read_char(gs_Context *ctx, void *udata) {
         (void)ctx;

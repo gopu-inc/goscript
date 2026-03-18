@@ -7,20 +7,11 @@
 #include <string.h>
 #include <stdint.h>
 #include <ctype.h>
+#include <math.h>
 
-// Inclusion de ton système de tokens
 #include "token.h"
 
-// Définitions de structures globales partagées
-typedef struct {
-    char* source;
-    size_t length;
-    int line;
-} GOScriptContext;
-
-// Prototypes généraux partagés
 void error(const char* message, int line);
 void* allocate(size_t size);
 
 #endif
-

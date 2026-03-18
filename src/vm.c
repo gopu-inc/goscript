@@ -5,6 +5,13 @@
 #include <string.h>
 
 //------------------------------------------------------------------------------
+// Forward declarations
+//------------------------------------------------------------------------------
+
+static void execute_statement(VM* vm, Node* node);
+static double evaluate(VM* vm, Node* node);
+
+//------------------------------------------------------------------------------
 // Initialization and cleanup
 //------------------------------------------------------------------------------
 
@@ -206,7 +213,6 @@ static double evaluate(VM* vm, Node* node) {
         }
         
         case NODE_FUNCTION_CALL: {
-            // Push return value from function call
             execute_statement(vm, node);
             if (vm->stack_top > 0) {
                 return pop(vm);

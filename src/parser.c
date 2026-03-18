@@ -12,14 +12,16 @@ typedef struct {
 
 static Parser parser;
 
+// Forward declarations
 static void advance();
 static void consume(TokenType type, const char* message);
 static bool match(TokenType type);
 static bool check(TokenType type);
 static void error_at_current(const char* message);
+static void error_at_previous(const char* message);
 static void synchronize();
 
-// Fonctions de parsing par niveau de précédence
+// Expression parsing
 static Node* expression();
 static Node* assignment();
 static Node* equality();
@@ -29,22 +31,30 @@ static Node* factor();
 static Node* unary();
 static Node* call();
 static Node* primary();
+static Node* finish_call(Node* callee);
 
-// Déclarations et statements
+// Declarations and statements
 static Node* declaration();
-static Node* statement();
+static Node* function_declaration();
 static Node* var_declaration();
+static Node* statement();
+static Node* expr_statement();
 static Node* print_statement();
 static Node* getlf_statement();
 static Node* input_statement();
 static Node* if_statement();
 static Node* while_statement();
 static Node* for_statement();
-static Node* block_statement();
 static Node* return_statement();
-static Node* function_declaration();
-static Node* function_call(Token name);
-static Node* arguments();
+static Node* block_statement();
+static Node* import_statement();
+
+// Helper functions
+static const char* token_type_to_string(TokenType type);
+
+//------------------------------------------------------------------------------
+// Lexical helpers
+//------------------------------------------------------------------------------
 
 static void advance() {
     parser.previous = parser.current;
@@ -76,13 +86,41 @@ static bool check(TokenType type) {
     return parser.current.type == type;
 }
 
+//------------------------------------------------------------------------------
+// Error handling (ONLY in English, only when errors occur)
+//------------------------------------------------------------------------------
+
 static void error_at_current(const char* message) {
     if (parser.panic_mode) return;
     parser.panic_mode = true;
     
-    fprintf(stderr, "[Erreur] Ligne %d: ", parser.current.line);
-    fprintf(stderr, "%s\n", message);
+    fprintf(stderr, "Error at line %d", parser.current.line);
     
+    if (parser.current.type == TOKEN_EOF) {
+        fprintf(stderr, " at end of file");
+    } else if (parser.current.type == TOKEN_ERROR) {
+        // Nothing
+    } else {
+        fprintf(stderr, " at '%.*s'", parser.current.length, parser.current.start);
+    }
+    
+    fprintf(stderr, ": %s\n", message);
+    parser.had_error = true;
+}
+
+static void error_at_previous(const char* message) {
+    if (parser.panic_mode) return;
+    parser.panic_mode = true;
+    
+    fprintf(stderr, "Error at line %d", parser.previous.line);
+    
+    if (parser.previous.type == TOKEN_EOF) {
+        fprintf(stderr, " at end of file");
+    } else {
+        fprintf(stderr, " at '%.*s'", parser.previous.length, parser.previous.start);
+    }
+    
+    fprintf(stderr, ": %s\n", message);
     parser.had_error = true;
 }
 
@@ -93,7 +131,6 @@ static void synchronize() {
         if (parser.previous.type == TOKEN_SEMICOLON) return;
         
         switch (parser.current.type) {
-            case TOKEN_CLASS:
             case TOKEN_FN:
             case TOKEN_LET:
             case TOKEN_CONST:
@@ -103,6 +140,7 @@ static void synchronize() {
             case TOKEN_PRINT:
             case TOKEN_GETLF:
             case TOKEN_RETURN:
+            case TOKEN_USE:
                 return;
             default:
                 break;
@@ -112,7 +150,10 @@ static void synchronize() {
     }
 }
 
-// Parsing des expressions avec précédence
+//------------------------------------------------------------------------------
+// Expression parsing (with precedence)
+//------------------------------------------------------------------------------
+
 static Node* expression() {
     return assignment();
 }
@@ -121,15 +162,13 @@ static Node* assignment() {
     Node* expr = equality();
     
     if (match(TOKEN_EQUAL)) {
-        Token equals = parser.previous;
         Node* value = assignment();
         
         if (expr->type == NODE_VARIABLE) {
-            Token name = parser.previous;
             return create_assignment(expr->data.identifier, value);
         }
         
-        error_at_current("Cible d'affectation invalide");
+        error_at_previous("Invalid assignment target");
         return expr;
     }
     
@@ -140,9 +179,14 @@ static Node* equality() {
     Node* expr = comparison();
     
     while (match(TOKEN_BANG_EQUAL) || match(TOKEN_EQUAL_EQUAL)) {
-        char op = parser.previous.type == TOKEN_BANG_EQUAL ? '!' : '=';
+        TokenType op = parser.previous.type;
         Node* right = comparison();
-        expr = create_binary_op(op, expr, right);
+        
+        if (op == TOKEN_BANG_EQUAL) {
+            expr = create_binary_op('!', expr, right);
+        } else {
+            expr = create_binary_op('=', expr, right);
+        }
     }
     
     return expr;
@@ -153,12 +197,19 @@ static Node* comparison() {
     
     while (match(TOKEN_GREATER) || match(TOKEN_GREATER_EQUAL) ||
            match(TOKEN_LESS) || match(TOKEN_LESS_EQUAL)) {
-        char op = parser.previous.start[0];
-        if (parser.previous.type == TOKEN_GREATER_EQUAL) op = 'g'; // g pour >=
-        else if (parser.previous.type == TOKEN_LESS_EQUAL) op = 'l'; // l pour <=
         
+        TokenType op = parser.previous.type;
         Node* right = term();
-        expr = create_binary_op(op, expr, right);
+        
+        if (op == TOKEN_GREATER) {
+            expr = create_binary_op('>', expr, right);
+        } else if (op == TOKEN_GREATER_EQUAL) {
+            expr = create_binary_op('g', expr, right); // g for >=
+        } else if (op == TOKEN_LESS) {
+            expr = create_binary_op('<', expr, right);
+        } else {
+            expr = create_binary_op('l', expr, right); // l for <=
+        }
     }
     
     return expr;
@@ -168,9 +219,14 @@ static Node* term() {
     Node* expr = factor();
     
     while (match(TOKEN_MINUS) || match(TOKEN_PLUS)) {
-        char op = parser.previous.type == TOKEN_PLUS ? '+' : '-';
+        TokenType op = parser.previous.type;
         Node* right = factor();
-        expr = create_binary_op(op, expr, right);
+        
+        if (op == TOKEN_PLUS) {
+            expr = create_binary_op('+', expr, right);
+        } else {
+            expr = create_binary_op('-', expr, right);
+        }
     }
     
     return expr;
@@ -180,9 +236,14 @@ static Node* factor() {
     Node* expr = unary();
     
     while (match(TOKEN_SLASH) || match(TOKEN_STAR)) {
-        char op = parser.previous.type == TOKEN_STAR ? '*' : '/';
+        TokenType op = parser.previous.type;
         Node* right = unary();
-        expr = create_binary_op(op, expr, right);
+        
+        if (op == TOKEN_STAR) {
+            expr = create_binary_op('*', expr, right);
+        } else {
+            expr = create_binary_op('/', expr, right);
+        }
     }
     
     return expr;
@@ -190,9 +251,14 @@ static Node* factor() {
 
 static Node* unary() {
     if (match(TOKEN_BANG) || match(TOKEN_MINUS)) {
-        char op = parser.previous.type == TOKEN_BANG ? '!' : '-';
+        TokenType op = parser.previous.type;
         Node* right = unary();
-        return create_unary_op(op, right);
+        
+        if (op == TOKEN_BANG) {
+            return create_unary_op('!', right);
+        } else {
+            return create_unary_op('-', right);
+        }
     }
     
     return call();
@@ -203,7 +269,7 @@ static Node* call() {
     
     while (true) {
         if (match(TOKEN_LPAREN)) {
-            expr = function_call(parser.previous);
+            expr = finish_call(expr);
         } else {
             break;
         }
@@ -212,41 +278,39 @@ static Node* call() {
     return expr;
 }
 
-static Node* function_call(Token name) {
-    Node* args = arguments();
-    consume(TOKEN_RPAREN, "Attendu ')' après les arguments.");
+static Node* finish_call(Node* callee) {
+    Node* args = NULL;
+    Node* current = NULL;
     
-    // Extraire le nom de la fonction de l'expression primaire
-    char* func_name = NULL;
-    if (name.type == TOKEN_IDENTIFIER) {
-        func_name = (char*)allocate(name.length + 1);
-        memcpy(func_name, name.start, name.length);
-        func_name[name.length] = '\0';
+    if (!check(TOKEN_RPAREN)) {
+        do {
+            Node* arg = expression();
+            
+            if (!args) {
+                args = arg;
+                current = arg;
+            } else {
+                current->right = arg;
+                current = arg;
+            }
+        } while (match(TOKEN_COMMA));
     }
     
-    return create_function_call(func_name, args);
-}
-
-static Node* arguments() {
-    if (check(TOKEN_RPAREN)) return NULL;
+    consume(TOKEN_RPAREN, "Expected ')' after arguments.");
     
-    Node* args = expression();
-    Node* current = args;
-    
-    while (match(TOKEN_COMMA)) {
-        Node* next_arg = expression();
-        if (current) {
-            current->right = next_arg;
-            current = next_arg;
-        }
+    // Create call node - callee should be a variable node
+    if (callee->type == NODE_VARIABLE) {
+        return create_function_call(callee->data.identifier, args);
+    } else {
+        error_at_previous("Can only call functions");
+        return create_number(0);
     }
-    
-    return args;
 }
 
 static Node* primary() {
     if (match(TOKEN_FALSE)) return create_bool(false);
     if (match(TOKEN_TRUE)) return create_bool(true);
+    if (match(TOKEN_NIL)) return create_number(0); // nil = 0 for now
     
     if (match(TOKEN_NUMBER)) {
         double value = strtod(parser.previous.start, NULL);
@@ -269,36 +333,17 @@ static Node* primary() {
     
     if (match(TOKEN_LPAREN)) {
         Node* expr = expression();
-        consume(TOKEN_RPAREN, "Attendu ')' après l'expression.");
+        consume(TOKEN_RPAREN, "Expected ')' after expression.");
         return create_grouping(expr);
     }
     
-    error_at_current("Attendu une expression.");
+    error_at_current("Expected expression");
     return create_number(0);
 }
 
-static Node* declaration() {
-    if (match(TOKEN_FN)) return function_declaration();
-    if (match(TOKEN_LET)) return var_declaration();
-    
-    return statement();
-}
-
-static Node* var_declaration() {
-    consume(TOKEN_IDENTIFIER, "Attendu un nom de variable.");
-    
-    char* name = (char*)allocate(parser.previous.length + 1);
-    memcpy(name, parser.previous.start, parser.previous.length);
-    name[parser.previous.length] = '\0';
-    
-    Node* initializer = NULL;
-    if (match(TOKEN_EQUAL)) {
-        initializer = expression();
-    }
-    
-    consume(TOKEN_SEMICOLON, "Attendu ';' après la déclaration de variable.");
-    return create_var_decl(name, initializer);
-}
+//------------------------------------------------------------------------------
+// Statement parsing
+//------------------------------------------------------------------------------
 
 static Node* statement() {
     if (match(TOKEN_PRINT)) return print_statement();
@@ -308,49 +353,52 @@ static Node* statement() {
     if (match(TOKEN_WHILE)) return while_statement();
     if (match(TOKEN_FOR)) return for_statement();
     if (match(TOKEN_RETURN)) return return_statement();
+    if (match(TOKEN_USE)) return import_statement();
     if (match(TOKEN_LBRACE)) return block_statement();
     
-    return expression_statement();
+    return expr_statement();
 }
 
-static Node* expression_statement() {
+static Node* expr_statement() {
     Node* expr = expression();
-    consume(TOKEN_SEMICOLON, "Attendu ';' après l'expression.");
+    consume(TOKEN_SEMICOLON, "Expected ';' after expression.");
     return create_expression_stmt(expr);
 }
 
 static Node* print_statement() {
-    consume(TOKEN_LPAREN, "Attendu '(' après print.");
+    consume(TOKEN_LPAREN, "Expected '(' after 'print'.");
     Node* expr = expression();
-    consume(TOKEN_RPAREN, "Attendu ')' après la valeur à afficher.");
-    consume(TOKEN_SEMICOLON, "Attendu ';' après print.");
+    consume(TOKEN_RPAREN, "Expected ')' after value to print.");
+    consume(TOKEN_SEMICOLON, "Expected ';' after 'print'.");
     return create_print(expr);
 }
 
 static Node* getlf_statement() {
-    consume(TOKEN_LPAREN, "Attendu '(' après getlf.");
+    consume(TOKEN_LPAREN, "Expected '(' after 'getlf'.");
     Node* expr = expression();
-    consume(TOKEN_RPAREN, "Attendu ')' après getlf.");
-    consume(TOKEN_SEMICOLON, "Attendu ';' après getlf.");
+    consume(TOKEN_RPAREN, "Expected ')' after value.");
+    consume(TOKEN_SEMICOLON, "Expected ';' after 'getlf'.");
     return create_getlf(expr);
 }
 
 static Node* input_statement() {
     Node* prompt = NULL;
+    
     if (match(TOKEN_LPAREN)) {
-        if (!match(TOKEN_RPAREN)) {
+        if (!check(TOKEN_RPAREN)) {
             prompt = expression();
-            consume(TOKEN_RPAREN, "Attendu ')' après le prompt.");
         }
+        consume(TOKEN_RPAREN, "Expected ')' after prompt.");
     }
-    consume(TOKEN_SEMICOLON, "Attendu ';' après input.");
+    
+    consume(TOKEN_SEMICOLON, "Expected ';' after 'input'.");
     return create_input(prompt ? prompt->data.string_value : NULL);
 }
 
 static Node* if_statement() {
-    consume(TOKEN_LPAREN, "Attendu '(' après if.");
+    consume(TOKEN_LPAREN, "Expected '(' after 'if'.");
     Node* condition = expression();
-    consume(TOKEN_RPAREN, "Attendu ')' après la condition.");
+    consume(TOKEN_RPAREN, "Expected ')' after condition.");
     
     Node* then_branch = statement();
     Node* else_branch = NULL;
@@ -363,9 +411,9 @@ static Node* if_statement() {
 }
 
 static Node* while_statement() {
-    consume(TOKEN_LPAREN, "Attendu '(' après while.");
+    consume(TOKEN_LPAREN, "Expected '(' after 'while'.");
     Node* condition = expression();
-    consume(TOKEN_RPAREN, "Attendu ')' après la condition.");
+    consume(TOKEN_RPAREN, "Expected ')' after condition.");
     
     Node* body = statement();
     
@@ -373,16 +421,16 @@ static Node* while_statement() {
 }
 
 static Node* for_statement() {
-    consume(TOKEN_LPAREN, "Attendu '(' après for.");
+    consume(TOKEN_LPAREN, "Expected '(' after 'for'.");
     
-    // Initialisation
+    // Initializer
     Node* initializer = NULL;
     if (match(TOKEN_SEMICOLON)) {
-        // Pas d'initialisation
+        // No initializer
     } else if (match(TOKEN_LET)) {
         initializer = var_declaration();
     } else {
-        initializer = expression_statement();
+        initializer = expr_statement();
     }
     
     // Condition
@@ -390,20 +438,29 @@ static Node* for_statement() {
     if (!check(TOKEN_SEMICOLON)) {
         condition = expression();
     }
-    consume(TOKEN_SEMICOLON, "Attendu ';' après la condition de la boucle.");
+    consume(TOKEN_SEMICOLON, "Expected ';' after loop condition.");
     
-    // Incrément
+    // Increment
     Node* increment = NULL;
     if (!check(TOKEN_RPAREN)) {
         increment = expression();
     }
-    consume(TOKEN_RPAREN, "Attendu ')' après les clauses du for.");
+    consume(TOKEN_RPAREN, "Expected ')' after for clauses.");
     
     Node* body = statement();
     
-    // Transformer en while
-    // Pour simplifier, on va retourner un noeud spécial for
     return create_for(initializer, condition, increment, body);
+}
+
+static Node* return_statement() {
+    Node* value = NULL;
+    
+    if (!check(TOKEN_SEMICOLON)) {
+        value = expression();
+    }
+    
+    consume(TOKEN_SEMICOLON, "Expected ';' after return value.");
+    return create_return(value);
 }
 
 static Node* block_statement() {
@@ -413,49 +470,63 @@ static Node* block_statement() {
     while (!check(TOKEN_RBRACE) && !check(TOKEN_EOF)) {
         Node* stmt = declaration();
         
-        if (!statements) {
-            statements = stmt;
-            current = stmt;
-        } else {
-            current->right = stmt;
-            current = stmt;
+        if (stmt) {
+            if (!statements) {
+                statements = stmt;
+                current = stmt;
+            } else {
+                current->right = stmt;
+                current = stmt;
+            }
         }
     }
     
-    consume(TOKEN_RBRACE, "Attendu '}' après le bloc.");
+    consume(TOKEN_RBRACE, "Expected '}' after block.");
     return create_block(statements);
 }
 
-static Node* return_statement() {
-    Node* value = NULL;
-    if (!check(TOKEN_SEMICOLON)) {
-        value = expression();
-    }
-    consume(TOKEN_SEMICOLON, "Attendu ';' après return.");
-    return create_return(value);
+static Node* import_statement() {
+    consume(TOKEN_IDENTIFIER, "Expected module name after 'use'.");
+    consume(TOKEN_SEMICOLON, "Expected ';' after module name.");
+    
+    // For now, just return a no-op
+    return create_expression_stmt(create_number(0));
+}
+
+//------------------------------------------------------------------------------
+// Declaration parsing
+//------------------------------------------------------------------------------
+
+static Node* declaration() {
+    if (match(TOKEN_FN)) return function_declaration();
+    if (match(TOKEN_LET)) return var_declaration();
+    
+    return statement();
 }
 
 static Node* function_declaration() {
-    consume(TOKEN_IDENTIFIER, "Attendu un nom de fonction.");
+    consume(TOKEN_IDENTIFIER, "Expected function name.");
     
     char* name = (char*)allocate(parser.previous.length + 1);
     memcpy(name, parser.previous.start, parser.previous.length);
     name[parser.previous.length] = '\0';
     
-    consume(TOKEN_LPAREN, "Attendu '(' après le nom de la fonction.");
+    consume(TOKEN_LPAREN, "Expected '(' after function name.");
     
-    // Paramètres
+    // Parameters
     Node* params = NULL;
     Node* current_param = NULL;
     
     if (!check(TOKEN_RPAREN)) {
         do {
-            consume(TOKEN_IDENTIFIER, "Attendu un nom de paramètre.");
+            consume(TOKEN_IDENTIFIER, "Expected parameter name.");
+            
             char* param_name = (char*)allocate(parser.previous.length + 1);
             memcpy(param_name, parser.previous.start, parser.previous.length);
             param_name[parser.previous.length] = '\0';
             
             Node* param = create_variable(param_name);
+            
             if (!params) {
                 params = param;
                 current_param = param;
@@ -466,13 +537,33 @@ static Node* function_declaration() {
         } while (match(TOKEN_COMMA));
     }
     
-    consume(TOKEN_RPAREN, "Attendu ')' après les paramètres.");
-    consume(TOKEN_LBRACE, "Attendu '{' avant le corps de la fonction.");
+    consume(TOKEN_RPAREN, "Expected ')' after parameters.");
+    consume(TOKEN_LBRACE, "Expected '{' before function body.");
     
     Node* body = block_statement();
     
     return create_function(name, params, body);
 }
+
+static Node* var_declaration() {
+    consume(TOKEN_IDENTIFIER, "Expected variable name.");
+    
+    char* name = (char*)allocate(parser.previous.length + 1);
+    memcpy(name, parser.previous.start, parser.previous.length);
+    name[parser.previous.length] = '\0';
+    
+    Node* initializer = NULL;
+    if (match(TOKEN_EQUAL)) {
+        initializer = expression();
+    }
+    
+    consume(TOKEN_SEMICOLON, "Expected ';' after variable declaration.");
+    return create_var_decl(name, initializer);
+}
+
+//------------------------------------------------------------------------------
+// Main parse function
+//------------------------------------------------------------------------------
 
 Node* parse(void) {
     parser.had_error = false;
@@ -486,18 +577,22 @@ Node* parse(void) {
     while (!check(TOKEN_EOF)) {
         Node* stmt = declaration();
         
-        if (!statements) {
-            statements = stmt;
-            current = stmt;
-        } else if (stmt) {
-            if (current) current->right = stmt;
-            current = stmt;
+        if (stmt) {
+            if (!statements) {
+                statements = stmt;
+                current = stmt;
+            } else {
+                current->right = stmt;
+                current = stmt;
+            }
         }
         
         if (parser.panic_mode) synchronize();
     }
     
+    // Only print error summary if there were errors
     if (parser.had_error) {
+        fprintf(stderr, "Parsing failed with errors.\n");
         free_ast(statements);
         return NULL;
     }

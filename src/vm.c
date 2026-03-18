@@ -210,31 +210,27 @@ static double evaluate(VM* vm, Node* node) {
                     vm->had_error = true;
                     return 0;
             }
+            break;  // ← Ajoute ce break
         }
         
-// Dans la fonction evaluate(), modifie le case NODE_FUNCTION_CALL :
-
-case NODE_FUNCTION_CALL: {
-    // Sauvegarder l'état actuel
-    int old_stack_top = vm->stack_top;
-    
-    // Exécuter l'appel de fonction
-    execute_statement(vm, node);
-    
-    // Récupérer la valeur retournée (si elle existe)
-    if (vm->stack_top > old_stack_top) {
-        return pop(vm);
-    }
-    return 0;
-}
-    }
+        case NODE_FUNCTION_CALL: {
+            int old_stack_top = vm->stack_top;
+            execute_statement(vm, node);
+            if (vm->stack_top > old_stack_top) {
+                return pop(vm);
+            }
+            return 0;
         }
         
+        // Ajoute un default à la fin
         default:
+            // Ignorer les autres types de nœuds (ils ne produisent pas de valeur)
             return 0;
     }
+    
+    // Ne devrait jamais arriver
+    return 0;
 }
-
 //------------------------------------------------------------------------------
 // Statement execution
 //------------------------------------------------------------------------------

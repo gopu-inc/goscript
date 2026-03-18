@@ -1,6 +1,6 @@
 /*
 ** goscript - Un interpréteur Lisp moderne inspiré de Rust
-** Copyright (c) 2024 Mauricio Mangituka
+** Copyright (c) 2026 Mauricio Mangituka
 **
 ** Un interpréteur léger, silencieux et robuste avec une syntaxe moderne.
 ** Extension de fichier recommandée : .gjs
@@ -31,24 +31,24 @@ typedef struct {
     void (*error)(gs_Context *ctx, const char *msg, gs_Object *callstack);
     void (*mark)(gs_Context *ctx, gs_Object *obj);
     void (*gc)(gs_Context *ctx, gs_Object *obj);
-    void (*print)(gs_Context *ctx, const char *msg); // Handler de sortie silencieux
+    void (*print)(gs_Context *ctx, const char *msg);
 } gs_Handlers;
 
 // Types d'objets supportés
 typedef enum {
-    GS_T_PAIR = 0,      // Paire CONS
-    GS_T_FREE,          // Objet libre (GC)
-    GS_T_NIL,           // L'objet nil
-    GS_T_NUMBER,        // Nombre (double)
-    GS_T_SYMBOL,        // Symbole
-    GS_T_STRING,        // Chaîne de caractères
-    GS_T_FUNC,          // Fonction utilisateur
-    GS_T_MACRO,         // Macro
-    GS_T_PRIM,          // Primitive interne
-    GS_T_CFUNC,         // Fonction C
-    GS_T_PTR,           // Pointeur C générique
-    GS_T_BOOL,          // Booléen (true/false)
-    GS_T_ERROR          // Objet d'erreur
+    GS_T_PAIR = 0,
+    GS_T_FREE,
+    GS_T_NIL,
+    GS_T_NUMBER,
+    GS_T_SYMBOL,
+    GS_T_STRING,
+    GS_T_FUNC,
+    GS_T_MACRO,
+    GS_T_PRIM,
+    GS_T_CFUNC,
+    GS_T_PTR,
+    GS_T_BOOL,
+    GS_T_ERROR
 } gs_Type;
 
 // Création et gestion du contexte
@@ -56,7 +56,7 @@ gs_Context* gs_open(void *memory, int size);
 void gs_close(gs_Context *ctx);
 gs_Handlers* gs_handlers(gs_Context *ctx);
 
-// Gestion des erreurs (maintenant en anglais)
+// Gestion des erreurs (version unifiée avec formatage)
 void gs_error(gs_Context *ctx, const char *format, ...) __attribute__((noreturn));
 
 // API GC
@@ -75,7 +75,7 @@ gs_Object* gs_string(gs_Context *ctx, const char *str);
 gs_Object* gs_symbol(gs_Context *ctx, const char *name);
 gs_Object* gs_cfunc(gs_Context *ctx, gs_CFunc fn);
 gs_Object* gs_ptr(gs_Context *ctx, void *ptr);
-gs_Object* gs_error(gs_Context *ctx, const char *msg);
+gs_Object* gs_make_error(gs_Context *ctx, const char *msg); // Renommé pour éviter conflit
 
 // Prédicats et accès
 gs_Type gs_type(gs_Context *ctx, gs_Object *obj);
@@ -92,7 +92,7 @@ gs_Object* gs_next_arg(gs_Context *ctx, gs_Object **args);
 void gs_set(gs_Context *ctx, gs_Object *sym, gs_Object *value);
 gs_Object* gs_get(gs_Context *ctx, gs_Object *sym, gs_Object *env);
 
-// Lecture/Ecriture (silencieuse)
+// Lecture/Ecriture
 gs_Object* gs_read(gs_Context *ctx, char (*read_fn)(gs_Context*, void*), void *udata);
 gs_Object* gs_read_string(gs_Context *ctx, const char *input);
 gs_Object* gs_read_file(gs_Context *ctx, FILE *fp);
@@ -106,7 +106,7 @@ gs_Object* gs_eval_string(gs_Context *ctx, const char *input);
 gs_Object* gs_eval_file(gs_Context *ctx, FILE *fp);
 gs_Object* gs_eval_in_env(gs_Context *ctx, gs_Object *obj, gs_Object *env);
 
-// Fonctions utilitaires pour les extensions C
+// Fonctions utilitaires
 gs_Object* gs_list(gs_Context *ctx, gs_Object **items, int count);
 gs_Object* gs_list_from_args(gs_Context *ctx, gs_Object *args);
 int gs_list_length(gs_Context *ctx, gs_Object *list);

@@ -84,19 +84,35 @@ static void collectgarbage(gs_Context *ctx) {
 
 /* --- Core Internal Functions --- */
 
+
 static gs_Object* object(gs_Context *ctx) {
   gs_Object *obj = NULL;
-  /* find free object */
+  
+  /* 1. Cherche un objet libre */
   for (int i = 0; i < ctx->object_count; i++) {
     if (tag(&ctx->objects[i]) == GS_TFREE) {
       obj = &ctx->objects[i];
       break;
     }
   }
+  
+  /* 2. Si aucun objet n'est libre, on lance le GC et on RETENTE */
   if (!obj) {
     collectgarbage(ctx);
-    gs_error(ctx, "out of memory");
+    
+    for (int i = 0; i < ctx->object_count; i++) {
+      if (tag(&ctx->objects[i]) == GS_TFREE) {
+        obj = &ctx->objects[i];
+        break;
+      }
+    }
+    
+    /* 3. Si c'est toujours plein après le GC, là on crash vraiment */
+    if (!obj) {
+      gs_error(ctx, "out of memory");
+    }
   }
+  
   gs_pushgc(ctx, obj);
   return obj;
 }

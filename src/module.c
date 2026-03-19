@@ -3,19 +3,19 @@
 #include <string.h>
 #include "gsc.h"
 
-static fe_Object* load_module(fe_Context *ctx, fe_Object *args, int is_local) {
-  fe_Object *arg = fe_nextarg(ctx, &args);
+static gs_Object* load_module(gs_Context *ctx, gs_Object *args, int is_local) {
+  gs_Object *arg = gs_nextarg(ctx, &args);
   char path_buf[256];
   char file_path[512];
   char target_symbol[128];
   char *first_sep;
   FILE *fp;
   int gc;
-  fe_Object *obj;
-  fe_Object *result = fe_bool(ctx, 1); /* 't' par défaut */
+  gs_Object *obj;
+  gs_Object *result = gs_bool(ctx, 1); /* 't' par défaut */
 
   target_symbol[0] = '\0';
-  fe_tostring(ctx, arg, path_buf, sizeof(path_buf));
+  gs_tostring(ctx, arg, path_buf, sizeof(path_buf));
 
   /* 1. Extraction du chemin et du symbole :: */
   first_sep = strstr(path_buf, "::");
@@ -39,30 +39,30 @@ static fe_Object* load_module(fe_Context *ctx, fe_Object *args, int is_local) {
   if (!fp) {
     char err_msg[512];
     sprintf(err_msg, "Module not found: %s", file_path);
-    fe_error(ctx, err_msg);
+    gs_error(ctx, err_msg);
   }
 
   /* 4. Évaluation sécurisée */
-  gc = fe_savegc(ctx);
-  while ((obj = fe_readfp(ctx, fp))) {
-    fe_eval(ctx, obj);
-    fe_restoregc(ctx, gc);
+  gc = gs_savegc(ctx);
+  while ((obj = gs_readfp(ctx, fp))) {
+    gs_eval(ctx, obj);
+    gs_restoregc(ctx, gc);
   }
   fclose(fp);
 
   /* 5. Retour de l'objet ou de 't' */
   if (target_symbol[0] != '\0') {
     /* On cherche le symbole dans l'environnement global */
-    result = fe_eval(ctx, fe_symbol(ctx, target_symbol));
+    result = gs_eval(ctx, gs_symbol(ctx, target_symbol));
   }
 
   return result;
 }
 
-fe_Object* f_use(fe_Context *ctx, fe_Object *args) {
+gs_Object* f_use(gs_Context *ctx, gs_Object *args) {
   return load_module(ctx, args, 0);
 }
 
-fe_Object* f_nm(fe_Context *ctx, fe_Object *args) {
+gs_Object* f_nm(gs_Context *ctx, gs_Object *args) {
   return load_module(ctx, args, 1);
 }

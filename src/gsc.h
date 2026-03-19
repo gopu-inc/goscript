@@ -8,85 +8,96 @@
 #define GSC_H
 
 #include <stdio.h>
+#include <setjmp.h>
 
 /* --- Configuration & Version --- */
 #define GSC_VERSION "1.0.0"
-typedef float fe_Number; /* Type numérique de base */
+typedef float gs_Number; /* Type numérique de base */
 
 /* --- Types d'objets GoScript --- */
 enum {
-  FE_TPAIR,      /* Liste / Paire cons */
-  FE_TFREE,      /* Objet libre (Garbage Collector) */
-  FE_TNIL,       /* Valeur nulle / Fin de liste */
-  FE_TNUMBER,    /* Nombre (float) */
-  FE_TSYMBOL,    /* Symbole / Identifiant */
-  FE_TSTRING,    /* Chaîne de caractères */
-  FE_TFUNC,      /* Fonction (Closure) */
-  FE_TMACRO,     /* Macro */
-  FE_TPRIM,      /* Primitive native (C interne) */
-  FE_TCFUNC,     /* Fonction C externe (Callback) */
-  FE_TPTR        /* Pointeur brut (pour extensions) */
+  GS_TPAIR = 1,      /* Liste / Paire cons */
+  GS_TFREE,          /* Objet libre (Garbage Collector) */
+  GS_TNIL,           /* Valeur nulle / Fin de liste */
+  GS_TNUMBER,        /* Nombre (float) */
+  GS_TSYMBOL,        /* Symbole / Identifiant */
+  GS_TSTRING,        /* Chaîne de caractères */
+  GS_TFUNC,          /* Fonction (Closure) */
+  GS_TMACRO,         /* Macro */
+  GS_TPRIM,          /* Primitive native (C interne) */
+  GS_TCFUNC,         /* Fonction C externe (Callback) */
+  GS_TPTR            /* Pointeur brut (pour extensions) */
 };
 
 /* --- Définitions des types opaques --- */
-typedef struct fe_Object fe_Object;
-typedef struct fe_Context fe_Context;
+typedef struct gs_Object gs_Object;
+typedef struct gs_Context gs_Context;
 
 /* --- Prototypes des fonctions de rappel (Callbacks) --- */
-typedef fe_Object* (*fe_CFunc)(fe_Context *ctx, fe_Object *args);
-typedef void (*fe_ErrorFn)(fe_Context *ctx, const char *err, fe_Object *cl);
-typedef void (*fe_WriteFn)(fe_Context *ctx, void *udata, char chr);
-typedef char (*fe_ReadFn)(fe_Context *ctx, void *udata);
+typedef gs_Object* (*gs_CFunc)(gs_Context *ctx, gs_Object *args);
+typedef void (*gs_ErrorFn)(gs_Context *ctx, const char *err, gs_Object *cl);
+typedef void (*gs_WriteFn)(gs_Context *ctx, void *udata, char chr);
+typedef char (*gs_ReadFn)(gs_Context *ctx, void *udata);
 
 typedef struct {
-  fe_ErrorFn error;
-  fe_CFunc mark;
-  fe_CFunc gc;
-} fe_Handlers;
+  gs_ErrorFn error;
+  gs_CFunc mark;
+  gs_CFunc gc;
+} gs_Handlers;
 
 /* --- Fonctions de Gestion du Contexte --- */
-fe_Context* fe_open(void *ptr, int size);
-void fe_close(fe_Context *ctx);
-fe_Handlers* fe_handlers(fe_Context *ctx);
-void fe_error(fe_Context *ctx, const char *msg);
+gs_Context* gs_open(void *ptr, int size);
+void gs_close(gs_Context *ctx);
+gs_Handlers* gs_handlers(gs_Context *ctx);
+void gs_error(gs_Context *ctx, const char *msg);
 
 /* --- Fonctions du Garbage Collector (GC) --- */
-void fe_pushgc(fe_Context *ctx, fe_Object *obj);
-void fe_restoregc(fe_Context *ctx, int idx);
-int fe_savegc(fe_Context *ctx);
-void fe_mark(fe_Context *ctx, fe_Object *obj);
+void gs_pushgc(gs_Context *ctx, gs_Object *obj);
+void gs_restoregc(gs_Context *ctx, int idx);
+int gs_savegc(gs_Context *ctx);
+void gs_mark(gs_Context *ctx, gs_Object *obj);
 
 /* --- Création d'objets --- */
-fe_Object* fe_cons(fe_Context *ctx, fe_Object *car, fe_Object *cdr);
-fe_Object* fe_bool(fe_Context *ctx, int b);
-fe_Object* fe_number(fe_Context *ctx, fe_Number n);
-fe_Object* fe_string(fe_Context *ctx, const char *str);
-fe_Object* fe_symbol(fe_Context *ctx, const char *name);
-fe_Object* fe_cfunc(fe_Context *ctx, fe_CFunc fn);
-fe_Object* fe_ptr(fe_Context *ctx, void *ptr);
-fe_Object* fe_list(fe_Context *ctx, fe_Object **objs, int n);
+gs_Object* gs_cons(gs_Context *ctx, gs_Object *car, gs_Object *cdr);
+gs_Object* gs_bool(gs_Context *ctx, int b);
+gs_Object* gs_number(gs_Context *ctx, gs_Number n);
+gs_Object* gs_string(gs_Context *ctx, const char *str);
+gs_Object* gs_symbol(gs_Context *ctx, const char *name);
+gs_Object* gs_cfunc(gs_Context *ctx, gs_CFunc fn);
+gs_Object* gs_ptr(gs_Context *ctx, void *ptr);
+gs_Object* gs_list(gs_Context *ctx, gs_Object **objs, int n);
 
 /* --- Accès aux données des objets --- */
-fe_Object* fe_car(fe_Context *ctx, fe_Object *obj);
-fe_Object* fe_cdr(fe_Context *ctx, fe_Object *obj);
-fe_Object* fe_nextarg(fe_Context *ctx, fe_Object **arg);
-int fe_type(fe_Context *ctx, fe_Object *obj);
-int fe_isnil(fe_Context *ctx, fe_Object *obj);
-fe_Number fe_tonumber(fe_Context *ctx, fe_Object *obj);
-void fe_tostring(fe_Context *ctx, fe_Object *obj, char *dst, int size);
-void* fe_toptr(fe_Context *ctx, fe_Object *obj);
+gs_Object* gs_car(gs_Context *ctx, gs_Object *obj);
+gs_Object* gs_cdr(gs_Context *ctx, gs_Object *obj);
+gs_Object* gs_nextarg(gs_Context *ctx, gs_Object **arg);
+int gs_type(gs_Context *ctx, gs_Object *obj);
+int gs_isnil(gs_Context *ctx, gs_Object *obj);
+gs_Number gs_tonumber(gs_Context *ctx, gs_Object *obj);
+void gs_tostring(gs_Context *ctx, gs_Object *obj, char *dst, int size);
+void* gs_toptr(gs_Context *ctx, gs_Object *obj);
 
 /* --- Entrées / Sorties --- */
-fe_Object* fe_read(fe_Context *ctx, fe_ReadFn fn, void *udata);
-void fe_write(fe_Context *ctx, fe_Object *obj, fe_WriteFn fn, void *udata, int quoted);
+gs_Object* gs_read(gs_Context *ctx, gs_ReadFn fn, void *udata);
+gs_Object* gs_readfp(gs_Context *ctx, FILE *fp);
+void gs_write(gs_Context *ctx, gs_Object *obj, gs_WriteFn fn, void *udata, int quoted);
 
-/* --- Fonctions utilitaires (facultatif mais pratique) --- */
-/* Pour transformer gsc.c en standalone */
-void fe_set(fe_Context *ctx, fe_Object *sym, fe_Object *v);
+/* --- Évaluation --- */
+gs_Object* gs_eval(gs_Context *ctx, gs_Object *obj);
 
-fe_Object* fe_readfp(fe_Context *ctx, FILE *fp);
-fe_Object* fe_eval(fe_Context *ctx, fe_Object *obj);
+/* --- Fonctions utilitaires --- */
+void gs_set(gs_Context *ctx, gs_Object *sym, gs_Object *v);
+
 /* --- Nouveau : Prototypes pour les modules natifs --- */
-void fs_init(fe_Context *ctx);
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* Module système de fichiers */
+void fs_init(gs_Context *ctx);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* GSC_H */

@@ -363,15 +363,25 @@ static fe_Object* eval(fe_Context *ctx, fe_Object *obj, fe_Object *env) {
           while (args != ctx->nil) n += number(eval(ctx, fe_nextarg(ctx, &args), env));
           return fe_number(ctx, n);
         }
-        case P_PRINT: {
-          while (args != ctx->nil) {
-            fe_Object *v = eval(ctx, fe_nextarg(ctx, &args), env);
-            fe_write(ctx, v, stdout, 1);
-            printf(args != ctx->nil ? " " : "");
-          }
-          printf("\n");
-          return ctx->nil;
+        // Dans la fonction eval(), remplacer les lignes 339-341:
+case P_PRINT: {
+    while (args != ctx->nil) {
+        fe_Object *v = eval(ctx, fe_nextarg(ctx, &args), env);
+        // Correction: utiliser printf directement au lieu de fe_write
+        if (tag(v) == FE_TNUMBER) {
+            printf("%g", number(v));
+        } else if (tag(v) == FE_TSTRING) {
+            printf("%s", strbuf(v));
+        } else if (tag(v) == FE_TSYMBOL) {
+            printf("%s", strbuf(v));
+        } else {
+            printf("#<object>");
         }
+        printf(args != ctx->nil ? " " : "");
+    }
+    printf("\n");
+    return ctx->nil;
+}
         case P_SET: {
           fe_Object *sym = fe_nextarg(ctx, &args);
           fe_Object *val = eval(ctx, fe_nextarg(ctx, &args), env);

@@ -83,13 +83,18 @@ statement:
     | while_statement
     | loop_statement
     | return_statement
-    | expression TOKEN_SEMICOLON {
+    | expression opt_semicolon {
         $$ = create_expr_statement($1);
     }
     ;
 
+opt_semicolon:
+    /* empty */
+    | TOKEN_SEMICOLON
+    ;
+
 import_statement:
-    TOKEN_IMPORT TOKEN_IDENTIFIER {
+    TOKEN_IMPORT TOKEN_IDENTIFIER opt_semicolon {
         $$ = create_import_node($2, NULL);
     }
     ;
@@ -115,13 +120,13 @@ param_list:
     ;
 
 let_decl:
-    TOKEN_LET TOKEN_IDENTIFIER TOKEN_ASSIGN expression TOKEN_SEMICOLON {
+    TOKEN_LET TOKEN_IDENTIFIER TOKEN_ASSIGN expression opt_semicolon {
         $$ = create_let_node($2, NULL, $4);
     }
     ;
 
 const_decl:
-    TOKEN_CONST TOKEN_IDENTIFIER TOKEN_ASSIGN expression TOKEN_SEMICOLON {
+    TOKEN_CONST TOKEN_IDENTIFIER TOKEN_ASSIGN expression opt_semicolon {
         $$ = create_const_node($2, $4);
     }
     ;
@@ -129,6 +134,9 @@ const_decl:
 if_statement:
     TOKEN_IF expression TOKEN_LBRACE statement_list TOKEN_RBRACE {
         $$ = create_if_node($2, $4, NULL);
+    }
+    | TOKEN_IF expression TOKEN_LBRACE statement_list TOKEN_RBRACE TOKEN_ELSE TOKEN_LBRACE statement_list TOKEN_RBRACE {
+        $$ = create_if_node($2, $4, $8);
     }
     ;
 
@@ -151,10 +159,10 @@ loop_statement:
     ;
 
 return_statement:
-    TOKEN_RETURN expression TOKEN_SEMICOLON {
+    TOKEN_RETURN expression opt_semicolon {
         $$ = create_return_node($2);
     }
-    | TOKEN_RETURN TOKEN_SEMICOLON {
+    | TOKEN_RETURN opt_semicolon {
         $$ = create_return_node(NULL);
     }
     ;
@@ -195,9 +203,6 @@ binary_expr:
     }
     | expression TOKEN_OR expression {
         $$ = create_binary_op($1, OP_OR, $3);
-    }
-    | expression TOKEN_ASSIGN expression {
-        $$ = create_assign_node($1, $3);
     }
     ;
 

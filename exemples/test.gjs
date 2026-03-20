@@ -1,12 +1,12 @@
-import std/io
-import packet net/http
-import .gui
-
-// Constantes
-cn MAX_SIZE = 100
-cn APP_VERSION = "1.0.0"
-
-// Enumération
+fn main() {
+    lt i = 0
+    while i < 5 {
+        println("Count: " + i)
+        lt i = i + 1
+    }
+    ret 0
+}
+umération
 enm Color {
     Red,
     Green,

@@ -1,0 +1,87 @@
+fn main() {
+    println("=== GOSCRIPT WORKING TEST ===\n")
+    
+    // Test 1: Variables
+    println("1. Variables:")
+    lt a = 10
+    lt b = 20
+    lt c = a + b
+    println("   a = " + a)
+    println("   b = " + b)
+    println("   a + b = " + c)
+    println("")
+    
+    // Test 2: Conditions avec parenthèses
+    println("2. Conditions:")
+    if (a < b) {
+        println("   a est plus petit que b")
+    } else {
+        println("   a est plus grand ou égal à b")
+    }
+    println("")
+    
+    // Test 3: Boucle while
+    println("3. Boucle while:")
+    lt i = 0
+    while (i < 3) {
+        println("   i = " + i)
+        i = i + 1
+    }
+    println("")
+    
+    // Test 4: Boucle loop
+    println("4. Boucle loop:")
+    lt j = 0
+    loop {
+        println("   j = " + j)
+        j = j + 1
+        if (j >= 3) {
+            break
+        }
+    }
+    println("")
+    
+    // Test 5: Opérateurs
+    println("5. Opérateurs:")
+    lt x = 10
+    x += 5
+    println("   x += 5 = " + x)
+    x -= 3
+    println("   x -= 3 = " + x)
+    x *= 2
+    println("   x *= 2 = " + x)
+    x /= 4
+    println("   x /= 4 = " + x)
+    println("")
+    
+    // Test 6: Comparaisons
+    println("6. Comparaisons:")
+    println("   10 < 20 = " + (10 < 20))
+    println("   10 > 20 = " + (10 > 20))
+    println("   10 <= 20 = " + (10 <= 20))
+    println("   10 >= 20 = " + (10 >= 20))
+    println("   10 == 20 = " + (10 == 20))
+    println("   10 != 20 = " + (10 != 20))
+    println("")
+    
+    // Test 7: Logique
+    println("7. Logique:")
+    println("   true && true = " + (true && true))
+    println("   true && false = " + (true && false))
+    println("   true || false = " + (true || false))
+    println("   !true = " + (!true))
+    println("")
+    
+    // Test 8: Fonction
+    println("8. Fonction:")
+    lt result = addNumbers(15, 25)
+    println("   15 + 25 = " + result)
+    println("")
+    
+    println("=== TOUS LES TESTS RÉUSSIS ===")
+    ret 0
+}
+
+fn addNumbers(x, y) {
+    ret x + y
+}

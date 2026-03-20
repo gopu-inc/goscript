@@ -5,4 +5,4 @@ gcc -Wall -g -O2 -I./src -I./src/ast -c parser.c -o parser.o
 gcc -Wall -g -O2 -I./src -I./src/ast -c src/ast/ast.c -o ast.o
 gcc -Wall -g -O2 -I./src -I./src/ast -c src/interpreter/interpreter.c -o interpreter.o
 gcc -Wall -g -O2 -I./src -I./src/ast -c src/main.c -o main.o
-gcc scanner.o parser.o ast.o interpreter.o main.o -lm -o goscript
+gcc scanner.o parser.o ast.o interpreter.o main.o -lm -o gd

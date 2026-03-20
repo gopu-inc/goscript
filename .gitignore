@@ -2,4 +2,7 @@ fe
 gd
 test.fe
 *.fe
+*.o 
+src/*/*.o
+*/*/*.o
 

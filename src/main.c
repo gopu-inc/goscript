@@ -6,35 +6,41 @@
 extern ASTNode* program_root;
 extern FILE* yyin;
 extern int yyparse(void);
-extern int yylineno;
+
+// Forward declarations
+void print_ast(ASTNode* node, int depth);
+void interpret_program(ASTNode* program);
 
 int main(int argc, char** argv) {
     int debug_mode = 0;
+    int run_mode = 1;
     char* filename = NULL;
     
-    // Parse arguments
     for (int i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
+        if (strcmp(argv[i], "-d") == 0 || strcmp(argv[i], "--debug") == 0) {
+            debug_mode = 1;
+        } else if (strcmp(argv[i], "-p") == 0 || strcmp(argv[i], "--parse-only") == 0) {
+            run_mode = 0;
+        } else if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
             printf("Usage: %s [options] <file.gjs>\n", argv[0]);
             printf("Options:\n");
-            printf("  -d, --debug  Enable debug mode (show AST)\n");
-            printf("  -h, --help   Show this help\n");
+            printf("  -d, --debug      Show AST\n");
+            printf("  -p, --parse-only Parse only, don't execute\n");
+            printf("  -h, --help       Show help\n");
             return 0;
-        } else if (strcmp(argv[i], "-d") == 0 || strcmp(argv[i], "--debug") == 0) {
-            debug_mode = 1;
         } else if (argv[i][0] != '-') {
             filename = argv[i];
         }
     }
     
     if (!filename) {
-        fprintf(stderr, "Error: No input file specified\n");
+        fprintf(stderr, "Error: No input file\n");
         return 1;
     }
     
     yyin = fopen(filename, "r");
     if (!yyin) {
-        fprintf(stderr, "Error: Cannot open file '%s'\n", filename);
+        fprintf(stderr, "Error: Cannot open '%s'\n", filename);
         return 1;
     }
     
@@ -50,6 +56,10 @@ int main(int argc, char** argv) {
         printf("\n=== AST ===\n");
         print_ast(program_root, 0);
         printf("\n");
+    }
+    
+    if (run_mode) {
+        interpret_program(program_root);
     }
     
     free_ast(program_root);
@@ -106,6 +116,11 @@ void print_ast(ASTNode* node, int depth) {
             break;
         case NODE_IDENTIFIER:
             printf("%s", node->identifier.name);
+            break;
+        case NODE_IF:
+            printf("If: ");
+            print_ast(node->if_stmt.condition, 0);
+            printf("\n");
             break;
         default:
             printf("Node(%d)", node->type);

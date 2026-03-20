@@ -416,6 +416,8 @@ int evaluate_statement(ASTNode* node, Environment* env) {
             print_value(val, 1);
             return 1;
         }
+        case NODE_BREAK:
+            return 2;
         
         case NODE_IF: {
             Value cond = evaluate_expr(node->if_stmt.condition, env);

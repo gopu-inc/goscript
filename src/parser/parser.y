@@ -29,6 +29,7 @@ ASTNode* program_root;
 %token TOKEN_STRUCT TOKEN_ENUM TOKEN_IMPL TOKEN_MATCH TOKEN_TYPE
 %token TOKEN_TRUE TOKEN_FALSE TOKEN_NIL
 %token TOKEN_AS TOKEN_IN TOKEN_FROM TOKEN_PUB
+%token TOKEN_UNDERSCORE
 
 /* Operators */
 %token TOKEN_PLUS TOKEN_MINUS TOKEN_MULTIPLY TOKEN_DIVIDE TOKEN_MODULO
@@ -41,6 +42,7 @@ ASTNode* program_root;
 %token TOKEN_COLON TOKEN_SEMICOLON TOKEN_COMMA
 %token TOKEN_ARROW TOKEN_FAT_ARROW TOKEN_PIPE_FORWARD
 %token TOKEN_OPTIONAL TOKEN_COALESCE
+%token TOKEN_RANGE TOKEN_RANGE_INC
 
 /* Delimiters */
 %token TOKEN_LPAREN TOKEN_RPAREN TOKEN_LBRACE TOKEN_RBRACE
@@ -60,7 +62,8 @@ ASTNode* program_root;
 %type <node> struct_decl enum_decl impl_decl match_statement
 %type <node> binary_expr unary_expr primary_expr call_expr
 %type <node> array_expr struct_expr
-%type <node_list> statement_list argument_list param_list struct_fields enum_variants array_items
+%type <node> param type return_type
+%type <node_list> statement_list argument_list param_list struct_fields enum_variants array_items match_cases function_decl_list struct_init_fields
 
 %start program
 
@@ -179,8 +182,11 @@ return_type:
     ;
 
 let_decl:
-    TOKEN_LET TOKEN_IDENTIFIER type_opt TOKEN_ASSIGN expression {
-        $$ = create_let_node($2, $3, $5);
+    TOKEN_LET TOKEN_IDENTIFIER TOKEN_ASSIGN expression {
+        $$ = create_let_node($2, NULL, $4);
+    }
+    | TOKEN_LET TOKEN_IDENTIFIER TOKEN_COLON type TOKEN_ASSIGN expression {
+        $$ = create_let_node($2, $4, $6);
     }
     ;
 
@@ -188,11 +194,6 @@ const_decl:
     TOKEN_CONST TOKEN_IDENTIFIER TOKEN_ASSIGN expression {
         $$ = create_const_node($2, $4);
     }
-    ;
-
-type_opt:
-    /* empty */ { $$ = NULL; }
-    | TOKEN_COLON type { $$ = $2; }
     ;
 
 if_statement:
@@ -316,7 +317,9 @@ impl_decl:
     ;
 
 function_decl_list:
-    /* empty */ { $$ = NULL; }
+    /* empty */ {
+        $$ = NULL;
+    }
     | function_decl {
         $$ = create_node_list();
         add_to_node_list($$, $1);

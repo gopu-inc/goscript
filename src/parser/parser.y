@@ -34,6 +34,7 @@ ASTNode* program_root;
 %token TOKEN_MULTIPLY_ASSIGN TOKEN_DIVIDE_ASSIGN TOKEN_MODULO_ASSIGN
 %token TOKEN_EQ TOKEN_NEQ TOKEN_LT TOKEN_LTE TOKEN_GT TOKEN_GTE
 %token TOKEN_AND TOKEN_OR TOKEN_NOT
+%token TOKEN_MODULO
 %token TOKEN_COLON TOKEN_SEMICOLON TOKEN_COMMA TOKEN_DOT
 
 /* Delimiters */
@@ -230,6 +231,9 @@ binary_expr:
     }
     | expression TOKEN_OR expression {
         $$ = create_binary_op($1, OP_OR, $3);
+    }
+    | expression TOKEN_MODULO expression {
+        $$ = create_binary_op($1, OP_MOD, $3);
     }
     /* Assignation simple */
     | expression TOKEN_ASSIGN expression {

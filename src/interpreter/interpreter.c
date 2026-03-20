@@ -118,6 +118,16 @@ Value evaluate_expr(ASTNode* node, Environment* env) {
         }
         
         case NODE_BINARY_OP: {
+            // Handle assignment first
+            if (node->binary.op == OP_ASSIGN) {
+                if (node->binary.left->type == NODE_IDENTIFIER) {
+                    Value right_val = evaluate_expr(node->binary.right, env);
+                    env_set(env, node->binary.left->identifier.name, right_val);
+                    result = right_val;
+                }
+                break;
+            }
+            
             Value left = evaluate_expr(node->binary.left, env);
             Value right = evaluate_expr(node->binary.right, env);
             
@@ -252,17 +262,7 @@ Value evaluate_expr(ASTNode* node, Environment* env) {
             }
             break;
         }
-        case OP_ASSIGN: {
-    // Pour l'assignation, on évalue la partie droite
-            Value right_val = evaluate_expr(node->binary.right, env);
-    
-    // On cherche la variable à assigner
-            if (node->binary.left->type == NODE_IDENTIFIER) {
-                env_set(env, node->binary.left->identifier.name, right_val);
-                result = right_val;
-            }
-            break;
-        }
+        
         case NODE_CALL: {
             char* func_name = node->call.callee->identifier.name;
             

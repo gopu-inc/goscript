@@ -47,13 +47,12 @@ ASTNode* program_root;
 %token <string> TOKEN_STRING
 
 /* Non-terminals */
-%type <node> program statement expression
+%type <node> program statement expression break_statement
 %type <node> function_decl let_decl const_decl return_statement
 %type <node> if_statement for_statement while_statement loop_statement
 %type <node> import_statement
 %type <node> binary_expr unary_expr primary_expr call_expr
 %type <node_list> statement_list argument_list param_list
-
 %start program
 
 %%

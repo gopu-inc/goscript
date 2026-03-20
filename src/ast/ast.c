@@ -3,7 +3,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-// Fonctions de création de listes
 ASTNodeList* create_node_list() {
     ASTNodeList* list = malloc(sizeof(ASTNodeList));
     list->nodes = NULL;
@@ -38,55 +37,6 @@ void add_array_item(ASTNodeList* list, ASTNode* item) {
     add_to_node_list(list, item);
 }
 
-ASTNodeList* create_param_list() {
-    return create_node_list();
-}
-
-void add_param(ASTNodeList* list, ASTNode* param) {
-    add_to_node_list(list, param);
-}
-
-ASTNodeList* create_field_list() {
-    return create_node_list();
-}
-
-void add_field(ASTNodeList* list, ASTNode* field) {
-    add_to_node_list(list, field);
-}
-
-ASTNodeList* create_variant_list() {
-    return create_node_list();
-}
-
-void add_variant(ASTNodeList* list, ASTNode* variant) {
-    add_to_node_list(list, variant);
-}
-
-ASTNodeList* create_case_list() {
-    return create_node_list();
-}
-
-void add_case(ASTNodeList* list, ASTNode* case_node) {
-    add_to_node_list(list, case_node);
-}
-
-ASTNodeList* create_field_init_list() {
-    return create_node_list();
-}
-
-void add_field_init(ASTNodeList* list, ASTNode* init) {
-    add_to_node_list(list, init);
-}
-
-ASTNodeList* create_type_list() {
-    return create_node_list();
-}
-
-void add_type(ASTNodeList* list, ASTNode* type) {
-    add_to_node_list(list, type);
-}
-
-// Création des noeuds AST
 ASTNode* create_program_node(ASTNodeList* statements) {
     ASTNode* node = malloc(sizeof(ASTNode));
     node->type = NODE_PROGRAM;
@@ -160,28 +110,7 @@ ASTNode* create_if_node(ASTNode* condition, ASTNodeList* then_branch, ASTNodeLis
 }
 
 ASTNode* create_elseif_node(ASTNode* condition, ASTNodeList* then_branch, ASTNodeList* else_branch) {
-    ASTNode* node = create_if_node(condition, then_branch, else_branch);
-    return node;
-}
-
-ASTNode* create_for_range_node(char* var, ASTNode* start, ASTNode* end, ASTNodeList* body) {
-    ASTNode* node = malloc(sizeof(ASTNode));
-    node->type = NODE_FOR;
-    node->for_range.var = strdup(var);
-    node->for_range.start = start;
-    node->for_range.end = end;
-    node->for_range.body = body;
-    return node;
-}
-
-ASTNode* create_for_cond_node(ASTNode* condition, ASTNodeList* body) {
-    ASTNode* node = malloc(sizeof(ASTNode));
-    node->type = NODE_FOR;
-    node->for_range.var = NULL;
-    node->for_range.start = condition;
-    node->for_range.end = NULL;
-    node->for_range.body = body;
-    return node;
+    return create_if_node(condition, then_branch, else_branch);
 }
 
 ASTNode* create_while_node(ASTNode* condition, ASTNodeList* body) {
@@ -196,14 +125,6 @@ ASTNode* create_loop_node(ASTNodeList* body) {
     ASTNode* node = malloc(sizeof(ASTNode));
     node->type = NODE_LOOP;
     node->loop_stmt.body = body;
-    return node;
-}
-
-ASTNode* create_match_node(ASTNode* value, ASTNodeList* cases) {
-    ASTNode* node = malloc(sizeof(ASTNode));
-    node->type = NODE_MATCH;
-    node->match_stmt.value = value;
-    node->match_stmt.cases = cases;
     return node;
 }
 
@@ -287,131 +208,11 @@ ASTNode* create_call_node(ASTNode* callee, ASTNodeList* args) {
     return node;
 }
 
-ASTNode* create_member_access(ASTNode* object, char* member) {
-    ASTNode* node = malloc(sizeof(ASTNode));
-    node->type = NODE_MEMBER_ACCESS;
-    node->member.object = object;
-    node->member.member = strdup(member);
-    return node;
-}
-
-ASTNode* create_static_access(ASTNode* object, char* member) {
-    return create_member_access(object, member);
-}
-
-ASTNode* create_pipe_op(ASTNode* left, ASTNode* right) {
-    ASTNode* node = malloc(sizeof(ASTNode));
-    node->type = NODE_PIPE;
-    node->pipe.value = left;
-    node->pipe.next = right;
-    return node;
-}
-
-ASTNode* create_range_node(ASTNode* start, ASTNode* end, int inclusive) {
-    ASTNode* node = malloc(sizeof(ASTNode));
-    node->type = NODE_RANGE;
-    node->range.start = start;
-    node->range.end = end;
-    node->range.inclusive = inclusive;
-    return node;
-}
-
 ASTNode* create_array_node(ASTNodeList* elements) {
     ASTNode* node = malloc(sizeof(ASTNode));
     node->type = NODE_ARRAY;
     node->array.elements = elements;
     return node;
-}
-
-ASTNode* create_struct_node(char* name, ASTNodeList* fields) {
-    ASTNode* node = malloc(sizeof(ASTNode));
-    node->type = NODE_STRUCT;
-    node->struct_def.name = strdup(name);
-    node->struct_def.fields = fields;
-    return node;
-}
-
-ASTNode* create_enum_node(char* name, ASTNodeList* variants) {
-    ASTNode* node = malloc(sizeof(ASTNode));
-    node->type = NODE_ENUM;
-    node->enum_def.name = strdup(name);
-    node->enum_def.variants = variants;
-    return node;
-}
-
-ASTNode* create_param_node(char* name, ASTNode* type) {
-    ASTNode* node = malloc(sizeof(ASTNode));
-    node->type = NODE_IDENTIFIER;
-    node->identifier.name = strdup(name);
-    return node;
-}
-
-ASTNode* create_type_node(char* name) {
-    ASTNode* node = malloc(sizeof(ASTNode));
-    node->type = NODE_IDENTIFIER;
-    node->identifier.name = strdup(name);
-    return node;
-}
-
-ASTNode* create_array_type_node(ASTNode* element_type) {
-    return element_type;
-}
-
-ASTNode* create_chan_type_node(ASTNode* channel_type) {
-    return channel_type;
-}
-
-ASTNode* create_match_case_node(ASTNode* pattern, ASTNode* value) {
-    ASTNode* node = malloc(sizeof(ASTNode));
-    node->type = NODE_MATCH;
-    node->match_stmt.value = pattern;
-    node->match_stmt.cases = (ASTNodeList*)value;
-    return node;
-}
-
-ASTNode* create_field_node(char* name, ASTNode* type) {
-    ASTNode* node = malloc(sizeof(ASTNode));
-    node->type = NODE_STRUCT;
-    node->struct_def.name = strdup(name);
-    node->struct_def.fields = (ASTNodeList*)type;
-    return node;
-}
-
-ASTNode* create_variant_node(char* name, ASTNodeList* types) {
-    ASTNode* node = malloc(sizeof(ASTNode));
-    node->type = NODE_ENUM;
-    node->enum_def.name = strdup(name);
-    node->enum_def.variants = types;
-    return node;
-}
-
-ASTNode* create_field_init_node(char* name, ASTNode* value) {
-    ASTNode* node = malloc(sizeof(ASTNode));
-    node->type = NODE_IDENTIFIER;
-    node->identifier.name = strdup(name);
-    return node;
-}
-
-ASTNode* create_pattern_number(int value) {
-    return create_number_node(value);
-}
-
-ASTNode* create_pattern_string(char* value) {
-    return create_string_node(value);
-}
-
-ASTNode* create_pattern_ident(char* value) {
-    return create_identifier_node(value);
-}
-
-ASTNode* create_pattern_enum(char* enum_name, char* variant) {
-    char* full_name = malloc(strlen(enum_name) + strlen(variant) + 3);
-    sprintf(full_name, "%s::%s", enum_name, variant);
-    return create_identifier_node(full_name);
-}
-
-ASTNode* create_pattern_wildcard() {
-    return create_identifier_node("_");
 }
 
 ASTNode* create_for_node(ASTNode* init, ASTNode* cond, ASTNode* inc, ASTNodeList* body) {
@@ -425,15 +226,9 @@ ASTNode* create_for_node(ASTNode* init, ASTNode* cond, ASTNode* inc, ASTNodeList
 }
 
 ASTNode* create_assign_node(ASTNode* left, ASTNode* right) {
-    ASTNode* node = malloc(sizeof(ASTNode));
-    node->type = NODE_BINARY_OP;
-    node->binary.left = left;
-    node->binary.op = OP_ASSIGN;
-    node->binary.right = right;
-    return node;
+    return create_binary_op(left, OP_ASSIGN, right);
 }
 
-// Fonction de libération de mémoire
 void free_ast(ASTNode* node) {
     if (!node) return;
     
@@ -447,23 +242,10 @@ void free_ast(ASTNode* node) {
                 free(node->program.statements);
             }
             break;
-            
         case NODE_IMPORT:
             if (node->import.path) free(node->import.path);
             if (node->import.alias) free(node->import.alias);
             break;
-            
-        case NODE_PACKET:
-            if (node->packet.name) free(node->packet.name);
-            if (node->packet.statements) {
-                for (int i = 0; i < node->packet.statements->count; i++) {
-                    free_ast(node->packet.statements->nodes[i]);
-                }
-                free(node->packet.statements->nodes);
-                free(node->packet.statements);
-            }
-            break;
-            
         case NODE_FUNCTION:
             if (node->function.name) free(node->function.name);
             if (node->function.body) {
@@ -474,13 +256,11 @@ void free_ast(ASTNode* node) {
                 free(node->function.body);
             }
             break;
-            
         case NODE_LET:
         case NODE_CONST:
             if (node->var_decl.name) free(node->var_decl.name);
             if (node->var_decl.value) free_ast(node->var_decl.value);
             break;
-            
         case NODE_IF:
             if (node->if_stmt.condition) free_ast(node->if_stmt.condition);
             if (node->if_stmt.then_branch) {
@@ -491,48 +271,14 @@ void free_ast(ASTNode* node) {
                 free(node->if_stmt.then_branch);
             }
             break;
-            
         case NODE_STRING:
             if (node->string_val.value) free(node->string_val.value);
             break;
-            
         case NODE_IDENTIFIER:
             if (node->identifier.name) free(node->identifier.name);
             break;
-            
-        case NODE_BINARY_OP:
-            free_ast(node->binary.left);
-            free_ast(node->binary.right);
-            break;
-            
-        case NODE_UNARY_OP:
-            free_ast(node->unary.operand);
-            break;
-            
-        case NODE_CALL:
-            free_ast(node->call.callee);
-            if (node->call.args) {
-                for (int i = 0; i < node->call.args->count; i++) {
-                    free_ast(node->call.args->nodes[i]);
-                }
-                free(node->call.args->nodes);
-                free(node->call.args);
-            }
-            break;
-            
-        case NODE_ARRAY:
-            if (node->array.elements) {
-                for (int i = 0; i < node->array.elements->count; i++) {
-                    free_ast(node->array.elements->nodes[i]);
-                }
-                free(node->array.elements->nodes);
-                free(node->array.elements);
-            }
-            break;
-            
         default:
             break;
     }
-    
     free(node);
 }

@@ -176,7 +176,24 @@ expression:
     ;
 
 binary_expr:
-    expression TOKEN_PLUS expression {
+    /* Opérateurs d'assignation composée */
+    expression TOKEN_PLUS_ASSIGN expression {
+        $$ = create_assign_op($1, OP_ADD_ASSIGN, $3);
+    }
+    | expression TOKEN_MINUS_ASSIGN expression {
+        $$ = create_assign_op($1, OP_SUB_ASSIGN, $3);
+    }
+    | expression TOKEN_MULTIPLY_ASSIGN expression {
+        $$ = create_assign_op($1, OP_MUL_ASSIGN, $3);
+    }
+    | expression TOKEN_DIVIDE_ASSIGN expression {
+        $$ = create_assign_op($1, OP_DIV_ASSIGN, $3);
+    }
+    | expression TOKEN_MODULO_ASSIGN expression {
+        $$ = create_assign_op($1, OP_MOD_ASSIGN, $3);
+    }
+    /* Opérateurs arithmétiques */
+    | expression TOKEN_PLUS expression {
         $$ = create_binary_op($1, OP_ADD, $3);
     }
     | expression TOKEN_MINUS expression {
@@ -188,6 +205,7 @@ binary_expr:
     | expression TOKEN_DIVIDE expression {
         $$ = create_binary_op($1, OP_DIV, $3);
     }
+    /* Opérateurs de comparaison */
     | expression TOKEN_EQ expression {
         $$ = create_binary_op($1, OP_EQ, $3);
     }
@@ -197,15 +215,23 @@ binary_expr:
     | expression TOKEN_LT expression {
         $$ = create_binary_op($1, OP_LT, $3);
     }
+    | expression TOKEN_LTE expression {
+        $$ = create_binary_op($1, OP_LTE, $3);
+    }
     | expression TOKEN_GT expression {
         $$ = create_binary_op($1, OP_GT, $3);
     }
+    | expression TOKEN_GTE expression {
+        $$ = create_binary_op($1, OP_GTE, $3);
+    }
+    /* Opérateurs logiques */
     | expression TOKEN_AND expression {
         $$ = create_binary_op($1, OP_AND, $3);
     }
     | expression TOKEN_OR expression {
         $$ = create_binary_op($1, OP_OR, $3);
     }
+    /* Assignation simple */
     | expression TOKEN_ASSIGN expression {
         $$ = create_assign_node($1, $3);
     }

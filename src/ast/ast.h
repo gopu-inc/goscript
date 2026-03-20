@@ -31,16 +31,23 @@ typedef enum {
     NODE_ENUM,
     NODE_EXPR_STMT,
     NODE_MEMBER_ACCESS,
-    NODE_PIPE,
-    NODE_RANGE,
-    NODE_NIL,
-    NODE_ASSIGN
+    NODE_NIL
 } NodeType;
 
 typedef enum {
-    OP_ADD, OP_SUB, OP_MUL, OP_DIV,
-    OP_EQ, OP_NEQ, OP_LT, OP_GT,
-    OP_NOT, OP_NEG, OP_ASSIGN
+    OP_ADD = 1,
+    OP_SUB = 2,
+    OP_MUL = 3,
+    OP_DIV = 4,
+    OP_EQ = 5,
+    OP_NEQ = 6,
+    OP_LT = 7,
+    OP_GT = 8,
+    OP_AND = 9,
+    OP_OR = 10,
+    OP_NOT = 11,
+    OP_NEG = 12,
+    OP_ASSIGN = 13
 } Operator;
 
 typedef struct ASTNodeList {
@@ -147,27 +154,16 @@ typedef struct ASTNode {
             struct ASTNode* object;
             char* member;
         } member;
-        struct {
-            struct ASTNode* value;
-            struct ASTNode* next;
-        } pipe;
-        struct {
-            struct ASTNode* start;
-            struct ASTNode* end;
-            int inclusive;
-        } range;
     };
 } ASTNode;
 
-// Fonctions de création de listes
+// List functions
 ASTNodeList* create_node_list(void);
 void add_to_node_list(ASTNodeList* list, ASTNode* node);
 ASTNodeList* create_arg_list(void);
 void add_arg(ASTNodeList* list, ASTNode* arg);
-ASTNodeList* create_array_items(void);
-void add_array_item(ASTNodeList* list, ASTNode* item);
 
-// Création des noeuds AST
+// Node creation functions
 ASTNode* create_program_node(ASTNodeList* statements);
 ASTNode* create_import_node(char* path, char* alias);
 ASTNode* create_packet_import_node(char* path);
@@ -177,7 +173,6 @@ ASTNode* create_main_function_node(char* name, ASTNodeList* params, ASTNode* ret
 ASTNode* create_let_node(char* name, ASTNode* type, ASTNode* value);
 ASTNode* create_const_node(char* name, ASTNode* value);
 ASTNode* create_if_node(ASTNode* condition, ASTNodeList* then_branch, ASTNodeList* else_branch);
-ASTNode* create_elseif_node(ASTNode* condition, ASTNodeList* then_branch, ASTNodeList* else_branch);
 ASTNode* create_while_node(ASTNode* condition, ASTNodeList* body);
 ASTNode* create_loop_node(ASTNodeList* body);
 ASTNode* create_return_node(ASTNode* value);
@@ -191,11 +186,16 @@ ASTNode* create_bool_node(int value);
 ASTNode* create_nil_node(void);
 ASTNode* create_identifier_node(char* name);
 ASTNode* create_call_node(ASTNode* callee, ASTNodeList* args);
+ASTNode* create_member_access(ASTNode* object, char* member);
+ASTNode* create_static_access(ASTNode* object, char* member);
 ASTNode* create_array_node(ASTNodeList* elements);
+ASTNode* create_struct_node(char* name, ASTNodeList* fields);
+ASTNode* create_enum_node(char* name, ASTNodeList* variants);
+ASTNode* create_struct_init_node(char* name, ASTNodeList* fields);
 ASTNode* create_for_node(ASTNode* init, ASTNode* cond, ASTNode* inc, ASTNodeList* body);
 ASTNode* create_assign_node(ASTNode* left, ASTNode* right);
 
-// Fonction de libération
+// Free function
 void free_ast(ASTNode* node);
 
 #endif

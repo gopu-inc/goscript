@@ -55,13 +55,18 @@ void yyerror(const char* msg);
     yylval.string = strdup(yytext+1);
     return TOKEN_STRING;
 }
-
- /* Opérateurs */
+/* Opérateurs */
 "+"                     { return TOKEN_PLUS; }
 "-"                     { return TOKEN_MINUS; }
 "*"                     { return TOKEN_MULTIPLY; }
 "/"                     { return TOKEN_DIVIDE; }
+"%"                     { return TOKEN_MODULO; }
 "="                     { return TOKEN_ASSIGN; }
+"+="                    { return TOKEN_PLUS_ASSIGN; }
+"-="                    { return TOKEN_MINUS_ASSIGN; }
+"*="                    { return TOKEN_MULTIPLY_ASSIGN; }
+"/="                    { return TOKEN_DIVIDE_ASSIGN; }
+"%="                    { return TOKEN_MODULO_ASSIGN; }
 "=="                    { return TOKEN_EQ; }
 "!="                    { return TOKEN_NEQ; }
 "<"                     { return TOKEN_LT; }

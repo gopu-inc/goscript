@@ -22,6 +22,10 @@ typedef struct Environment {
     int var_count;
     int var_capacity;
 } Environment;
+// Ajoutez cette déclaration en haut du fichier
+void interpret_program(ASTNode* program);
+
+// Assurez-vous que la fonction n'est pas static
 
 Environment* create_env(Environment* parent) {
     Environment* env = malloc(sizeof(Environment));

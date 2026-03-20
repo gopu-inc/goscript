@@ -280,8 +280,8 @@ struct_fields:
         $$ = create_node_list();
         add_to_node_list($$, $1);
     }
-    | struct_fields struct_field {
-        add_to_node_list($1, $2);
+    | struct_fields TOKEN_COMMA struct_field {
+        add_to_node_list($1, $3);
         $$ = $1;
     }
     ;

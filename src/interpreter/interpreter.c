@@ -200,13 +200,13 @@ Value evaluate_expr(ASTNode* node, Environment* env) {
                         result.bool_val = left.int_val > right.int_val;
                     }
                     break;
-                case OP_LTE:
+                case OP_LT:
                     result.type = 3;
                     if (left.type == 0 && right.type == 0) {
                         result.bool_val = left.int_val <= right.int_val;
                     }
                     break;
-                case OP_GTE:
+                case OP_GT:
                     result.type = 3;
                     if (left.type == 0 && right.type == 0) {
                         result.bool_val = left.int_val >= right.int_val;

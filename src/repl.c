@@ -35,9 +35,9 @@ char* get_prompt() {
 }
 
 char* colorize(const char* line) {
-    static char buffer[4096];
+    static char buffer[8192];
     buffer[0] = '\0';
-    char word[128];
+    char word[256];
     int i = 0, j;
     int in_string = 0;
     
@@ -172,8 +172,6 @@ int evaluate_line(const char* line) {
         interpret_program(program_root);
         free_ast(program_root);
         program_root = NULL;
-    } else if (parse_result != 0) {
-        // Ne rien afficher, l'erreur est déjà affichée par yyerror
     }
     
     unlink(temp_file);
@@ -182,7 +180,7 @@ int evaluate_line(const char* line) {
 
 void show_help() {
     printf("\n");
-    printf("%s%s=== Goscript REPL Help ===%s\n", BOLD, CYAN, RESET);
+    printf("%s=== Goscript REPL Help ===%s\n", BOLD CYAN, RESET);
     printf("\n");
     printf("  %sCommands:%s\n", YELLOW, RESET);
     printf("    .exit      - Exit REPL\n");
@@ -197,20 +195,15 @@ void show_help() {
     printf("\n");
     printf("  %sMulti-line:%s\n", YELLOW, RESET);
     printf("    Use \\ at end of line for multi-line input\n");
-    printf("    Example:\n");
-    printf("    >>> fn main() { \\\n");
-    printf("    ... lt x = 42 \\\n");
-    printf("    ... println(x) \\\n");
-    printf("    ... }\n");
     printf("\n");
 }
 
 int repl_main() {
     printf("\n");
-    printf("%s%s╔════════════════════════════════════════╗%s\n", BOLD, CYAN, RESET);
-    printf("%s%s║      Goscript REPL v1.0               ║%s\n", BOLD, CYAN, RESET);
-    printf("%s%s║      Type .help for help              ║%s\n", BOLD, CYAN, RESET);
-    printf("%s%s╚════════════════════════════════════════╝%s\n", BOLD, CYAN, RESET);
+    printf("%s╔════════════════════════════════════════╗%s\n", BOLD CYAN, RESET);
+    printf("%s║      Goscript REPL v1.0               ║%s\n", BOLD CYAN, RESET);
+    printf("%s║      Type .help for help              ║%s\n", BOLD CYAN, RESET);
+    printf("%s╚════════════════════════════════════════╝%s\n", BOLD CYAN, RESET);
     printf("\n");
     
     char* input;
@@ -244,14 +237,15 @@ int repl_main() {
         }
         
         // Multi-line
-        if (strlen(input) > 0 && input[strlen(input)-1] == '\\') {
+        int len = strlen(input);
+        if (len > 0 && input[len-1] == '\\') {
             if (multiline_buffer == NULL) {
                 multiline_buffer = malloc(1);
                 multiline_buffer[0] = '\0';
             }
-            input[strlen(input)-1] = '\0'; // Enlever le \
-            size_t len = strlen(multiline_buffer) + strlen(input) + 1;
-            multiline_buffer = realloc(multiline_buffer, len + 1);
+            input[len-1] = '\0';
+            size_t new_len = strlen(multiline_buffer) + strlen(input) + 2;
+            multiline_buffer = realloc(multiline_buffer, new_len);
             strcat(multiline_buffer, input);
             strcat(multiline_buffer, " ");
             free(input);
@@ -259,8 +253,8 @@ int repl_main() {
         }
         
         if (multiline_buffer) {
-            size_t len = strlen(multiline_buffer) + strlen(input) + 1;
-            multiline_buffer = realloc(multiline_buffer, len + 1);
+            size_t new_len = strlen(multiline_buffer) + strlen(input) + 1;
+            multiline_buffer = realloc(multiline_buffer, new_len);
             strcat(multiline_buffer, input);
             free(input);
             evaluate_line(multiline_buffer);

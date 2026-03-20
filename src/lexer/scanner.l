@@ -42,6 +42,7 @@ void yyerror(const char* msg);
 "in"                    { return TOKEN_IN; }
 "from"                  { return TOKEN_FROM; }
 "pub"                   { return TOKEN_PUB; }
+"new"                   { return TOKEN_NEW; } 
 
  /* Identifiants */
 [a-zA-Z_][a-zA-Z0-9_]*  { 

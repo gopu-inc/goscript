@@ -12,8 +12,13 @@ void yyerror(const char* msg);
 
 %option noyywrap
 %option yylineno
+%option nodefault
+
+%x COMMENT
+%x STRING
 
 %%
+
  /* Mots-clés */
 "fn"                    { return TOKEN_FN; }
 "lt"                    { return TOKEN_LET; }
@@ -22,7 +27,6 @@ void yyerror(const char* msg);
 "if"                    { return TOKEN_IF; }
 "else"                  { return TOKEN_ELSE; }
 "elseif"                { return TOKEN_ELSEIF; }
-"then"                  { return TOKEN_THEN; }
 "for"                   { return TOKEN_FOR; }
 "while"                 { return TOKEN_WHILE; }
 "loop"                  { return TOKEN_LOOP; }
@@ -36,24 +40,20 @@ void yyerror(const char* msg);
 "packet"                { return TOKEN_PACKET; }
 "export"                { return TOKEN_EXPORT; }
 "type"                  { return TOKEN_TYPE; }
-"go"                    { return TOKEN_GO; }
-"chan"                  { return TOKEN_CHAN; }
-"select"                { return TOKEN_SELECT; }
-"try"                   { return TOKEN_TRY; }
-"catch"                 { return TOKEN_CATCH; }
-"finally"               { return TOKEN_FINALLY; }
-"nil"                   { return TOKEN_NIL; }
 "true"                  { return TOKEN_TRUE; }
 "false"                 { return TOKEN_FALSE; }
-"where"                 { return TOKEN_WHERE; }
+"nil"                   { return TOKEN_NIL; }
 "as"                    { return TOKEN_AS; }
+"in"                    { return TOKEN_IN; }
+"from"                  { return TOKEN_FROM; }
 
- /* Identifiants et littéraux */
+ /* Identifiants (support Unicode basique) */
 [a-zA-Z_][a-zA-Z0-9_]*  { 
     yylval.string = strdup(yytext); 
     return TOKEN_IDENTIFIER; 
 }
 
+ /* Nombres */
 [0-9]+                  {
     yylval.number = atoi(yytext);
     return TOKEN_NUMBER;
@@ -64,10 +64,39 @@ void yyerror(const char* msg);
     return TOKEN_FLOAT;
 }
 
-\"[^\"]*\"              {
-    yytext[strlen(yytext)-1] = '\0';
-    yylval.string = strdup(yytext+1);
-    return TOKEN_STRING;
+0x[0-9a-fA-F]+          {
+    yylval.number = strtol(yytext, NULL, 16);
+    return TOKEN_NUMBER;
+}
+
+0b[01]+                 {
+    yylval.number = strtol(yytext+2, NULL, 2);
+    return TOKEN_NUMBER;
+}
+
+ /* Chaînes de caractères */
+\"                      {
+    BEGIN(STRING);
+    yylval.string = malloc(1024);
+    yylval.string[0] = '\0';
+}
+
+<STRING>{
+    \"                      {
+        BEGIN(INITIAL);
+        return TOKEN_STRING;
+    }
+    \n                      {
+        yyerror("Unterminated string");
+        BEGIN(INITIAL);
+    }
+    \\n                     { strcat(yylval.string, "\n"); }
+    \\t                     { strcat(yylval.string, "\t"); }
+    \\r                     { strcat(yylval.string, "\r"); }
+    \\\"                    { strcat(yylval.string, "\""); }
+    \\\\                    { strcat(yylval.string, "\\"); }
+    [^\\\n\"]+              { strcat(yylval.string, yytext); }
+    .                       { strcat(yylval.string, yytext); }
 }
 
  /* Opérateurs */
@@ -100,6 +129,7 @@ void yyerror(const char* msg);
 "."                     { return TOKEN_DOT; }
 "::"                    { return TOKEN_DOUBLE_COLON; }
 "|>"                    { return TOKEN_PIPE_FORWARD; }
+"@",                    { return TOKEN_AT; }
 
  /* Délimiteurs */
 "("                     { return TOKEN_LPAREN; }
@@ -110,12 +140,23 @@ void yyerror(const char* msg);
 "]"                     { return TOKEN_RBRACKET; }
 
  /* Commentaires */
-"//".*                  { /* Ignorer ligne */ }
-"/*"([^*]|\*+[^*/])*\*+"/" { /* Ignorer bloc */ }
+"//".*                  { /* Ignore line comment */ }
+"/*"                    { BEGIN(COMMENT); }
 
- /* Espaces blancs */
-[ \t\r\n]+              { /* Ignorer */ }
+<COMMENT>{
+    "*/"                    { BEGIN(INITIAL); }
+    .                       { /* Ignore */ }
+    \n                      { /* Ignore */ }
+}
 
-.                       { yyerror("Caractère invalide"); }
+ /* Whitespace */
+[ \t\r\n]+              { /* Ignore */ }
+
+ /* Caractères invalides */
+.                       { 
+    char msg[256];
+    snprintf(msg, sizeof(msg), "Invalid character '%c'", yytext[0]);
+    yyerror(msg);
+}
 
 %%

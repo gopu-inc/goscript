@@ -75,7 +75,6 @@ void yyerror(const char* msg);
 ";"                     { return TOKEN_SEMICOLON; }
 ","                     { return TOKEN_COMMA; }
 "."                     { return TOKEN_DOT; }
-"::"                    { return TOKEN_DOUBLE_COLON; }
 
  /* Délimiteurs */
 "("                     { return TOKEN_LPAREN; }

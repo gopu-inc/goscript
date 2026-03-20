@@ -194,7 +194,6 @@ ASTNode* create_enum_node(char* name, ASTNodeList* variants);
 ASTNode* create_struct_init_node(char* name, ASTNodeList* fields);
 ASTNode* create_for_node(ASTNode* init, ASTNode* cond, ASTNode* inc, ASTNodeList* body);
 ASTNode* create_assign_node(ASTNode* left, ASTNode* right);
-
 // Free function
 void free_ast(ASTNode* node);
 

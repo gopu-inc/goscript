@@ -54,7 +54,7 @@ ASTNode* program_root;
 %token <float_val> TOKEN_FLOAT
 %token <string> TOKEN_STRING
 
-/* Non-terminals */
+/* Non-terminals avec types */
 %type <node> program statement expression block
 %type <node> function_decl let_decl const_decl return_statement
 %type <node> if_statement for_statement while_statement loop_statement
@@ -63,6 +63,7 @@ ASTNode* program_root;
 %type <node> binary_expr unary_expr primary_expr call_expr
 %type <node> array_expr struct_expr
 %type <node> param type return_type
+%type <node> match_case pattern struct_field
 %type <node_list> statement_list argument_list param_list struct_fields enum_variants array_items match_cases function_decl_list struct_init_fields
 
 %start program

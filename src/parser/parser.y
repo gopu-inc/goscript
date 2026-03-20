@@ -23,17 +23,16 @@ ASTNode* program_root;
 
 /* Tokens */
 %token TOKEN_FN TOKEN_LET TOKEN_CONST TOKEN_RETURN
-%token TOKEN_IF TOKEN_ELSE TOKEN_ELSEIF
+%token TOKEN_IF TOKEN_ELSE
 %token TOKEN_FOR TOKEN_WHILE TOKEN_LOOP TOKEN_BREAK
 %token TOKEN_IMPORT TOKEN_PACKET
-%token TOKEN_NIL TOKEN_TRUE TOKEN_FALSE TOKEN_AS TOKEN_IN TOKEN_FROM
-%token TOKEN_AT
+%token TOKEN_NIL TOKEN_TRUE TOKEN_FALSE
 
 /* Operators */
 %token TOKEN_PLUS TOKEN_MINUS TOKEN_MULTIPLY TOKEN_DIVIDE
 %token TOKEN_ASSIGN TOKEN_EQ TOKEN_NEQ TOKEN_LT TOKEN_LTE TOKEN_GT TOKEN_GTE
 %token TOKEN_AND TOKEN_OR TOKEN_NOT
-%token TOKEN_COLON TOKEN_SEMICOLON TOKEN_COMMA TOKEN_DOT TOKEN_DOUBLE_COLON
+%token TOKEN_COLON TOKEN_SEMICOLON TOKEN_COMMA TOKEN_DOT
 
 /* Delimiters */
 %token TOKEN_LPAREN TOKEN_RPAREN TOKEN_LBRACE TOKEN_RBRACE
@@ -51,8 +50,7 @@ ASTNode* program_root;
 %type <node> if_statement for_statement while_statement loop_statement
 %type <node> import_statement
 %type <node> binary_expr unary_expr primary_expr call_expr
-%type <node> array_expr
-%type <node_list> statement_list argument_list array_items
+%type <node_list> statement_list argument_list param_list
 
 %start program
 
@@ -94,20 +92,25 @@ import_statement:
     TOKEN_IMPORT TOKEN_IDENTIFIER {
         $$ = create_import_node($2, NULL);
     }
-    | TOKEN_IMPORT TOKEN_DOT TOKEN_IDENTIFIER {
-        char* path = malloc(strlen($3) + 3);
-        sprintf(path, "./%s", $3);
-        $$ = create_import_node(path, NULL);
-        free(path);
-    }
     ;
 
 function_decl:
-    TOKEN_FN TOKEN_IDENTIFIER TOKEN_LPAREN TOKEN_RPAREN TOKEN_LBRACE statement_list TOKEN_RBRACE {
-        $$ = create_function_node($2, NULL, NULL, $6);
+    TOKEN_FN TOKEN_IDENTIFIER TOKEN_LPAREN param_list TOKEN_RPAREN TOKEN_LBRACE statement_list TOKEN_RBRACE {
+        $$ = create_function_node($2, $4, NULL, $7);
     }
-    | TOKEN_FN TOKEN_AT TOKEN_IDENTIFIER TOKEN_LPAREN TOKEN_RPAREN TOKEN_LBRACE statement_list TOKEN_RBRACE {
-        $$ = create_main_function_node($3, NULL, NULL, $7);
+    ;
+
+param_list:
+    /* empty */ {
+        $$ = NULL;
+    }
+    | TOKEN_IDENTIFIER {
+        $$ = create_node_list();
+        add_to_node_list($$, create_identifier_node($1));
+    }
+    | param_list TOKEN_COMMA TOKEN_IDENTIFIER {
+        add_to_node_list($1, create_identifier_node($3));
+        $$ = $1;
     }
     ;
 
@@ -126,9 +129,6 @@ const_decl:
 if_statement:
     TOKEN_IF expression TOKEN_LBRACE statement_list TOKEN_RBRACE {
         $$ = create_if_node($2, $4, NULL);
-    }
-    | TOKEN_IF expression TOKEN_LBRACE statement_list TOKEN_RBRACE TOKEN_ELSE TOKEN_LBRACE statement_list TOKEN_RBRACE {
-        $$ = create_if_node($2, $4, $8);
     }
     ;
 
@@ -196,6 +196,9 @@ binary_expr:
     | expression TOKEN_OR expression {
         $$ = create_binary_op($1, OP_OR, $3);
     }
+    | expression TOKEN_ASSIGN expression {
+        $$ = create_assign_node($1, $3);
+    }
     ;
 
 unary_expr:
@@ -233,7 +236,6 @@ primary_expr:
         $$ = $2;
     }
     | call_expr
-    | array_expr
     ;
 
 call_expr:
@@ -253,26 +255,6 @@ argument_list:
     }
     | argument_list TOKEN_COMMA expression {
         add_arg($1, $3);
-        $$ = $1;
-    }
-    ;
-
-array_expr:
-    TOKEN_LBRACKET array_items TOKEN_RBRACKET {
-        $$ = create_array_node($2);
-    }
-    ;
-
-array_items:
-    /* empty */ {
-        $$ = NULL;
-    }
-    | expression {
-        $$ = create_node_list();
-        add_to_node_list($$, $1);
-    }
-    | array_items TOKEN_COMMA expression {
-        add_to_node_list($1, $3);
         $$ = $1;
     }
     ;

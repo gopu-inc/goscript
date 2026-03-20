@@ -90,7 +90,13 @@ Value evaluate_expr(ASTNode* node, Environment* env) {
             result.type = 0;
             result.int_val = node->number.value;
             break;
-            
+
+        case OP_MOD:
+            if (left.type == 0 && right.type == 0 && right.int_val != 0) {
+                result.type = 0;
+                result.int_val = left.int_val % right.int_val;
+            }
+            break;
         case NODE_FLOAT:
             result.type = 1;
             result.float_val = node->float_val.value;

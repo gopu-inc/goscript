@@ -200,18 +200,6 @@ Value evaluate_expr(ASTNode* node, Environment* env) {
                         result.bool_val = left.int_val > right.int_val;
                     }
                     break;
-                case OP_LT:
-                    result.type = 3;
-                    if (left.type == 0 && right.type == 0) {
-                        result.bool_val = left.int_val <= right.int_val;
-                    }
-                    break;
-                case OP_GT:
-                    result.type = 3;
-                    if (left.type == 0 && right.type == 0) {
-                        result.bool_val = left.int_val >= right.int_val;
-                    }
-                    break;
                 case OP_EQ:
                     result.type = 3;
                     if (left.type == 0 && right.type == 0) {
@@ -309,7 +297,7 @@ int evaluate_statement(ASTNode* node, Environment* env) {
         case NODE_RETURN: {
             Value val = evaluate_expr(node->return_stmt.value, env);
             print_value(val, 1);
-            return 1;  // Signal return
+            return 1;
         }
         
         case NODE_IF: {
@@ -342,31 +330,6 @@ int evaluate_statement(ASTNode* node, Environment* env) {
             return 0;
         }
         
-        case NODE_FOR: {
-            // Initialize
-            if (node->for_range.start) {
-                evaluate_statement(node->for_range.start, env);
-            }
-            // Loop
-            while (1) {
-                if (node->for_range.end) {
-                    Value cond = evaluate_expr(node->for_range.end, env);
-                    if (cond.type != 3 || !cond.bool_val) {
-                        break;
-                    }
-                }
-                for (int i = 0; i < node->for_range.body->count; i++) {
-                    int ret = evaluate_statement(node->for_range.body->nodes[i], env);
-                    if (ret) return 1;
-                }
-                // Increment
-                if (node->for_range.var) {
-                    // Handle increment
-                }
-            }
-            return 0;
-        }
-        
         case NODE_LOOP: {
             while (1) {
                 for (int i = 0; i < node->loop_stmt.body->count; i++) {
@@ -389,17 +352,6 @@ int evaluate_statement(ASTNode* node, Environment* env) {
 
 void interpret_program(ASTNode* program) {
     Environment* global = create_env(NULL);
-    
-    // Store all functions in environment
-    for (int i = 0; i < program->program.statements->count; i++) {
-        ASTNode* stmt = program->program.statements->nodes[i];
-        if (stmt->type == NODE_FUNCTION) {
-            Value func_val;
-            func_val.type = 4;  // function type
-            func_val.int_val = (int)stmt;
-            env_set(global, stmt->function.name, func_val);
-        }
-    }
     
     // Find main function
     ASTNode* main_func = NULL;

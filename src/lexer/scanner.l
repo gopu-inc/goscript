@@ -26,11 +26,22 @@ void yyerror(const char* msg);
 "while"                 { return TOKEN_WHILE; }
 "loop"                  { return TOKEN_LOOP; }
 "break"                 { return TOKEN_BREAK; }
+"continue"              { return TOKEN_CONTINUE; }
 "import"                { return TOKEN_IMPORT; }
+"export"                { return TOKEN_EXPORT; }
 "packet"                { return TOKEN_PACKET; }
+"struct"                { return TOKEN_STRUCT; }
+"enm"                   { return TOKEN_ENUM; }
+"impl"                  { return TOKEN_IMPL; }
+"match"                 { return TOKEN_MATCH; }
+"type"                  { return TOKEN_TYPE; }
 "true"                  { return TOKEN_TRUE; }
 "false"                 { return TOKEN_FALSE; }
 "nil"                   { return TOKEN_NIL; }
+"as"                    { return TOKEN_AS; }
+"in"                    { return TOKEN_IN; }
+"from"                  { return TOKEN_FROM; }
+"pub"                   { return TOKEN_PUB; }
 
  /* Identifiants */
 [a-zA-Z_][a-zA-Z0-9_]*  { 
@@ -56,39 +67,42 @@ void yyerror(const char* msg);
     return TOKEN_STRING;
 }
 
- /* Opérateurs arithmétiques */
+ /* Opérateurs */
 "+"                     { return TOKEN_PLUS; }
 "-"                     { return TOKEN_MINUS; }
 "*"                     { return TOKEN_MULTIPLY; }
 "/"                     { return TOKEN_DIVIDE; }
 "%"                     { return TOKEN_MODULO; }
-
- /* Opérateurs d'assignation */
 "="                     { return TOKEN_ASSIGN; }
 "+="                    { return TOKEN_PLUS_ASSIGN; }
 "-="                    { return TOKEN_MINUS_ASSIGN; }
 "*="                    { return TOKEN_MULTIPLY_ASSIGN; }
 "/="                    { return TOKEN_DIVIDE_ASSIGN; }
 "%="                    { return TOKEN_MODULO_ASSIGN; }
-
- /* Opérateurs de comparaison */
 "=="                    { return TOKEN_EQ; }
 "!="                    { return TOKEN_NEQ; }
 "<"                     { return TOKEN_LT; }
 "<="                    { return TOKEN_LTE; }
 ">"                     { return TOKEN_GT; }
 ">="                    { return TOKEN_GTE; }
-
- /* Opérateurs logiques */
 "&&"                    { return TOKEN_AND; }
 "||"                    { return TOKEN_OR; }
 "!"                     { return TOKEN_NOT; }
-
- /* Opérateurs spéciaux */
+"&"                     { return TOKEN_AMP; }
+"|"                     { return TOKEN_PIPE; }
+"^"                     { return TOKEN_XOR; }
+"<<"                    { return TOKEN_LSHIFT; }
+">>"                    { return TOKEN_RSHIFT; }
+"::"                    { return TOKEN_DOUBLE_COLON; }
+"."                     { return TOKEN_DOT; }
 ":"                     { return TOKEN_COLON; }
 ";"                     { return TOKEN_SEMICOLON; }
 ","                     { return TOKEN_COMMA; }
-"."                     { return TOKEN_DOT; }
+"->"                    { return TOKEN_ARROW; }
+"=>"                    { return TOKEN_FAT_ARROW; }
+"|>"                    { return TOKEN_PIPE_FORWARD; }
+"?"                     { return TOKEN_OPTIONAL; }
+"??"                    { return TOKEN_COALESCE; }
 
  /* Délimiteurs */
 "("                     { return TOKEN_LPAREN; }
@@ -99,17 +113,12 @@ void yyerror(const char* msg);
 "]"                     { return TOKEN_RBRACKET; }
 
  /* Commentaires */
-"//".*                  { /* Ignorer ligne */ }
-"/*"([^*]|\*+[^*/])*\*+"/" { /* Ignorer bloc */ }
+"//".*                  { /* Ignorer */ }
+"/*"([^*]|\*+[^*/])*\*+"/" { /* Ignorer */ }
 
- /* Espaces blancs */
+ /* Espaces */
 [ \t\r\n]+              { /* Ignorer */ }
 
- /* Caractères invalides */
-.                       { 
-    char msg[256];
-    snprintf(msg, sizeof(msg), "Invalid character '%c'", yytext[0]);
-    yyerror(msg);
-}
+.                       { yyerror("Invalid character"); }
 
 %%

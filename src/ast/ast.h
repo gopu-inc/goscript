@@ -39,16 +39,25 @@ typedef enum {
     OP_SUB = 2,
     OP_MUL = 3,
     OP_DIV = 4,
-    OP_EQ = 5,
-    OP_NEQ = 6,
-    OP_LT = 7,
-    OP_GT = 8,
-    OP_AND = 9,
-    OP_OR = 10,
-    OP_NOT = 11,
-    OP_NEG = 12,
-    OP_ASSIGN = 13
+    OP_MOD = 5,
+    OP_EQ = 6,
+    OP_NEQ = 7,
+    OP_LT = 8,
+    OP_GT = 9,
+    OP_LTE = 10,
+    OP_GTE = 11,
+    OP_AND = 12,
+    OP_OR = 13,
+    OP_NOT = 14,
+    OP_NEG = 15,
+    OP_ASSIGN = 16,
+    OP_ADD_ASSIGN = 17,
+    OP_SUB_ASSIGN = 18,
+    OP_MUL_ASSIGN = 19,
+    OP_DIV_ASSIGN = 20,
+    OP_MOD_ASSIGN = 21
 } Operator;
+
 
 typedef struct ASTNodeList {
     struct ASTNode** nodes;

@@ -130,7 +130,6 @@ Value evaluate_expr(ASTNode* node, Environment* env) {
                         result.type = 1;
                         result.float_val = left.float_val + right.float_val;
                     } else if (left.type == 2 || right.type == 2) {
-                        // String concatenation
                         char* left_str = (left.type == 2) ? left.string_val : "";
                         char* right_str = (right.type == 2) ? right.string_val : "";
                         char* num_buf = NULL;
@@ -139,10 +138,18 @@ Value evaluate_expr(ASTNode* node, Environment* env) {
                             num_buf = malloc(32);
                             sprintf(num_buf, "%d", left.int_val);
                             left_str = num_buf;
+                        } else if (left.type == 1) {
+                            num_buf = malloc(32);
+                            sprintf(num_buf, "%f", left.float_val);
+                            left_str = num_buf;
                         }
                         if (right.type == 0) {
                             num_buf = malloc(32);
                             sprintf(num_buf, "%d", right.int_val);
+                            right_str = num_buf;
+                        } else if (right.type == 1) {
+                            num_buf = malloc(32);
+                            sprintf(num_buf, "%f", right.float_val);
                             right_str = num_buf;
                         }
                         
@@ -193,18 +200,63 @@ Value evaluate_expr(ASTNode* node, Environment* env) {
                         result.bool_val = left.int_val > right.int_val;
                     }
                     break;
+                case OP_LTE:
+                    result.type = 3;
+                    if (left.type == 0 && right.type == 0) {
+                        result.bool_val = left.int_val <= right.int_val;
+                    }
+                    break;
+                case OP_GTE:
+                    result.type = 3;
+                    if (left.type == 0 && right.type == 0) {
+                        result.bool_val = left.int_val >= right.int_val;
+                    }
+                    break;
                 case OP_EQ:
                     result.type = 3;
                     if (left.type == 0 && right.type == 0) {
                         result.bool_val = left.int_val == right.int_val;
                     } else if (left.type == 2 && right.type == 2) {
                         result.bool_val = strcmp(left.string_val, right.string_val) == 0;
+                    } else if (left.type == 3 && right.type == 3) {
+                        result.bool_val = left.bool_val == right.bool_val;
                     }
                     break;
                 case OP_NEQ:
                     result.type = 3;
                     if (left.type == 0 && right.type == 0) {
                         result.bool_val = left.int_val != right.int_val;
+                    }
+                    break;
+                case OP_AND:
+                    result.type = 3;
+                    if (left.type == 3 && right.type == 3) {
+                        result.bool_val = left.bool_val && right.bool_val;
+                    }
+                    break;
+                case OP_OR:
+                    result.type = 3;
+                    if (left.type == 3 && right.type == 3) {
+                        result.bool_val = left.bool_val || right.bool_val;
+                    }
+                    break;
+                default:
+                    break;
+            }
+            break;
+        }
+        
+        case NODE_UNARY_OP: {
+            Value operand = evaluate_expr(node->unary.operand, env);
+            switch (node->unary.op) {
+                case OP_NOT:
+                    result.type = 3;
+                    result.bool_val = !operand.bool_val;
+                    break;
+                case OP_NEG:
+                    if (operand.type == 0) {
+                        result.type = 0;
+                        result.int_val = -operand.int_val;
                     }
                     break;
                 default:
@@ -233,7 +285,6 @@ Value evaluate_expr(ASTNode* node, Environment* env) {
                 result.type = 0;
                 result.int_val = 0;
             } else {
-                // User function call - simplified for now
                 result.type = 0;
                 result.int_val = 0;
             }
@@ -247,47 +298,108 @@ Value evaluate_expr(ASTNode* node, Environment* env) {
     return result;
 }
 
-void evaluate_statement(ASTNode* node, Environment* env) {
+int evaluate_statement(ASTNode* node, Environment* env) {
     switch (node->type) {
         case NODE_LET: {
             Value val = evaluate_expr(node->var_decl.value, env);
             env_set(env, node->var_decl.name, val);
-            break;
+            return 0;
         }
         
         case NODE_RETURN: {
             Value val = evaluate_expr(node->return_stmt.value, env);
             print_value(val, 1);
-            exit(0);
-            break;
+            return 1;  // Signal return
         }
         
         case NODE_IF: {
             Value cond = evaluate_expr(node->if_stmt.condition, env);
             if (cond.type == 3 && cond.bool_val) {
                 for (int i = 0; i < node->if_stmt.then_branch->count; i++) {
-                    evaluate_statement(node->if_stmt.then_branch->nodes[i], env);
+                    int ret = evaluate_statement(node->if_stmt.then_branch->nodes[i], env);
+                    if (ret) return 1;
                 }
             } else if (node->if_stmt.else_branch) {
                 for (int i = 0; i < node->if_stmt.else_branch->count; i++) {
-                    evaluate_statement(node->if_stmt.else_branch->nodes[i], env);
+                    int ret = evaluate_statement(node->if_stmt.else_branch->nodes[i], env);
+                    if (ret) return 1;
                 }
             }
-            break;
+            return 0;
+        }
+        
+        case NODE_WHILE: {
+            while (1) {
+                Value cond = evaluate_expr(node->while_stmt.condition, env);
+                if (cond.type != 3 || !cond.bool_val) {
+                    break;
+                }
+                for (int i = 0; i < node->while_stmt.body->count; i++) {
+                    int ret = evaluate_statement(node->while_stmt.body->nodes[i], env);
+                    if (ret) return 1;
+                }
+            }
+            return 0;
+        }
+        
+        case NODE_FOR: {
+            // Initialize
+            if (node->for_range.start) {
+                evaluate_statement(node->for_range.start, env);
+            }
+            // Loop
+            while (1) {
+                if (node->for_range.end) {
+                    Value cond = evaluate_expr(node->for_range.end, env);
+                    if (cond.type != 3 || !cond.bool_val) {
+                        break;
+                    }
+                }
+                for (int i = 0; i < node->for_range.body->count; i++) {
+                    int ret = evaluate_statement(node->for_range.body->nodes[i], env);
+                    if (ret) return 1;
+                }
+                // Increment
+                if (node->for_range.var) {
+                    // Handle increment
+                }
+            }
+            return 0;
+        }
+        
+        case NODE_LOOP: {
+            while (1) {
+                for (int i = 0; i < node->loop_stmt.body->count; i++) {
+                    int ret = evaluate_statement(node->loop_stmt.body->nodes[i], env);
+                    if (ret) return 1;
+                }
+            }
+            return 0;
         }
         
         case NODE_EXPR_STMT: {
             evaluate_expr(node->expr_stmt.expr, env);
-            break;
+            return 0;
         }
         
         default:
-            break;
+            return 0;
     }
 }
 
 void interpret_program(ASTNode* program) {
     Environment* global = create_env(NULL);
+    
+    // Store all functions in environment
+    for (int i = 0; i < program->program.statements->count; i++) {
+        ASTNode* stmt = program->program.statements->nodes[i];
+        if (stmt->type == NODE_FUNCTION) {
+            Value func_val;
+            func_val.type = 4;  // function type
+            func_val.int_val = (int)stmt;
+            env_set(global, stmt->function.name, func_val);
+        }
+    }
     
     // Find main function
     ASTNode* main_func = NULL;
@@ -306,7 +418,8 @@ void interpret_program(ASTNode* program) {
     
     // Execute main function body
     for (int i = 0; i < main_func->function.body->count; i++) {
-        evaluate_statement(main_func->function.body->nodes[i], global);
+        int ret = evaluate_statement(main_func->function.body->nodes[i], global);
+        if (ret) break;
     }
     
     free(global);

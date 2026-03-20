@@ -289,21 +289,19 @@ Value evaluate_expr(ASTNode* node, Environment* env) {
                     }
                     break;
                     
-                case OP_LTE:
-                    result.type = 3;
-                    if (left.type == 0 && right.type == 0) {
-                        result.bool_val = left.int_val <= right.int_val;
-                    } else if (left.type == 1 && right.type == 1) {
-                        result.bool_val = left.float_val <= right.float_val;
-                    }
-                    break;
-                    
+                
+
                 case OP_GTE:
                     result.type = 3;
                     if (left.type == 0 && right.type == 0) {
                         result.bool_val = left.int_val >= right.int_val;
-                    } else if (left.type == 1 && right.type == 1) {
-                        result.bool_val = left.float_val >= right.float_val;
+                    }
+                    break;
+
+                case OP_LTE:
+                    result.type = 3;
+                    if (left.type == 0 && right.type == 0) {
+                        result.bool_val = left.int_val <= right.int_val;
                     }
                     break;
                     

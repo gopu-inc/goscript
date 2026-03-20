@@ -74,7 +74,7 @@ void print_value(Value val, int newline) {
             printf("%s", val.string_val);
             break;
         case 3:  // bool
-            printf("%s", val.bool_val ? "true" : "false");
+            printf("%s", val.bool_val);
             break;
         default:
             printf("unknown");

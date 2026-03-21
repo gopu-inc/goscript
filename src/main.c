@@ -79,6 +79,22 @@ void print_ast(ASTNode* node, int depth) {
                 }
             }
             break;
+        case NODE_STRUCT:
+            printf("Struct: %s\n", node->struct_def.name);
+            if (node->struct_def.fields) {
+                for (int i = 0; i < node->struct_def.fields->count; i++) {
+                    print_ast(node->struct_def.fields->nodes[i], depth + 1);
+                }
+            }
+            break;
+        case NODE_IMPL:
+            printf("Impl: %s\n", node->impl.name);
+            if (node->impl.methods) {
+                for (int i = 0; i < node->impl.methods->count; i++) {
+                    print_ast(node->impl.methods->nodes[i], depth + 1);
+                }
+            }
+            break;
         case NODE_FUNCTION:
             printf("Function: %s\n", node->function.name);
             if (node->function.body) {
@@ -86,6 +102,29 @@ void print_ast(ASTNode* node, int depth) {
                     print_ast(node->function.body->nodes[i], depth + 1);
                 }
             }
+            break;
+        case NODE_STRUCT_INIT:
+            printf("StructInit: %s\n", node->struct_init.name);
+            if (node->struct_init.fields) {
+                for (int i = 0; i < node->struct_init.fields->count; i++) {
+                    print_ast(node->struct_init.fields->nodes[i], depth + 1);
+                }
+            }
+            break;
+        case NODE_MEMBER_ACCESS:
+            printf("MemberAccess: ");
+            print_ast(node->member.object, 0);
+            printf(".%s\n", node->member.member);
+            break;
+        case NODE_METHOD_CALL:
+            printf("MethodCall: ");
+            print_ast(node->method_call.object, 0);
+            printf(".%s()\n", node->method_call.method);
+            break;
+        case NODE_FIELD_INIT:
+            printf("Field: %s = ", node->field_init.name);
+            print_ast(node->field_init.value, 0);
+            printf("\n");
             break;
         case NODE_LET:
             printf("Let: %s = ", node->var_decl.name);
@@ -97,27 +136,14 @@ void print_ast(ASTNode* node, int depth) {
             if (node->return_stmt.value) print_ast(node->return_stmt.value, 0);
             printf("\n");
             break;
-        case NODE_BINARY_OP:
-            printf("(");
-            print_ast(node->binary.left, 0);
-            switch (node->binary.op) {
-                case OP_ADD: printf(" + "); break;
-                case OP_SUB: printf(" - "); break;
-                case OP_MUL: printf(" * "); break;
-                case OP_DIV: printf(" / "); break;
-                default: printf(" ? "); break;
-            }
-            print_ast(node->binary.right, 0);
-            printf(")");
-            break;
         case NODE_NUMBER:
             printf("%d", node->number.value);
             break;
         case NODE_IDENTIFIER:
             printf("%s", node->identifier.name);
             break;
-        case NODE_WHILE:
-            printf("While\n");
+        case NODE_STRING:
+            printf("\"%s\"", node->string_val.value);
             break;
         default:
             printf("Node(%d)", node->type);

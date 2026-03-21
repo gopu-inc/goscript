@@ -42,20 +42,12 @@ void yyerror(const char* msg);
 "in"                    { return TOKEN_IN; }
 "from"                  { return TOKEN_FROM; }
 "pub"                   { return TOKEN_PUB; }
-"new"                   { return TOKEN_NEW; } 
-/* Mots-clés d'import */
-"import"                { return TOKEN_IMPORT; }
-"from"                  { return TOKEN_FROM; }
-"as"                    { return TOKEN_AS; }
+"new"                   { return TOKEN_NEW; }
 "module"                { return TOKEN_MODULE; }
-"pub"                   { return TOKEN_PUB; }
 "only"                  { return TOKEN_ONLY; }
 "sandbox"               { return TOKEN_SANDBOX; }
 "security"              { return TOKEN_SECURITY; }
 "timeout"               { return TOKEN_TIMEOUT; }
-/* Opérateurs spéciaux */
-"|"                     { return TOKEN_PIPE; }
-"|>"                    { return TOKEN_PIPE_FORWARD; }
 
  /* Identifiants */
 [a-zA-Z_][a-zA-Z0-9_]*  { 

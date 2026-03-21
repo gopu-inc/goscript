@@ -97,6 +97,7 @@ statement:
     | enum_decl
     | impl_decl
     | let_decl
+    | break_statement
     | const_decl
     | if_statement
     | for_statement
@@ -206,7 +207,11 @@ if_statement:
         $$ = create_if_node($2, $4, $8);
     }
     ;
-
+break_statement:
+    TOKEN_BREAK {
+        $$ = create_break_node();
+    }
+    ;
 for_statement:
     TOKEN_FOR expression TOKEN_LBRACE statement_list TOKEN_RBRACE {
         $$ = create_while_node($2, $4);
@@ -460,6 +465,9 @@ primary_expr:
 member_access:
     primary_expr TOKEN_DOT TOKEN_IDENTIFIER {
         $$ = create_member_access($1, $3);
+    }
+    | primary_expr TOKEN_DOUBLE_COLON TOKEN_IDENTIFIER {
+        $$ = create_static_access($1, $3);
     }
     ;
 

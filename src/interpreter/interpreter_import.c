@@ -1,8 +1,17 @@
 #include "interpreter.h"
 #include <libgen.h>
 #include <sys/stat.h>
+#include <unistd.h>  // Pour access() et F_OK
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
-// Résoudre un chemin d'import
+extern ASTNode* program_root;
+extern int yyparse(void);
+extern FILE* yyin;
+
+// ==================== RÉSOLVEUR DE CHEMIN ====================
+
 char* resolve_module_path(char* current_file, char* import_path) {
     char* result = NULL;
     
@@ -20,7 +29,7 @@ char* resolve_module_path(char* current_file, char* import_path) {
         if (import_path[1] == '/') {
             // ./module
             snprintf(full_path, sizeof(full_path), "%s/%s", dirname_ptr, import_path + 2);
-        } else if (import_path[1] == '.') {
+        } else if (import_path[1] == '.' && import_path[2] == '/') {
             // ../module
             char* parent = dirname(dirname_ptr);
             snprintf(full_path, sizeof(full_path), "%s/%s", parent, import_path + 3);
@@ -33,7 +42,7 @@ char* resolve_module_path(char* current_file, char* import_path) {
     }
     // Module standard
     else {
-        // Chercher dans /usr/local/lib/goscript/granul/packages/
+        // Chercher dans différents chemins
         char* paths[] = {
             "/usr/local/lib/goscript/granul/packages/",
             "/usr/lib/goscript/",
@@ -64,10 +73,57 @@ char* resolve_module_path(char* current_file, char* import_path) {
     return result;
 }
 
-// Charger un module avec ses contraintes
-LoadedModule* load_module(ModuleRegistry* reg, char* current_file, 
-                          char* import_path, char* alias, 
-                          ASTNode* constraints) {
+// ==================== GESTION DE LA TABLE DES MODULES ====================
+
+ModuleRegistry* init_module_registry() {
+    ModuleRegistry* reg = malloc(sizeof(ModuleRegistry));
+    reg->modules = NULL;
+    reg->count = 0;
+    reg->capacity = 0;
+    return reg;
+}
+
+void register_module(ModuleRegistry* reg, LoadedModule* mod) {
+    if (reg->count >= reg->capacity) {
+        reg->capacity = reg->capacity == 0 ? 10 : reg->capacity * 2;
+        reg->modules = realloc(reg->modules, reg->capacity * sizeof(LoadedModule*));
+    }
+    reg->modules[reg->count++] = mod;
+}
+
+LoadedModule* find_module(ModuleRegistry* reg, char* path) {
+    for (int i = 0; i < reg->count; i++) {
+        if (strcmp(reg->modules[i]->module_path, path) == 0) {
+            return reg->modules[i];
+        }
+    }
+    return NULL;
+}
+
+void free_module_registry(ModuleRegistry* reg) {
+    if (!reg) return;
+    for (int i = 0; i < reg->count; i++) {
+        if (reg->modules[i]) {
+            free(reg->modules[i]->module_path);
+            free(reg->modules[i]->module_name);
+            if (reg->modules[i]->constraints.allowed_names) {
+                for (int j = 0; j < reg->modules[i]->constraints.allowed_count; j++) {
+                    free(reg->modules[i]->constraints.allowed_names[j]);
+                }
+                free(reg->modules[i]->constraints.allowed_names);
+            }
+            free(reg->modules[i]);
+        }
+    }
+    free(reg->modules);
+    free(reg);
+}
+
+// ==================== CHARGEMENT D'UN MODULE ====================
+
+LoadedModule* load_module(ModuleRegistry* reg, Environment* parent_env,
+                          char* current_file, char* import_path, 
+                          char* alias, ASTNode* constraints) {
     // 1. Résoudre le chemin
     char* module_path = resolve_module_path(current_file, import_path);
     if (!module_path) {
@@ -94,11 +150,9 @@ LoadedModule* load_module(ModuleRegistry* reg, char* current_file,
     }
     
     // Sauvegarder l'ancien yyin
-    extern FILE* yyin;
     FILE* old_yyin = yyin;
     yyin = f;
     
-    extern ASTNode* program_root;
     int parse_result = yyparse();
     
     fclose(f);
@@ -106,6 +160,7 @@ LoadedModule* load_module(ModuleRegistry* reg, char* current_file,
     
     if (parse_result != 0 || !program_root) {
         free(module_path);
+        free(module_env);
         return NULL;
     }
     
@@ -125,8 +180,9 @@ LoadedModule* load_module(ModuleRegistry* reg, char* current_file,
     module->constraints.allow_ffi = 1;
     
     // 6. Exécuter le module dans son environnement
-    // Interpreter le programme du module
-    interpret_program_in_env(program_root, module_env);
+    // Note: interpret_program_in_env doit être implémentée
+    // Pour l'instant, on utilise interpret_program
+    interpret_program(program_root);
     
     // 7. Enregistrer le module
     register_module(reg, module);
@@ -135,7 +191,28 @@ LoadedModule* load_module(ModuleRegistry* reg, char* current_file,
     Value module_val;
     module_val.type = 7;  // Type module
     module_val.int_val = (int)module;
-    env_set(env, alias ? alias : import_path, module_val);
+    if (parent_env) {
+        env_set(parent_env, alias ? alias : import_path, module_val);
+    }
     
     return module;
+}
+
+// ==================== FONCTIONS DE CONSTRAINTS ====================
+
+ASTNode* create_constraints_node(char* type, ASTNodeList* list) {
+    ASTNode* node = malloc(sizeof(ASTNode));
+    node->type = NODE_CONSTRAINT;
+    node->constraint.type = strdup(type);
+    node->constraint.list = list;
+    return node;
+}
+
+ASTNode* merge_constraints(ASTNode* a, ASTNode* b) {
+    // Fusionner deux listes de contraintes
+    ASTNode* result = malloc(sizeof(ASTNode));
+    result->type = NODE_CONSTRAINT_LIST;
+    result->constraint_list.a = a;
+    result->constraint_list.b = b;
+    return result;
 }

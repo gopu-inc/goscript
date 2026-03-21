@@ -376,7 +376,7 @@ void add_field_init(ASTNodeList* list, ASTNode* init);
 ASTNode* create_program_node(ASTNodeList* statements);
 
 /* Imports et exports */
-ASTNode* create_import_node(char* path, char* alias);
+ASTNode* create_import_node(char* path, char* alias, ASTNode* constraints);
 ASTNode* create_export_node(char* name);
 ASTNode* create_packet_node(char* name, ASTNodeList* statements);
 

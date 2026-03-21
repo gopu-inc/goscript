@@ -69,7 +69,21 @@ typedef struct ModuleRegistry {
     int count;
     int capacity;
 } ModuleRegistry;
-
+// Déclarations des fonctions
+ModuleRegistry* init_module_registry(void);
+void register_module(ModuleRegistry* reg, LoadedModule* mod);
+LoadedModule* find_module(ModuleRegistry* reg, char* path);
+void free_module_registry(ModuleRegistry* reg);
+char* resolve_module_path(char* current_file, char* import_path);
+LoadedModule* load_module(ModuleRegistry* reg, Environment* parent_env,
+                          char* current_file, char* import_path, 
+                          char* alias, ASTNode* constraints);
+ASTNode* create_constraints_node(char* constraint_type, ASTNodeList* list);
+ASTNode* create_timeout_constraint(int timeout_ms);
+ASTNode* merge_constraints(ASTNode* a, ASTNode* b);
+void process_constraints(LoadedModule* module, ASTNode* constraints);
+int is_name_allowed(LoadedModule* module, char* name);
+int is_ffi_allowed(LoadedModule* module);
 // Fonctions de gestion des modules
 ModuleRegistry* init_module_registry();
 void register_module(ModuleRegistry* reg, LoadedModule* mod);

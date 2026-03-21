@@ -130,35 +130,19 @@ statement:
 // Nouvelles règles d'import
 import_statement:
     TOKEN_IMPORT TOKEN_IDENTIFIER {
-        $$ = create_import_node($2, NULL, NULL);
+        $$ = create_import_node($2, NULL);
     }
     | TOKEN_IMPORT TOKEN_DOT TOKEN_IDENTIFIER {
         char* path = malloc(strlen($3) + 3);
         sprintf(path, "./%s", $3);
-        $$ = create_import_node(path, NULL, NULL);
-        free(path);
-    }
-    | TOKEN_IMPORT TOKEN_DOT TOKEN_DOT TOKEN_DOT TOKEN_IDENTIFIER {
-        char* path = malloc(strlen($5) + 4);
-        sprintf(path, "../%s", $5);
-        $$ = create_import_node(path, NULL, NULL);
+        $$ = create_import_node(path, NULL);
         free(path);
     }
     | TOKEN_IMPORT TOKEN_IDENTIFIER TOKEN_FROM TOKEN_STRING {
-        $$ = create_import_node($4, $2, NULL);
-    }
-    // NOUVELLE RÈGLE : import sys from .sys (sans guillemets)
-    | TOKEN_IMPORT TOKEN_IDENTIFIER TOKEN_FROM TOKEN_DOT TOKEN_IDENTIFIER {
-        char* path = malloc(strlen($5) + 3);
-        sprintf(path, "./%s", $5);
-        $$ = create_import_node(path, $2, NULL);
-        free(path);
+        $$ = create_import_node($4, $2);
     }
     | TOKEN_IMPORT TOKEN_IDENTIFIER TOKEN_AS TOKEN_IDENTIFIER {
-        $$ = create_import_node($2, $4, NULL);
-    }
-    | TOKEN_IMPORT TOKEN_IDENTIFIER import_constraints {
-        $$ = create_import_node($2, NULL, $3);
+        $$ = create_import_node($2, $4);
     }
     ;
 

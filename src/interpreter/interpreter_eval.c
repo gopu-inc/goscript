@@ -498,53 +498,63 @@ Value evaluate_expr(ASTNode* node, Environment* env) {
             }
             break;
         }
-        case NODE_STRUCT_INIT: {
+case NODE_STRUCT_INIT: {
     // Créer une nouvelle structure
-            result.type = 6;  // type structure
-            result.struct_val.name = strdup(node->struct_init.name);
+    result.type = 6;  // type structure
     
     // Compter le nombre de champs
-            int field_count = 0;
-            if (node->struct_init.fields) {
-                field_count = node->struct_init.fields->count;
-            }
+    int field_count = 0;
+    if (node->struct_init.fields) {
+        field_count = node->struct_init.fields->count;
+    }
     
-    // Allouer le tableau de champs
-            result.struct_val.fields = malloc(field_count * sizeof(Value*));
+    // Allouer le tableau de champs (tableau de Value*)
+    result.struct_val.fields = malloc(field_count * sizeof(Value*));
+    result.struct_val.field_count = field_count;
     
-    // Initialiser chaque champ
-            for (int i = 0; i < field_count; i++) {
-                ASTNode* field_node = node->struct_init.fields->nodes[i];
-                if (field_node->type == NODE_FIELD_INIT) {
-                    Value* field_val = malloc(sizeof(Value));
-                    *field_val = evaluate_expr(field_node->field_init.value, env);
-                    result.struct_val.fields[i] = field_val;
-                }
-            }
-            break;
+    // Initialiser chaque champ avec les valeurs évaluées
+    for (int i = 0; i < field_count; i++) {
+        ASTNode* field_node = node->struct_init.fields->nodes[i];
+        if (field_node->type == NODE_FIELD_INIT) {
+            Value* field_val = malloc(sizeof(Value));
+            *field_val = evaluate_expr(field_node->field_init.value, env);
+            result.struct_val.fields[i] = field_val;
+        } else {
+            result.struct_val.fields[i] = NULL;
         }
+    }
+    break;
+}
+
+case NODE_MEMBER_ACCESS: {
+    Value obj = evaluate_expr(node->member.object, env);
+    
+    if (obj.type == 6 && obj.struct_val.fields) {
+        // Pour l'instant, on accède par index (ordre de déclaration)
+        // x est le premier champ (index 0), y est le deuxième (index 1)
+        char* member_name = node->member.member;
         
-        case NODE_MEMBER_ACCESS: {
-    // Accéder à un champ d'une structure
-            Value obj = evaluate_expr(node->member.object, env);
-   
-            if (obj.type == 6) { // Structure
-        // Chercher le champ par son nom
-                char* member_name = node->member.member;
-        
-        // Pour l'instant, on utilise l'ordre des champs
-        // Idéalement, il faudrait chercher par nom
-                if (strcmp(member_name, "x") == 0 && obj.struct_val.fields && obj.struct_val.fields[0]) {
-                    result = *obj.struct_val.fields[0];
-                } else if (strcmp(member_name, "y") == 0 && obj.struct_val.fields && obj.struct_val.fields[1]) {
-                    result = *obj.struct_val.fields[1];
-                } else {
-                    result.type = 0;
-                    result.int_val = 0;
-                }
+        if (strcmp(member_name, "x") == 0) {
+            if (obj.struct_val.fields[0]) {
+                result = *obj.struct_val.fields[0];
+            } else {
+                result.type = 0;
+                result.int_val = 0;
             }
-            break;
+        } else if (strcmp(member_name, "y") == 0) {
+            if (obj.struct_val.fields[1]) {
+                result = *obj.struct_val.fields[1];
+            } else {
+                result.type = 0;
+                result.int_val = 0;
+            }
+        } else {
+            result.type = 0;
+            result.int_val = 0;
         }
+    }
+    break;
+}
         case NODE_CALL: {
             char* func_name = node->call.callee->identifier.name;
             Value* func = env_get(env, func_name);

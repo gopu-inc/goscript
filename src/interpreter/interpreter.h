@@ -47,7 +47,34 @@ typedef struct Environment {
     int var_count;
     int var_capacity;
 } Environment;
+// Structure pour un module chargé
+typedef struct LoadedModule {
+    char* module_path;      // Chemin absolu
+    char* module_name;      // Nom du module
+    Environment* env;       // Environnement propre au module
+    int status;             // 0: loading, 1: loaded, -1: error
+    int ref_count;          // Nombre de références
+    struct {
+        char** allowed_names;  // Noms autorisés (only)
+        int allowed_count;
+        int timeout_ms;        // Timeout en ms
+        int sandbox;           // 1 = sandboxé
+        int allow_ffi;         // 1 = FFI autorisé
+    } constraints;
+} LoadedModule;
 
+// Table globale des modules
+typedef struct ModuleRegistry {
+    LoadedModule** modules;
+    int count;
+    int capacity;
+} ModuleRegistry;
+
+// Fonctions de gestion des modules
+ModuleRegistry* init_module_registry();
+void register_module(ModuleRegistry* reg, LoadedModule* mod);
+LoadedModule* find_module(ModuleRegistry* reg, char* path);
+void free_module_registry(ModuleRegistry* reg);
 // Fonctions d'environnement
 Environment* create_env(Environment* parent);
 void env_set(Environment* env, char* name, Value value);

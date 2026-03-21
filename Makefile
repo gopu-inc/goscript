@@ -2,7 +2,7 @@ CC = gcc
 CFLAGS = -Wall -g -O2 -I./src -I./src/ast
 LDFLAGS = -lm -ldl -lffi -lreadline
 
-OBJS = scanner.o parser.o ast.o main.o interpreter_env.o interpreter_ffi.o interpreter_eval.o
+OBJS = scanner.o parser.o ast.o main.o interpreter_env.o interpreter_import.o interpreter_ffi.o interpreter_eval.o
 
 all: gd
 
@@ -23,6 +23,9 @@ main.o: src/main.c parser.h
 
 interpreter_env.o: src/interpreter/interpreter_env.c src/interpreter/interpreter.h
 	$(CC) $(CFLAGS) -c src/interpreter/interpreter_env.c -o interpreter_env.o
+
+interpreter_import.o: src/interpreter/interpreter_import.c src/interpreter/interpreter.h
+	$(CC) $(CFLAGS) -c src/interpreter/interpreter_import.c -o interpreter_import.o
 
 interpreter_ffi.o: src/interpreter/interpreter_ffi.c src/interpreter/interpreter.h
 	$(CC) $(CFLAGS) -c src/interpreter/interpreter_ffi.c -o interpreter_ffi.o

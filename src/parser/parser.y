@@ -24,12 +24,12 @@ ASTNode* program_root;
 /* Tokens */
 %token TOKEN_FN TOKEN_LET TOKEN_CONST TOKEN_RETURN
 %token TOKEN_IF TOKEN_ELSE
-%token TOKEN_NEW
 %token TOKEN_FOR TOKEN_WHILE TOKEN_LOOP TOKEN_BREAK TOKEN_CONTINUE
 %token TOKEN_IMPORT TOKEN_EXPORT TOKEN_PACKET
 %token TOKEN_STRUCT TOKEN_ENUM TOKEN_IMPL TOKEN_MATCH TOKEN_TYPE
 %token TOKEN_TRUE TOKEN_FALSE TOKEN_NIL
 %token TOKEN_AS TOKEN_IN TOKEN_FROM TOKEN_PUB
+%token TOKEN_NEW
 %token TOKEN_UNDERSCORE
 
 /* Operators */
@@ -55,14 +55,14 @@ ASTNode* program_root;
 %token <float_val> TOKEN_FLOAT
 %token <string> TOKEN_STRING
 
-/* Non-terminals avec types */
+/* Non-terminals */
 %type <node> program statement expression block
 %type <node> function_decl let_decl const_decl return_statement
 %type <node> if_statement for_statement while_statement loop_statement
 %type <node> import_statement export_statement packet_decl
 %type <node> struct_decl enum_decl impl_decl match_statement
 %type <node> binary_expr unary_expr primary_expr call_expr
-%type <node> array_expr struct_expr
+%type <node> array_expr struct_expr member_access
 %type <node> param type return_type
 %type <node> match_case pattern struct_field
 %type <node_list> statement_list argument_list param_list struct_fields enum_variants array_items match_cases function_decl_list struct_init_fields
@@ -211,6 +211,12 @@ for_statement:
     TOKEN_FOR expression TOKEN_LBRACE statement_list TOKEN_RBRACE {
         $$ = create_while_node($2, $4);
     }
+    | TOKEN_FOR TOKEN_IDENTIFIER TOKEN_ASSIGN expression TOKEN_SEMICOLON expression TOKEN_SEMICOLON expression TOKEN_LBRACE statement_list TOKEN_RBRACE {
+        ASTNode* init = create_let_node($2, NULL, $4);
+        ASTNode* cond = $6;
+        ASTNode* inc = create_expr_statement($8);
+        $$ = create_for_node(init, cond, inc, $10);
+    }
     | TOKEN_FOR TOKEN_IDENTIFIER TOKEN_IN expression TOKEN_RANGE expression TOKEN_LBRACE statement_list TOKEN_RBRACE {
         $$ = create_for_range_node($2, $4, $6, $8);
     }
@@ -282,6 +288,10 @@ struct_fields:
     }
     | struct_fields TOKEN_COMMA struct_field {
         add_to_node_list($1, $3);
+        $$ = $1;
+    }
+    | struct_fields struct_field {
+        add_to_node_list($1, $2);
         $$ = $1;
     }
     ;
@@ -444,7 +454,7 @@ primary_expr:
     | call_expr
     | array_expr
     | struct_expr
-    | member_access 
+    | member_access
     ;
 
 member_access:

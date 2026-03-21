@@ -1,4 +1,106 @@
 #include "interpreter.h"
+#include <dlfcn.h>
+#include <ffi.h>
+
+// Handle global pour la libc (ouvert une seule fois)
+static void* libc_handle = NULL;
+static int libc_initialized = 0;
+
+// Initialiser le handle de la libc
+void init_libc() {
+    if (!libc_initialized) {
+        // Sur Alpine Linux, la libc est musl
+        libc_handle = dlopen("libc.musl-x86.so.1", RTLD_LAZY);
+        if (!libc_handle) {
+            // Essayer avec le nom standard
+            libc_handle = dlopen("libc.so.6", RTLD_LAZY);
+        }
+        if (!libc_handle) {
+            // Essayer avec NULL pour le programme courant
+            libc_handle = dlopen(NULL, RTLD_LAZY);
+        }
+        libc_initialized = 1;
+    }
+}
+
+// Fonction pour appeler une fonction C via FFI
+Value call_c_function_ffi(void* func_ptr, Value* args, int arg_count, ffi_type* ret_type, ffi_type** arg_types) {
+    Value result = {0};
+    
+    if (!func_ptr) {
+        fprintf(stderr, "Error: NULL function pointer\n");
+        return result;
+    }
+    
+    // Préparer la CIF (Call Interface)
+    ffi_cif cif;
+    ffi_status status = ffi_prep_cif(&cif, FFI_DEFAULT_ABI, arg_count, ret_type, arg_types);
+    
+    if (status != FFI_OK) {
+        fprintf(stderr, "Error: ffi_prep_cif failed with status %d\n", status);
+        return result;
+    }
+    
+    // Préparer les valeurs
+    void** values = malloc(arg_count * sizeof(void*));
+    void* ret_val = malloc(32);
+    
+    for (int i = 0; i < arg_count; i++) {
+        switch (args[i].type) {
+            case 0: values[i] = &args[i].int_val; break;
+            case 1: values[i] = &args[i].float_val; break;
+            case 2: values[i] = &args[i].string_val; break;
+            case 3: values[i] = &args[i].bool_val; break;
+            default: values[i] = NULL;
+        }
+    }
+    
+    ffi_call(&cif, FFI_FN(func_ptr), ret_val, values);
+    
+    if (ret_type == &ffi_type_sint32 || ret_type == &ffi_type_sint) {
+        result.type = 0;
+        result.int_val = *(int*)ret_val;
+    } else if (ret_type == &ffi_type_sint64) {
+        result.type = 0;
+        result.int_val = *(long long*)ret_val;
+    } else if (ret_type == &ffi_type_float) {
+        result.type = 1;
+        result.float_val = *(float*)ret_val;
+    } else if (ret_type == &ffi_type_double) {
+        result.type = 1;
+        result.float_val = *(double*)ret_val;
+    } else if (ret_type == &ffi_type_pointer) {
+        result.type = 2;
+        char* str = *(char**)ret_val;
+        result.string_val = str ? strdup(str) : strdup("");
+    } else if (ret_type == &ffi_type_void) {
+        result.type = 0;
+        result.int_val = 0;
+    }
+    
+    free(values);
+    free(ret_val);
+    return result;
+}
+
+// Fonction pour appeler puts
+Value call_puts(Value* args, int arg_count) {
+    Value result = {0};
+    if (arg_count > 0 && args[0].type == 2) {
+        printf("%s\n", args[0].string_val);
+    }
+    return result;
+}
+
+// Fonction pour appeler putchar
+Value call_putchar(Value* args, int arg_count) {
+    Value result = {0};
+    if (arg_count > 0 && args[0].type == 0) {
+        putchar(args[0].int_val);
+        result.int_val = args[0].int_val;
+    }
+    return result;
+}
 
 void print_value(Value val, int newline) {
     switch (val.type) {
@@ -9,6 +111,118 @@ void print_value(Value val, int newline) {
         default: printf("unknown");
     }
     if (newline) printf("\n");
+}
+
+void register_native_c_functions(Environment* env) {
+    init_libc();
+    
+    if (libc_handle) {
+        void* strlen_ptr = dlsym(libc_handle, "strlen");
+        if (strlen_ptr) {
+            ffi_type* arg_types[] = {&ffi_type_pointer};
+            Value func_val;
+            func_val.type = 5;
+            func_val.cfunc_val.func_ptr = strlen_ptr;
+            func_val.cfunc_val.ret_type = &ffi_type_sint32;
+            func_val.cfunc_val.arg_count = 1;
+            func_val.cfunc_val.arg_types = malloc(sizeof(ffi_type*));
+            func_val.cfunc_val.arg_types[0] = &ffi_type_pointer;
+            ffi_prep_cif(&func_val.cfunc_val.cif, FFI_DEFAULT_ABI, 1, &ffi_type_sint32, arg_types);
+            env_set(env, "strlen", func_val);
+        }
+        
+        void* strcmp_ptr = dlsym(libc_handle, "strcmp");
+        if (strcmp_ptr) {
+            ffi_type* arg_types[] = {&ffi_type_pointer, &ffi_type_pointer};
+            Value func_val;
+            func_val.type = 5;
+            func_val.cfunc_val.func_ptr = strcmp_ptr;
+            func_val.cfunc_val.ret_type = &ffi_type_sint32;
+            func_val.cfunc_val.arg_count = 2;
+            func_val.cfunc_val.arg_types = malloc(2 * sizeof(ffi_type*));
+            func_val.cfunc_val.arg_types[0] = &ffi_type_pointer;
+            func_val.cfunc_val.arg_types[1] = &ffi_type_pointer;
+            ffi_prep_cif(&func_val.cfunc_val.cif, FFI_DEFAULT_ABI, 2, &ffi_type_sint32, arg_types);
+            env_set(env, "strcmp", func_val);
+        }
+        
+        void* atoi_ptr = dlsym(libc_handle, "atoi");
+        if (atoi_ptr) {
+            ffi_type* arg_types[] = {&ffi_type_pointer};
+            Value func_val;
+            func_val.type = 5;
+            func_val.cfunc_val.func_ptr = atoi_ptr;
+            func_val.cfunc_val.ret_type = &ffi_type_sint32;
+            func_val.cfunc_val.arg_count = 1;
+            func_val.cfunc_val.arg_types = malloc(sizeof(ffi_type*));
+            func_val.cfunc_val.arg_types[0] = &ffi_type_pointer;
+            ffi_prep_cif(&func_val.cfunc_val.cif, FFI_DEFAULT_ABI, 1, &ffi_type_sint32, arg_types);
+            env_set(env, "atoi", func_val);
+        }
+        
+        void* system_ptr = dlsym(libc_handle, "system");
+        if (system_ptr) {
+            ffi_type* arg_types[] = {&ffi_type_pointer};
+            Value func_val;
+            func_val.type = 5;
+            func_val.cfunc_val.func_ptr = system_ptr;
+            func_val.cfunc_val.ret_type = &ffi_type_sint32;
+            func_val.cfunc_val.arg_count = 1;
+            func_val.cfunc_val.arg_types = malloc(sizeof(ffi_type*));
+            func_val.cfunc_val.arg_types[0] = &ffi_type_pointer;
+            ffi_prep_cif(&func_val.cfunc_val.cif, FFI_DEFAULT_ABI, 1, &ffi_type_sint32, arg_types);
+            env_set(env, "system", func_val);
+        }
+        
+        void* malloc_ptr = dlsym(libc_handle, "malloc");
+        if (malloc_ptr) {
+            ffi_type* arg_types[] = {&ffi_type_sint32};
+            Value func_val;
+            func_val.type = 5;
+            func_val.cfunc_val.func_ptr = malloc_ptr;
+            func_val.cfunc_val.ret_type = &ffi_type_pointer;
+            func_val.cfunc_val.arg_count = 1;
+            func_val.cfunc_val.arg_types = malloc(sizeof(ffi_type*));
+            func_val.cfunc_val.arg_types[0] = &ffi_type_sint32;
+            ffi_prep_cif(&func_val.cfunc_val.cif, FFI_DEFAULT_ABI, 1, &ffi_type_pointer, arg_types);
+            env_set(env, "malloc", func_val);
+        }
+        
+        void* free_ptr = dlsym(libc_handle, "free");
+        if (free_ptr) {
+            ffi_type* arg_types[] = {&ffi_type_pointer};
+            Value func_val;
+            func_val.type = 5;
+            func_val.cfunc_val.func_ptr = free_ptr;
+            func_val.cfunc_val.ret_type = &ffi_type_void;
+            func_val.cfunc_val.arg_count = 1;
+            func_val.cfunc_val.arg_types = malloc(sizeof(ffi_type*));
+            func_val.cfunc_val.arg_types[0] = &ffi_type_pointer;
+            ffi_prep_cif(&func_val.cfunc_val.cif, FFI_DEFAULT_ABI, 1, &ffi_type_void, arg_types);
+            env_set(env, "free", func_val);
+        }
+    }
+    
+    // puts et putchar
+    Value puts_func;
+    puts_func.type = 5;
+    puts_func.cfunc_val.func_ptr = (void*)call_puts;
+    puts_func.cfunc_val.ret_type = &ffi_type_sint32;
+    puts_func.cfunc_val.arg_count = 1;
+    puts_func.cfunc_val.arg_types = malloc(sizeof(ffi_type*));
+    puts_func.cfunc_val.arg_types[0] = &ffi_type_pointer;
+    ffi_prep_cif(&puts_func.cfunc_val.cif, FFI_DEFAULT_ABI, 1, &ffi_type_sint32, (ffi_type*[]){&ffi_type_pointer});
+    env_set(env, "puts", puts_func);
+    
+    Value putchar_func;
+    putchar_func.type = 5;
+    putchar_func.cfunc_val.func_ptr = (void*)call_putchar;
+    putchar_func.cfunc_val.ret_type = &ffi_type_sint32;
+    putchar_func.cfunc_val.arg_count = 1;
+    putchar_func.cfunc_val.arg_types = malloc(sizeof(ffi_type*));
+    putchar_func.cfunc_val.arg_types[0] = &ffi_type_sint32;
+    ffi_prep_cif(&putchar_func.cfunc_val.cif, FFI_DEFAULT_ABI, 1, &ffi_type_sint32, (ffi_type*[]){&ffi_type_sint32});
+    env_set(env, "putchar", putchar_func);
 }
 
 Value evaluate_expr(ASTNode* node, Environment* env) {
@@ -24,7 +238,7 @@ Value evaluate_expr(ASTNode* node, Environment* env) {
             result.type = 1;
             result.float_val = node->float_val.value;
             break;
-
+            
         case NODE_STRING:
             result.type = 2;
             result.string_val = strdup(node->string_val.value);
@@ -35,30 +249,29 @@ Value evaluate_expr(ASTNode* node, Environment* env) {
             result.bool_val = node->bool_val.value;
             break;
             
+        case NODE_NIL:
+            result.type = 0;
+            result.int_val = 0;
+            break;
+            
         case NODE_IDENTIFIER: {
             Value* val = env_get(env, node->identifier.name);
             if (val) result = *val;
-            else {
-                fprintf(stderr, "Undefined: %s\n", node->identifier.name);
-                exit(1);
-            }
+            else fprintf(stderr, "Undefined: %s\n", node->identifier.name);
             break;
         }
         
         case NODE_BINARY_OP: {
-            // Assignation
-            if (node->binary.op >= OP_ASSIGN && node->binary.op <= OP_MOD_ASSIGN) {
+            if (node->binary.op == OP_ADD_ASSIGN || node->binary.op == OP_SUB_ASSIGN ||
+                node->binary.op == OP_MUL_ASSIGN || node->binary.op == OP_DIV_ASSIGN ||
+                node->binary.op == OP_MOD_ASSIGN) {
                 if (node->binary.left->type == NODE_IDENTIFIER) {
                     char* var_name = node->binary.left->identifier.name;
                     Value* current = env_get(env, var_name);
                     Value right_val = evaluate_expr(node->binary.right, env);
                     Value new_val = {0};
-                    
-                    if (!current && node->binary.op == OP_ASSIGN) {
-                        new_val = right_val;
-                    } else if (current) {
+                    if (current) {
                         switch (node->binary.op) {
-                            case OP_ASSIGN: new_val = right_val; break;
                             case OP_ADD_ASSIGN:
                                 if (current->type == 0 && right_val.type == 0) {
                                     new_val.type = 0;
@@ -90,9 +303,9 @@ Value evaluate_expr(ASTNode* node, Environment* env) {
                                 }
                                 break;
                         }
+                        env_set(env, var_name, new_val);
+                        result = new_val;
                     }
-                    env_set(env, var_name, new_val);
-                    result = new_val;
                 }
                 break;
             }
@@ -108,25 +321,22 @@ Value evaluate_expr(ASTNode* node, Environment* env) {
                     } else if (left.type == 1 && right.type == 1) {
                         result.type = 1;
                         result.float_val = left.float_val + right.float_val;
-                    } else if (left.type == 2 || right.type == 2) {
-                        char* left_str = (left.type == 2) ? left.string_val : "";
-                        char* right_str = (right.type == 2) ? right.string_val : "";
-                        char* num_buf = NULL;
-                        if (left.type == 0) {
-                            num_buf = malloc(32);
-                            sprintf(num_buf, "%d", left.int_val);
-                            left_str = num_buf;
-                        }
-                        if (right.type == 0) {
-                            num_buf = malloc(32);
-                            sprintf(num_buf, "%d", right.int_val);
-                            right_str = num_buf;
-                        }
+                    } else {
+                        char buf1[128], buf2[128];
+                        char* left_str = "";
+                        char* right_str = "";
+                        if (left.type == 0) { sprintf(buf1, "%d", left.int_val); left_str = buf1; }
+                        else if (left.type == 1) { sprintf(buf1, "%f", left.float_val); left_str = buf1; }
+                        else if (left.type == 2) left_str = left.string_val;
+                        else if (left.type == 3) left_str = left.bool_val ? "true" : "false";
+                        if (right.type == 0) { sprintf(buf2, "%d", right.int_val); right_str = buf2; }
+                        else if (right.type == 1) { sprintf(buf2, "%f", right.float_val); right_str = buf2; }
+                        else if (right.type == 2) right_str = right.string_val;
+                        else if (right.type == 3) right_str = right.bool_val ? "true" : "false";
                         result.type = 2;
                         result.string_val = malloc(strlen(left_str) + strlen(right_str) + 1);
                         strcpy(result.string_val, left_str);
                         strcat(result.string_val, right_str);
-                        if (num_buf) free(num_buf);
                     }
                     break;
                 case OP_SUB:
@@ -186,6 +396,7 @@ Value evaluate_expr(ASTNode* node, Environment* env) {
                     result.type = 3;
                     if (left.type == 3 && right.type == 3) result.bool_val = left.bool_val || right.bool_val;
                     break;
+                default: break;
             }
             break;
         }
@@ -203,6 +414,7 @@ Value evaluate_expr(ASTNode* node, Environment* env) {
                         result.int_val = -operand.int_val;
                     }
                     break;
+                default: break;
             }
             break;
         }
@@ -211,21 +423,37 @@ Value evaluate_expr(ASTNode* node, Environment* env) {
             char* func_name = node->call.callee->identifier.name;
             Value* func = env_get(env, func_name);
             
-            if (func && func->type == 5) {
+            if (func && func->type == 4) {
+                Environment* func_env = create_env(func->func_val.closure);
+                if (node->call.args && func->func_val.node->function.params) {
+                    int arg_count = node->call.args->count;
+                    for (int i = 0; i < arg_count && i < func->func_val.node->function.params->count; i++) {
+                        Value arg_val = evaluate_expr(node->call.args->nodes[i], env);
+                        ASTNode* param = func->func_val.node->function.params->nodes[i];
+                        env_set(func_env, param->identifier.name, arg_val);
+                    }
+                }
+                Value ret_val = {0};
+                for (int i = 0; i < func->func_val.node->function.body->count; i++) {
+                    ASTNode* stmt = func->func_val.node->function.body->nodes[i];
+                    if (stmt->type == NODE_RETURN) {
+                        ret_val = evaluate_expr(stmt->return_stmt.value, func_env);
+                        break;
+                    } else {
+                        evaluate_statement(stmt, func_env);
+                    }
+                }
+                free(func_env);
+                result = ret_val;
+            } else if (func && func->type == 5) {
                 int arg_count = node->call.args ? node->call.args->count : 0;
                 Value* args = malloc(arg_count * sizeof(Value));
                 for (int i = 0; i < arg_count; i++) {
                     args[i] = evaluate_expr(node->call.args->nodes[i], env);
                 }
-                call_c_function(func, args, arg_count, &result);
+                result = call_c_function_ffi(func->cfunc_val.func_ptr, args, arg_count,
+                                             func->cfunc_val.ret_type, func->cfunc_val.arg_types);
                 free(args);
-            } else if (strcmp(func_name, "print") == 0) {
-                if (node->call.args && node->call.args->count > 0) {
-                    Value arg = evaluate_expr(node->call.args->nodes[0], env);
-                    print_value(arg, 0);
-                }
-                result.type = 0;
-                result.int_val = 0;
             } else if (strcmp(func_name, "println") == 0) {
                 if (node->call.args && node->call.args->count > 0) {
                     Value arg = evaluate_expr(node->call.args->nodes[0], env);
@@ -233,15 +461,18 @@ Value evaluate_expr(ASTNode* node, Environment* env) {
                 } else printf("\n");
                 result.type = 0;
                 result.int_val = 0;
-            } else {
+            } else if (strcmp(func_name, "print") == 0) {
+                if (node->call.args && node->call.args->count > 0) {
+                    Value arg = evaluate_expr(node->call.args->nodes[0], env);
+                    print_value(arg, 0);
+                }
                 result.type = 0;
                 result.int_val = 0;
             }
             break;
         }
         
-        default:
-            break;
+        default: break;
     }
     
     return result;
@@ -254,9 +485,7 @@ int evaluate_statement(ASTNode* node, Environment* env) {
             env_set(env, node->var_decl.name, val);
             return 0;
         }
-        case NODE_BREAK: {
-            return 2; // Signal break
-        }
+        
         case NODE_RETURN: {
             Value val = evaluate_expr(node->return_stmt.value, env);
             print_value(val, 1);
@@ -290,36 +519,50 @@ int evaluate_statement(ASTNode* node, Environment* env) {
         
         case NODE_LOOP: {
             while (1) {
+                int break_flag = 0;
                 for (int i = 0; i < node->loop_stmt.body->count; i++) {
-                    if (evaluate_statement(node->loop_stmt.body->nodes[i], env)) return 1;
+                    int ret = evaluate_statement(node->loop_stmt.body->nodes[i], env);
+                    if (ret == 1) return 1;
+                    if (ret == 2) { break_flag = 1; break; }
+                }
+                if (break_flag) break;
+            }
+            return 0;
+        }
+        
+        case NODE_FOR: {
+            if (node->for_range.start) evaluate_statement(node->for_range.start, env);
+            while (1) {
+                if (node->for_range.end) {
+                    Value cond = evaluate_expr(node->for_range.end, env);
+                    if (cond.type != 3 || !cond.bool_val) break;
+                }
+                for (int i = 0; i < node->for_range.body->count; i++) {
+                    if (evaluate_statement(node->for_range.body->nodes[i], env)) return 1;
+                }
+                if (node->for_range.var) {
+                    // increment
                 }
             }
             return 0;
         }
         
+        case NODE_BREAK:
+            return 2;
+            
         case NODE_EXPR_STMT: {
             evaluate_expr(node->expr_stmt.expr, env);
             return 0;
         }
         
-        default:
-            return 0;
+        default: return 0;
     }
 }
 
 void interpret_program(ASTNode* program) {
     Environment* global = create_env(NULL);
-    
-    void* libc = dlopen("libc.so.6", RTLD_LAZY);
-    if (libc) {
-        register_c_function(global, "printf", dlsym(libc, "printf"), "int", -1);
-        register_c_function(global, "strlen", dlsym(libc, "strlen"), "int", 1, "char*");
-        register_c_function(global, "strcmp", dlsym(libc, "strcmp"), "int", 2, "char*", "char*");
-        register_c_function(global, "atoi", dlsym(libc, "atoi"), "int", 1, "char*");
-        register_c_function(global, "atof", dlsym(libc, "atof"), "double", 1, "char*");
-        register_c_function(global, "system", dlsym(libc, "system"), "int", 1, "char*");
-        register_c_function(global, "exit", dlsym(libc, "exit"), "void", 1, "int");
-    }
+    init_interpreter();
+    register_native_c_functions(global);
     
     for (int i = 0; i < program->program.statements->count; i++) {
         ASTNode* stmt = program->program.statements->nodes[i];
@@ -355,4 +598,8 @@ void interpret_program(ASTNode* program) {
     }
     
     free(global);
+}
+
+void init_interpreter() {
+    init_libc();
 }

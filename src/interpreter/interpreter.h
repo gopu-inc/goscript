@@ -9,8 +9,8 @@
 #include <ffi.h>
 #include "../ast/ast.h"
 
-  typedef struct Value {
-    int type;      // 0=int, 1=float, 2=string, 3=bool, 4=function, 5=cfunction, 6=struct
+typedef struct Value {
+    int type;  // 0=int, 1=float, 2=string, 3=bool, 4=function, 5=cfunction, 6=struct
     union {
         int int_val;
         double float_val;
@@ -29,15 +29,11 @@
             char* name;
         } cfunc_val;
         struct {
-            char* name;
-            struct {
-                char* name;
-                struct Value* value;
-            }* fields;
+            struct Value** fields;  // Tableau de pointeurs vers Value
             int field_count;
         } struct_val;
     };
-} Value;    
+} Value;
 typedef struct Environment {
     struct Environment* parent;
     struct {

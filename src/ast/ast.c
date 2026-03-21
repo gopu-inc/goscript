@@ -473,7 +473,22 @@ ASTNode* create_pattern_wildcard() {
     node->type = NODE_PATTERN_WILDCARD;
     return node;
 }
+ASTNode* create_constraints_node(char* type, ASTNodeList* list) {
+    ASTNode* node = malloc(sizeof(ASTNode));
+    node->type = NODE_CONSTRAINT;
+    node->constraint.constraint_type = strdup(type);
+    node->constraint.list = list;
+    node->constraint.int_value = 0;
+    return node;
+}
 
+ASTNode* merge_constraints(ASTNode* a, ASTNode* b) {
+    ASTNode* node = malloc(sizeof(ASTNode));
+    node->type = NODE_CONSTRAINT_LIST;
+    node->constraint_list.a = a;
+    node->constraint_list.b = b;
+    return node;
+}
 // ==================== Fonctions utilitaires ====================
 
 void free_ast(ASTNode* node) {

@@ -274,7 +274,55 @@ ASTNode* find_method(ASTNode* impl_node, char* method_name) {
     return NULL;
 }
 
-        
+
+Value call_method(Value* obj, char* method_name, ASTNodeList* args, Environment* env) {
+    Value result = {0};
+    
+    if (obj->type != 6) return result;
+    
+    // Chercher l'implémentation
+    ASTNode* impl_node = find_impl(obj->struct_val.struct_name);
+    
+    if (!impl_node) return result;
+    
+    // Chercher la méthode
+    ASTNode* method = find_method(impl_node, method_name);
+    
+    if (!method) return result;
+    
+    // Créer l'environnement de la méthode
+    Environment* method_env = create_env(env);
+    
+    // Lier self
+    env_set(method_env, "self", *obj);
+    
+    // Lier les arguments
+    if (args) {
+        for (int i = 0; i < args->count; i++) {
+            Value arg_val = evaluate_expr(args->nodes[i], env);
+            if (method->function.params && i < method->function.params->count) {
+                ASTNode* param = method->function.params->nodes[i];
+                env_set(method_env, param->identifier.name, arg_val);
+            }
+        }
+    }
+    
+    // Exécuter la méthode
+    for (int i = 0; i < method->function.body->count; i++) {
+        ASTNode* stmt = method->function.body->nodes[i];
+        if (stmt->type == NODE_RETURN) {
+            result = evaluate_expr(stmt->return_stmt.value, method_env);
+            break;
+        } else {
+            evaluate_statement(stmt, method_env);
+        }
+    }
+    
+    free(method_env);
+    return result;
+}
+
+
 Value evaluate_expr(ASTNode* node, Environment* env) {
     Value result = {0};
     

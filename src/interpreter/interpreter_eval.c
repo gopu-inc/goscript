@@ -323,6 +323,7 @@ Value call_method(Value* obj, char* method_name, ASTNodeList* args, Environment*
 }
 
 
+
 Value evaluate_expr(ASTNode* node, Environment* env) {
     Value result = {0};
     
@@ -683,17 +684,26 @@ case NODE_METHOD_CALL: {
             if (method) {
                 Environment* method_env = create_env(env);
                 
-                // Lier 'self' à l'objet
-                env_set(method_env, "self", obj);
-                
-                // Lier les arguments par leur nom
-                if (node->method_call.args && method->function.params) {
-                    for (int i = 0; i < node->method_call.args->count && i < method->function.params->count; i++) {
-                        Value arg_val = evaluate_expr(node->method_call.args->nodes[i], env);
-                        ASTNode* param = method->function.params->nodes[i];
-                        env_set(method_env, param->identifier.name, arg_val);
+                // ==================== CORRECTION ICI ====================
+                // Lier l'objet (l'instance) au PREMIER paramètre déclaré
+                if (method->function.params && method->function.params->count > 0) {
+                    // Le premier paramètre reçoit l'instance (peu importe son nom)
+                    ASTNode* first_param = method->function.params->nodes[0];
+                    env_set(method_env, first_param->identifier.name, obj);
+                    
+                    // Lier les arguments supplémentaires (décalés de 1)
+                    if (node->method_call.args) {
+                        for (int i = 0; i < node->method_call.args->count && (i + 1) < method->function.params->count; i++) {
+                            Value arg_val = evaluate_expr(node->method_call.args->nodes[i], env);
+                            ASTNode* param = method->function.params->nodes[i + 1];
+                            env_set(method_env, param->identifier.name, arg_val);
+                        }
                     }
+                } else {
+                    // Fallback : s'il n'y a pas de paramètre, on injecte "self"
+                    env_set(method_env, "self", obj);
                 }
+                // ==================== FIN CORRECTION ====================
                 
                 // Exécuter la méthode
                 Value ret_val = {0};

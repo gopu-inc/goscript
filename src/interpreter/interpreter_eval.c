@@ -643,22 +643,43 @@ int evaluate_statement(ASTNode* node, Environment* env) {
         }
         
         case NODE_FOR: {
-            if (node->for_range.start) evaluate_statement(node->for_range.start, env);
+    // La boucle for a trois parties: init, condition, increment
+    // Structure: for init; condition; increment { body }
+    
+    // 1. Exécuter l'initialisation (déclaration de variable)
+            if (node->for_range.start) {
+                evaluate_statement(node->for_range.start, env);
+            }
+    
+    // 2. Boucler tant que la condition est vraie
             while (1) {
+        // Vérifier la condition
                 if (node->for_range.end) {
                     Value cond = evaluate_expr(node->for_range.end, env);
-                    if (cond.type != 3 || !cond.bool_val) break;
+                    if (cond.type != 3 || !cond.bool_val) {
+                        break;  // Condition fausse, sortir de la boucle
+                    }
                 }
+        
+        // Exécuter le corps de la boucle
                 for (int i = 0; i < node->for_range.body->count; i++) {
-                    if (evaluate_statement(node->for_range.body->nodes[i], env)) return 1;
+                    int ret = evaluate_statement(node->for_range.body->nodes[i], env);
+                    if (ret == 1) return 1;  // return
+                    if (ret == 2) {  // break
+                        return 0;
+                    }
                 }
+        
+        // 3. Exécuter l'incrémentation
                 if (node->for_range.var) {
-                    // increment
+            // Pour l'instant, l'incrémentation est déjà dans le for
+            // format: for i = 0; i < 5; i = i + 1
+            // L'incrémentation est stockée dans node->for_range.start
+            // mais en réalité elle est dans la troisième expression
                 }
             }
             return 0;
         }
-        
         case NODE_BREAK:
             return 2;
             

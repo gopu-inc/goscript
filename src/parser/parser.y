@@ -77,7 +77,7 @@ ASTNode* program_root;
 %type <node> param type return_type
 %type <node> match_case pattern struct_field
 %type <node_list> statement_list argument_list param_list struct_fields enum_variants array_items match_cases function_decl_list struct_init_fields
-
+%type <node> break_statement
 %start program
 
 %%

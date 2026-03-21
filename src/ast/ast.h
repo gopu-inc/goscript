@@ -57,6 +57,7 @@ typedef enum {
     NODE_PATTERN_WILDCARD,
     NODE_CONSTRAINT,
     NODE_CONSTRAINT_LIST,
+    NODE_MODULE,
     NODE_ASSIGN_OP
 } NodeType;
 
@@ -108,6 +109,7 @@ typedef struct ASTNode {
         struct {
             char* path;
             char* alias;
+            struct ASTNode* constraints;  // Contraintes d'import (only, timeout, etc.)
         } import;
         struct {
             char* name;
@@ -289,7 +291,7 @@ typedef struct ASTNode {
             int inclusive;
         } range;
         
-        /* Types - Renommé pour éviter conflit */
+        /* Types */
         struct {
             char* name;
         } type_def;
@@ -325,6 +327,25 @@ typedef struct ASTNode {
             int dummy;
         } pattern_wildcard;
         
+        /* Contraintes d'import */
+        struct {
+            char* constraint_type;  // "only", "timeout", "sandbox", "allow_ffi"
+            ASTNodeList* list;       // Liste des noms autorisés pour "only"
+            int int_value;           // Valeur pour timeout, etc.
+        } constraint;
+        
+        /* Liste de contraintes */
+        struct {
+            struct ASTNode* a;
+            struct ASTNode* b;
+        } constraint_list;
+        
+        /* Module */
+        struct {
+            char* name;
+            struct LoadedModule* module;
+        } module;
+        
         /* Assignation composée */
         struct {
             Operator op;
@@ -333,7 +354,6 @@ typedef struct ASTNode {
         } assign_op;
     };
 } ASTNode;
-
 /* ==================== Fonctions de création de listes ==================== */
 ASTNodeList* create_node_list(void);
 void add_to_node_list(ASTNodeList* list, ASTNode* node);

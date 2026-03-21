@@ -1,40 +1,30 @@
-// module switchb
+// Test des fonctions C via FFI
 
-fn switch(a: int || float, b: int || float) {
-   enm skip(
-      pass
-      break
-      saute
-      ok
-   )
-   type continue(
-      skip::pass
-      skip::break
-      skip::saute
-   )
-   if a == int {
-      ret continue.skip::break
-   } elseif a == float {
-      ret continue.skip::pass
-   }
-   if b == int {
-      ret continue.skip::saute
-   } elseif b == float {
-      ret continue.skip::break
-   }
-ret skip::ok
+fn main() {
+    println("=== FFI TEST ===\n")
+    
+    // Test printf
+    printf("Hello from C printf!\n")
+    
+    // Test strlen
+    lt len = strlen("Goscript")
+    println("Length of 'Goscript': " + len)
+    
+    // Test atoi
+    lt num = atoi("12345")
+    println("String to int: " + num)
+    
+    // Test system
+    system("echo 'System command executed!'")
+    
+    // Test malloc et free
+    lt ptr = malloc(100)
+    if ptr != nil {
+        println("Memory allocated successfully")
+        free(ptr)
+        println("Memory freed")
+    }
+    
+    println("\n=== TEST RÉUSSI ===")
+    ret 0
 }
-pub fn constructor() {
-   impl: 
-        cn switch = switch(<param>)
-        if switch >= 0 {
-           ret f"{s}"
-        } else {
-           ret f"{e}"
-        }
-   eval:
-       switch::<param>
-}
-
-   
-        

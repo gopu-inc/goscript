@@ -121,12 +121,57 @@ statement:
     }
     ;
 
+// Nouvelles règles d'import
 import_statement:
     TOKEN_IMPORT TOKEN_IDENTIFIER {
-        $$ = create_import_node($2, NULL);
+        $$ = create_import_node($2, NULL, NULL);
+    }
+    | TOKEN_IMPORT TOKEN_DOT TOKEN_IDENTIFIER {
+        char* path = malloc(strlen($3) + 3);
+        sprintf(path, "./%s", $3);
+        $$ = create_import_node(path, NULL, NULL);
+        free(path);
+    }
+    | TOKEN_IMPORT TOKEN_DOT TOKEN_DOT TOKEN_DOT TOKEN_IDENTIFIER {
+        char* path = malloc(strlen($5) + 4);
+        sprintf(path, "../%s", $5);
+        $$ = create_import_node(path, NULL, NULL);
+        free(path);
     }
     | TOKEN_IMPORT TOKEN_IDENTIFIER TOKEN_FROM TOKEN_STRING {
-        $$ = create_import_node($4, $2);
+        $$ = create_import_node($4, $2, NULL);
+    }
+    | TOKEN_IMPORT TOKEN_IDENTIFIER TOKEN_AS TOKEN_IDENTIFIER {
+        $$ = create_import_node($2, $4, NULL);
+    }
+    | TOKEN_IMPORT TOKEN_IDENTIFIER import_constraints {
+        $$ = create_import_node($2, NULL, $3);
+    }
+    ;
+
+import_constraints:
+    TOKEN_LBRACE import_options TOKEN_RBRACE {
+        $$ = $2;
+    }
+    ;
+
+import_options:
+    TOKEN_ONLY TOKEN_COLON TOKEN_LBRACKET name_list TOKEN_RBRACKET {
+        $$ = create_constraints_node("only", $4);
+    }
+    | import_options TOKEN_COMMA import_options {
+        $$ = merge_constraints($1, $3);
+    }
+    ;
+
+name_list:
+    TOKEN_IDENTIFIER {
+        $$ = create_node_list();
+        add_to_node_list($$, create_identifier_node($1));
+    }
+    | name_list TOKEN_COMMA TOKEN_IDENTIFIER {
+        add_to_node_list($1, create_identifier_node($3));
+        $$ = $1;
     }
     ;
 

@@ -25,9 +25,6 @@ Value evaluate_expr(ASTNode* node, Environment* env) {
             result.float_val = node->float_val.value;
             break;
 
-        case NODE_BREAK: {
-            return 2; // Signal break
-        }
         case NODE_STRING:
             result.type = 2;
             result.string_val = strdup(node->string_val.value);
@@ -257,7 +254,9 @@ int evaluate_statement(ASTNode* node, Environment* env) {
             env_set(env, node->var_decl.name, val);
             return 0;
         }
-        
+        case NODE_BREAK: {
+            return 2; // Signal break
+        }
         case NODE_RETURN: {
             Value val = evaluate_expr(node->return_stmt.value, env);
             print_value(val, 1);

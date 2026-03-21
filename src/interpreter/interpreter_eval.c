@@ -609,7 +609,7 @@ Value evaluate_expr(ASTNode* node, Environment* env) {
 
 case NODE_STRUCT_INIT: {
     result.type = 6;
-    result.struct_val.struct_name = strdup(node->struct_init.name);  // Utilisez struct_name
+    result.struct_val.struct_name = strdup(node->struct_init.name);
     
     int field_count = 0;
     if (node->struct_init.fields) {
@@ -617,16 +617,17 @@ case NODE_STRUCT_INIT: {
     }
     
     result.struct_val.field_count = field_count;
-    result.struct_val.fields = malloc(field_count * sizeof(Value*));
+    result.struct_val.fields = malloc(field_count * sizeof(*result.struct_val.fields));
     
     for (int i = 0; i < field_count; i++) {
         ASTNode* field_node = node->struct_init.fields->nodes[i];
         if (field_node->type == NODE_FIELD_INIT) {
-            Value* field_val = malloc(sizeof(Value));
-            *field_val = evaluate_expr(field_node->field_init.value, env);
-            result.struct_val.fields[i] = field_val;
+            result.struct_val.fields[i].name = strdup(field_node->field_init.name);
+            result.struct_val.fields[i].value = malloc(sizeof(Value));
+            *(result.struct_val.fields[i].value) = evaluate_expr(field_node->field_init.value, env);
         } else {
-            result.struct_val.fields[i] = NULL;
+            result.struct_val.fields[i].name = NULL;
+            result.struct_val.fields[i].value = NULL;
         }
     }
     break;
@@ -637,19 +638,24 @@ case NODE_STRUCT_INIT: {
 case NODE_MEMBER_ACCESS: {
     Value obj = evaluate_expr(node->member.object, env);
     
-    if (obj.type == 6 && obj.struct_val.fields) {
+    if (obj.type == 6) {
         char* member_name = node->member.member;
         
-        // Accès par nom de champ
-        if (strcmp(member_name, "width") == 0 || strcmp(member_name, "x") == 0) {
-            if (obj.struct_val.fields[0]) {
-                result = *obj.struct_val.fields[0];
+        // Recherche linéaire du champ par son nom
+        Value* found = NULL;
+        for (int i = 0; i < obj.struct_val.field_count; i++) {
+            if (obj.struct_val.fields[i].name && 
+                strcmp(obj.struct_val.fields[i].name, member_name) == 0) {
+                found = obj.struct_val.fields[i].value;
+                break;
             }
-        } else if (strcmp(member_name, "height") == 0 || strcmp(member_name, "y") == 0) {
-            if (obj.struct_val.fields[1]) {
-                result = *obj.struct_val.fields[1];
-            }
+        }
+        
+        if (found) {
+            result = *found;
         } else {
+            fprintf(stderr, "Field '%s' not found in struct '%s'\n", 
+                    member_name, obj.struct_val.struct_name);
             result.type = 0;
             result.int_val = 0;
         }
@@ -659,66 +665,37 @@ case NODE_MEMBER_ACCESS: {
     }
     break;
 }
-
-// ==================== APPEL DE MÉTHODES ====================
-
 // ==================== APPEL DE MÉTHODE ====================
 
 case NODE_METHOD_CALL: {
-    // Évaluer l'objet (la structure)
     Value obj = evaluate_expr(node->method_call.object, env);
     
-    if (obj.type == 6) { // C'est une structure
+    if (obj.type == 6) {
         char* method_name = node->method_call.method;
         
         // Chercher l'implémentation de la structure
-        // Pour l'instant, on cherche dans le programme global
-        extern ASTNode* program_root;
-        ASTNode* impl_node = NULL;
+        ASTNode* impl_node = find_impl(obj.struct_val.struct_name);
         
-        if (program_root) {
-            for (int i = 0; i < program_root->program.statements->count; i++) {
-                ASTNode* stmt = program_root->program.statements->nodes[i];
-                if (stmt && stmt->type == NODE_IMPL && 
-                    strcmp(stmt->impl.name, "Rectangle") == 0) {
-                    impl_node = stmt;
-                    break;
-                }
-            }
-        }
-        
-        if (impl_node && impl_node->impl.methods) {
-            // Chercher la méthode
-            ASTNode* method = NULL;
-            for (int i = 0; i < impl_node->impl.methods->count; i++) {
-                ASTNode* m = impl_node->impl.methods->nodes[i];
-                if (m && m->type == NODE_FUNCTION && 
-                    strcmp(m->function.name, method_name) == 0) {
-                    method = m;
-                    break;
-                }
-            }
+        if (impl_node) {
+            // Chercher la méthode par son nom
+            ASTNode* method = find_method(impl_node, method_name);
             
             if (method) {
-                // Créer un environnement pour la méthode
                 Environment* method_env = create_env(env);
                 
                 // Lier 'self' à l'objet
-                Value self_val = obj;
-                env_set(method_env, "self", self_val);
+                env_set(method_env, "self", obj);
                 
-                // Lier les arguments
-                if (node->method_call.args) {
-                    for (int i = 0; i < node->method_call.args->count; i++) {
+                // Lier les arguments par leur nom
+                if (node->method_call.args && method->function.params) {
+                    for (int i = 0; i < node->method_call.args->count && i < method->function.params->count; i++) {
                         Value arg_val = evaluate_expr(node->method_call.args->nodes[i], env);
-                        if (method->function.params && i < method->function.params->count) {
-                            ASTNode* param = method->function.params->nodes[i];
-                            env_set(method_env, param->identifier.name, arg_val);
-                        }
+                        ASTNode* param = method->function.params->nodes[i];
+                        env_set(method_env, param->identifier.name, arg_val);
                     }
                 }
                 
-                // Exécuter le corps de la méthode
+                // Exécuter la méthode
                 Value ret_val = {0};
                 for (int i = 0; i < method->function.body->count; i++) {
                     ASTNode* stmt = method->function.body->nodes[i];
@@ -733,11 +710,14 @@ case NODE_METHOD_CALL: {
                 free(method_env);
                 result = ret_val;
             } else {
-                fprintf(stderr, "Method '%s' not found\n", method_name);
+                fprintf(stderr, "Method '%s' not found in struct '%s'\n", 
+                        method_name, obj.struct_val.struct_name);
                 result.type = 0;
                 result.int_val = 0;
             }
         } else {
+            fprintf(stderr, "No implementation found for struct '%s'\n", 
+                    obj.struct_val.struct_name);
             result.type = 0;
             result.int_val = 0;
         }

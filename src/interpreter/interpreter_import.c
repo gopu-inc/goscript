@@ -1,7 +1,7 @@
 #include "interpreter.h"
 #include <libgen.h>
 #include <sys/stat.h>
-#include <unistd.h>  // Pour access() et F_OK
+#include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -24,7 +24,6 @@ char* resolve_module_path(char* current_file, char* import_path) {
         char* dir = strdup(current_file);
         char* dirname_ptr = dirname(dir);
         
-        // Construire le chemin complet
         char full_path[1024];
         if (import_path[1] == '/') {
             // ./module
@@ -42,7 +41,6 @@ char* resolve_module_path(char* current_file, char* import_path) {
     }
     // Module standard
     else {
-        // Chercher dans différents chemins
         char* paths[] = {
             "/usr/local/lib/goscript/granul/packages/",
             "/usr/lib/goscript/",
@@ -75,7 +73,7 @@ char* resolve_module_path(char* current_file, char* import_path) {
 
 // ==================== GESTION DE LA TABLE DES MODULES ====================
 
-ModuleRegistry* init_module_registry() {
+ModuleRegistry* init_module_registry(void) {
     ModuleRegistry* reg = malloc(sizeof(ModuleRegistry));
     reg->modules = NULL;
     reg->count = 0;
@@ -119,6 +117,34 @@ void free_module_registry(ModuleRegistry* reg) {
     free(reg);
 }
 
+// ==================== FONCTIONS DE CONSTRAINTS ====================
+
+ASTNode* create_constraints_node(char* constraint_type, ASTNodeList* list) {
+    ASTNode* node = malloc(sizeof(ASTNode));
+    node->type = NODE_CONSTRAINT;
+    node->constraint.constraint_type = strdup(constraint_type);
+    node->constraint.list = list;
+    node->constraint.int_value = 0;
+    return node;
+}
+
+ASTNode* create_timeout_constraint(int timeout_ms) {
+    ASTNode* node = malloc(sizeof(ASTNode));
+    node->type = NODE_CONSTRAINT;
+    node->constraint.constraint_type = strdup("timeout");
+    node->constraint.list = NULL;
+    node->constraint.int_value = timeout_ms;
+    return node;
+}
+
+ASTNode* merge_constraints(ASTNode* a, ASTNode* b) {
+    ASTNode* node = malloc(sizeof(ASTNode));
+    node->type = NODE_CONSTRAINT_LIST;
+    node->constraint_list.a = a;
+    node->constraint_list.b = b;
+    return node;
+}
+
 // ==================== CHARGEMENT D'UN MODULE ====================
 
 LoadedModule* load_module(ModuleRegistry* reg, Environment* parent_env,
@@ -146,6 +172,7 @@ LoadedModule* load_module(ModuleRegistry* reg, Environment* parent_env,
     FILE* f = fopen(module_path, "r");
     if (!f) {
         free(module_path);
+        free(module_env);
         return NULL;
     }
     
@@ -179,6 +206,11 @@ LoadedModule* load_module(ModuleRegistry* reg, Environment* parent_env,
     module->constraints.sandbox = 0;
     module->constraints.allow_ffi = 1;
     
+    // Traiter les contraintes si présentes
+    if (constraints) {
+        process_constraints(module, constraints);
+    }
+    
     // 6. Exécuter le module dans son environnement
     // Note: interpret_program_in_env doit être implémentée
     // Pour l'instant, on utilise interpret_program
@@ -198,21 +230,55 @@ LoadedModule* load_module(ModuleRegistry* reg, Environment* parent_env,
     return module;
 }
 
-// ==================== FONCTIONS DE CONSTRAINTS ====================
+// ==================== TRAITEMENT DES CONTRAINTES ====================
 
-ASTNode* create_constraints_node(char* type, ASTNodeList* list) {
-    ASTNode* node = malloc(sizeof(ASTNode));
-    node->type = NODE_CONSTRAINT;
-    node->constraint.type = strdup(type);
-    node->constraint.list = list;
-    return node;
+void process_constraints(LoadedModule* module, ASTNode* constraints) {
+    if (!constraints) return;
+    
+    if (constraints->type == NODE_CONSTRAINT) {
+        if (strcmp(constraints->constraint.constraint_type, "only") == 0) {
+            // Traiter la liste "only"
+            if (constraints->constraint.list) {
+                module->constraints.allowed_count = constraints->constraint.list->count;
+                module->constraints.allowed_names = malloc(module->constraints.allowed_count * sizeof(char*));
+                for (int i = 0; i < module->constraints.allowed_count; i++) {
+                    ASTNode* name_node = constraints->constraint.list->nodes[i];
+                    if (name_node->type == NODE_IDENTIFIER) {
+                        module->constraints.allowed_names[i] = strdup(name_node->identifier.name);
+                    }
+                }
+            }
+        } else if (strcmp(constraints->constraint.constraint_type, "timeout") == 0) {
+            module->constraints.timeout_ms = constraints->constraint.int_value;
+        } else if (strcmp(constraints->constraint.constraint_type, "sandbox") == 0) {
+            module->constraints.sandbox = 1;
+        } else if (strcmp(constraints->constraint.constraint_type, "allow_ffi") == 0) {
+            module->constraints.allow_ffi = constraints->constraint.int_value;
+        }
+    } else if (constraints->type == NODE_CONSTRAINT_LIST) {
+        process_constraints(module, constraints->constraint_list.a);
+        process_constraints(module, constraints->constraint_list.b);
+    }
 }
 
-ASTNode* merge_constraints(ASTNode* a, ASTNode* b) {
-    // Fusionner deux listes de contraintes
-    ASTNode* result = malloc(sizeof(ASTNode));
-    result->type = NODE_CONSTRAINT_LIST;
-    result->constraint_list.a = a;
-    result->constraint_list.b = b;
-    return result;
+// ==================== VÉRIFICATION DES PERMISSIONS ====================
+
+int is_name_allowed(LoadedModule* module, char* name) {
+    if (!module) return 1;
+    
+    // Si pas de liste "only", tout est permis
+    if (module->constraints.allowed_count == 0) return 1;
+    
+    // Vérifier si le nom est dans la liste
+    for (int i = 0; i < module->constraints.allowed_count; i++) {
+        if (strcmp(module->constraints.allowed_names[i], name) == 0) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+int is_ffi_allowed(LoadedModule* module) {
+    if (!module) return 1;
+    return module->constraints.allow_ffi;
 }

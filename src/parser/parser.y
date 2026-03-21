@@ -55,6 +55,17 @@ ASTNode* program_root;
 %token <float_val> TOKEN_FLOAT
 %token <string> TOKEN_STRING
 
+/* Précédence des opérateurs (du plus faible au plus fort) */
+%left TOKEN_OR
+%left TOKEN_AND
+%left TOKEN_EQ TOKEN_NEQ
+%left TOKEN_LT TOKEN_LTE TOKEN_GT TOKEN_GTE
+%left TOKEN_PLUS TOKEN_MINUS
+%left TOKEN_MULTIPLY TOKEN_DIVIDE TOKEN_MODULO
+%right TOKEN_NOT
+%nonassoc TOKEN_ASSIGN TOKEN_PLUS_ASSIGN TOKEN_MINUS_ASSIGN 
+         TOKEN_MULTIPLY_ASSIGN TOKEN_DIVIDE_ASSIGN TOKEN_MODULO_ASSIGN
+
 /* Non-terminals */
 %type <node> program statement expression block
 %type <node> function_decl let_decl const_decl return_statement

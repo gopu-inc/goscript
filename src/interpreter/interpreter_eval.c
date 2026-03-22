@@ -719,7 +719,7 @@ case NODE_METHOD_CALL: {
                         ret_val = evaluate_expr(stmt->return_stmt.value, method_env);
                         break;
                     } else {
-                        evaluate_statement(stmt, method_env);
+                        evaluate_statement(stmt, method_env, NULL);
                     }
                 }
                 
@@ -799,7 +799,7 @@ case NODE_METHOD_CALL: {
                         has_return = 1;
                         break;
                     } else {
-                        evaluate_statement(stmt, func_env);
+                        evaluate_statement(stmt, func_env,,  NULL);
                     }
                 }
                 
@@ -1069,7 +1069,7 @@ void interpret_program(ASTNode* program) {
         
         // Exécuter le corps de main
         for (int i = 0; i < main_func->function.body->count; i++) {
-            int ret = evaluate_statement(main_func->function.body->nodes[i], main_env);
+            int ret = evaluate_statement(main_func->function.body->nodes[i], main_env, NULL);
             if (ret) break;
         }
         free(main_env);
@@ -1078,7 +1078,7 @@ void interpret_program(ASTNode* program) {
         for (int i = 0; i < program->program.statements->count; i++) {
             ASTNode* stmt = program->program.statements->nodes[i];
             if (stmt->type == NODE_EXPR_STMT) {
-                evaluate_statement(stmt, global);
+                evaluate_statement(stmt, global, NULL);
             }
         }
     }

@@ -18,38 +18,105 @@ extern void register_impl(char* struct_name, ASTNode* impl_node);
 extern void env_set(Environment* env, char* name, Value value);
 extern Environment* create_env(Environment* parent);
 extern int yylineno;
+extern void register_native_c_functions(Environment* env);
 
-// ==================== STRUCTURES DES MODULES ====================
+// ==================== CONSTANTES ====================
 
-typedef enum {
-    MODULE_STATUS_UNLOADED = 0,
-    MODULE_STATUS_LOADING,
-    MODULE_STATUS_LOADED,
-    MODULE_STATUS_ERROR
-} ModuleStatus;
-/*
-typedef struct LodedModule {
-    char* path;              // Chemin absolu (clé unique)
-    char* name;              // Nom du module
-    char* alias;             // Alias d'import
-    ModuleStatus status;
-    Environment* env;        // Environnement isolé du module
-    int ref_count;           // Compteur de références
-    struct {
-        char** exported_names;   // Noms exportés publiquement
-        int exported_count;
-        char** only_allowed;     // Filtre "only" pour l'import
-        int only_count;
-        int timeout_ms;          // Timeout en millisecondes
-        int sandbox;             // Mode sandboxé (1 = activé)
-        int allow_ffi;           // 1 = FFI autorisé
-    } constraints;
-} LodedModule;
-*/
-// Registre global des modules
-static LodedModule* modules[1024];
+#define MODULE_STATUS_UNLOADED 0
+#define MODULE_STATUS_LOADING 1
+#define MODULE_STATUS_LOADED 2
+#define MODULE_STATUS_ERROR 3
+
+// ==================== GESTION DU CACHE ====================
+
+static LoadedModule* modules[1024];
 static int module_count = 0;
 static int module_capacity = 1024;
+
+static LoadedModule* find_module_by_path(const char* path) {
+    for (int i = 0; i < module_count; i++) {
+        if (modules[i] && modules[i]->module_path && 
+            strcmp(modules[i]->module_path, path) == 0) {
+            return modules[i];
+        }
+    }
+    return NULL;
+}
+
+static LoadedModule* find_module_by_name(const char* name) {
+    for (int i = 0; i < module_count; i++) {
+        if (modules[i] && modules[i]->module_name && 
+            strcmp(modules[i]->module_name, name) == 0) {
+            return modules[i];
+        }
+    }
+    return NULL;
+}
+
+static LoadedModule* create_module(const char* path, const char* name, const char* alias) {
+    if (module_count >= module_capacity) {
+        fprintf(stderr, "Module registry full\n");
+        return NULL;
+    }
+    
+    LoadedModule* mod = malloc(sizeof(LoadedModule));
+    if (!mod) return NULL;
+    
+    mod->module_path = path ? strdup(path) : NULL;
+    mod->module_name = name ? strdup(name) : NULL;
+    mod->alias = alias ? strdup(alias) : NULL;
+    mod->status = MODULE_STATUS_LOADING;
+    mod->env = create_env(NULL);
+    mod->ref_count = 1;
+    
+    mod->constraints.allowed_names = NULL;
+    mod->constraints.allowed_count = 0;
+    mod->constraints.timeout_ms = 0;
+    mod->constraints.sandbox = 0;
+    mod->constraints.allow_ffi = 1;
+    
+    modules[module_count++] = mod;
+    return mod;
+}
+
+static void free_module(LoadedModule* mod) {
+    if (!mod) return;
+    
+    if (mod->module_path) free(mod->module_path);
+    if (mod->module_name) free(mod->module_name);
+    if (mod->alias) free(mod->alias);
+    if (mod->env) free(mod->env);
+    
+    if (mod->constraints.allowed_names) {
+        for (int i = 0; i < mod->constraints.allowed_count; i++) {
+            if (mod->constraints.allowed_names[i]) free(mod->constraints.allowed_names[i]);
+        }
+        free(mod->constraints.allowed_names);
+    }
+    
+    free(mod);
+}
+
+static void register_export(LoadedModule* mod, const char* symbol, const char* alias) {
+    if (!mod || !symbol) return;
+    
+    if (!mod->constraints.allowed_names) {
+        mod->constraints.allowed_names = malloc(32 * sizeof(char*));
+        mod->constraints.allowed_count = 0;
+    }
+    
+    // Vérifier si déjà exporté
+    for (int i = 0; i < mod->constraints.allowed_count; i++) {
+        if (mod->constraints.allowed_names[i] && 
+            strcmp(mod->constraints.allowed_names[i], symbol) == 0) {
+            return;
+        }
+    }
+    
+    const char* export_name = alias ? alias : symbol;
+    mod->constraints.allowed_names[mod->constraints.allowed_count] = strdup(export_name);
+    mod->constraints.allowed_count++;
+}
 
 // ==================== RÉSOLUTION DE CHEMIN ====================
 
@@ -169,122 +236,12 @@ char* resolve_module_path(char* current_file, char* import_path) {
     return NULL;
 }
 
-// ==================== GESTION DU CACHE ====================
-
-static LodedModule* find_module_by_path(const char* path) {
-    for (int i = 0; i < module_count; i++) {
-        if (modules[i] && modules[i]->path && strcmp(modules[i]->path, path) == 0) {
-            return modules[i];
-        }
-    }
-    return NULL;
-}
-
-static LodedModule* find_module_by_name(const char* name) {
-    for (int i = 0; i < module_count; i++) {
-        if (modules[i] && modules[i]->name && strcmp(modules[i]->name, name) == 0) {
-            return modules[i];
-        }
-    }
-    return NULL;
-}
-
-static LodedModule* create_module(const char* path, const char* name, const char* alias) {
-    if (module_count >= module_capacity) {
-        fprintf(stderr, "Module registry full\n");
-        return NULL;
-    }
-    
-    LodedModule* mod = malloc(sizeof(GoscriptModule));
-    if (!mod) return NULL;
-    
-    mod->path = path ? strdup(path) : NULL;
-    mod->name = name ? strdup(name) : NULL;
-    mod->alias = alias ? strdup(alias) : NULL;
-    mod->status = MODULE_STATUS_LOADING;
-    mod->env = create_env(NULL);
-    mod->ref_count = 1;
-    
-    mod->constraints.exported_names = NULL;
-    mod->constraints.exported_count = 0;
-    mod->constraints.only_allowed = NULL;
-    mod->constraints.only_count = 0;
-    mod->constraints.timeout_ms = 0;
-    mod->constraints.sandbox = 0;
-    mod->constraints.allow_ffi = 1;
-    
-    modules[module_count++] = mod;
-    return mod;
-}
-
-static void free_module(GoscriptModule* mod) {
-    if (!mod) return;
-    
-    if (mod->path) free(mod->path);
-    if (mod->name) free(mod->name);
-    if (mod->alias) free(mod->alias);
-    if (mod->env) free(mod->env);
-    
-    if (mod->constraints.exported_names) {
-        for (int i = 0; i < mod->constraints.exported_count; i++) {
-            if (mod->constraints.exported_names[i]) free(mod->constraints.exported_names[i]);
-        }
-        free(mod->constraints.exported_names);
-    }
-    
-    if (mod->constraints.only_allowed) {
-        for (int i = 0; i < mod->constraints.only_count; i++) {
-            if (mod->constraints.only_allowed[i]) free(mod->constraints.only_allowed[i]);
-        }
-        free(mod->constraints.only_allowed);
-    }
-    
-    free(mod);
-}
-
-// ==================== EXPORTATION DE SYMBOLES ====================
-
-static void register_export(GoscriptModule* mod, const char* symbol, const char* alias) {
-    if (!mod || !symbol) return;
-    
-    if (!mod->constraints.exported_names) {
-        mod->constraints.exported_names = malloc(32 * sizeof(char*));
-        mod->constraints.exported_count = 0;
-    }
-    
-    for (int i = 0; i < mod->constraints.exported_count; i++) {
-        if (mod->constraints.exported_names[i] && 
-            strcmp(mod->constraints.exported_names[i], symbol) == 0) {
-            return;
-        }
-    }
-    
-    const char* export_name = alias ? alias : symbol;
-    mod->constraints.exported_names[mod->constraints.exported_count] = strdup(export_name);
-    mod->constraints.exported_count++;
-}
-
-static int is_exported(GoscriptModule* mod, const char* symbol) {
-    if (!mod || !mod->constraints.exported_names) return 0;
-    
-    for (int i = 0; i < mod->constraints.exported_count; i++) {
-        if (mod->constraints.exported_names[i] && 
-            strcmp(mod->constraints.exported_names[i], symbol) == 0) {
-            return 1;
-        }
-    }
-    return 0;
-}
-
 // ==================== TRAITEMENT DES CONTRAINTES ====================
 
 void process_constraints(LoadedModule* module, ASTNode* constraints) {
     (void)module;
     (void)constraints;
-    // Implémentation simplifiée pour la compatibilité
 }
-
-// ==================== VÉRIFICATION DES PERMISSIONS ====================
 
 int is_name_allowed(LoadedModule* module, char* name) {
     (void)module;
@@ -298,6 +255,7 @@ int is_ffi_allowed(LoadedModule* module) {
 }
 
 // ==================== CHARGEMENT DE MODULE ===================
+
 LoadedModule* load_module(ModuleRegistry* reg, Environment* parent_env,
                           char* current_file, char* import_path, 
                           char* alias, ASTNode* constraints) {
@@ -312,7 +270,7 @@ LoadedModule* load_module(ModuleRegistry* reg, Environment* parent_env,
     }
     
     // 2. Vérifier le cache
-    GoscriptModule* existing = find_module_by_path(full_path);
+    LoadedModule* existing = find_module_by_path(full_path);
     if (existing) {
         if (existing->status == MODULE_STATUS_LOADING) {
             fprintf(stderr, "Circular import detected: %s\n", import_path);
@@ -325,20 +283,20 @@ LoadedModule* load_module(ModuleRegistry* reg, Environment* parent_env,
         Value module_val;
         module_val.type = 7;
         module_val.int_val = (int)existing;
-        env_set(parent_env, alias ? alias : existing->name, module_val);
+        env_set(parent_env, alias ? alias : existing->module_name, module_val);
         
         free(full_path);
-        return (LoadedModule*)existing;
+        return existing;
     }
     
     // 3. Créer le module
-    GoscriptModule* mod = create_module(full_path, import_path, alias);
+    LoadedModule* mod = create_module(full_path, import_path, alias);
     free(full_path);
     
     if (!mod) return NULL;
     
     // 4. Lire le fichier
-    FILE* f = fopen(mod->path, "r");
+    FILE* f = fopen(mod->module_path, "r");
     if (!f) {
         mod->status = MODULE_STATUS_ERROR;
         return NULL;
@@ -384,89 +342,70 @@ LoadedModule* load_module(ModuleRegistry* reg, Environment* parent_env,
     }
     
     // 6. Enregistrer les fonctions natives dans l'environnement du module
-    // IMPORTANT: Le module a besoin des fonctions de base comme println, etc.
     register_native_c_functions((Environment*)mod->env);
     
     // 7. Évaluer le contenu du module pour remplir son environnement
-    // 7. Évaluer le contenu du module pour remplir son environnement
-if (program_root && program_root->type == NODE_PROGRAM) {
-    for (int i = 0; i < program_root->program.statements->count; i++) {
-        ASTNode* stmt = program_root->program.statements->nodes[i];
-        
-        switch (stmt->type) {
-            case NODE_MODULE:
-                // Ignorer la déclaration module, elle est juste informative
-                // Le nom du module est déjà dans mod->name
-                break;
-                
-            case NODE_CONST:
-                // Traiter les constantes (même avec pub)
-                {
-                    Value val = evaluate_expr(stmt->var_decl.value, (Environment*)mod->env);
-                    env_set((Environment*)mod->env, stmt->var_decl.name, val);
-                    if (stmt->var_decl.is_public) {
-                        register_export(mod, stmt->var_decl.name, NULL);
+    if (program_root && program_root->type == NODE_PROGRAM) {
+        for (int i = 0; i < program_root->program.statements->count; i++) {
+            ASTNode* stmt = program_root->program.statements->nodes[i];
+            
+            switch (stmt->type) {
+                case NODE_MODULE:
+                    // Ignorer la déclaration module
+                    break;
+                    
+                case NODE_CONST:
+                case NODE_LET:
+                    {
+                        Value val = evaluate_expr(stmt->var_decl.value, (Environment*)mod->env);
+                        env_set((Environment*)mod->env, stmt->var_decl.name, val);
+                        if (stmt->var_decl.is_public) {
+                            register_export(mod, stmt->var_decl.name, NULL);
+                        }
                     }
-                }
-                break;
-                
-            case NODE_LET:
-                // Traiter les variables
-                {
-                    Value val = evaluate_expr(stmt->var_decl.value, (Environment*)mod->env);
-                    env_set((Environment*)mod->env, stmt->var_decl.name, val);
-                    if (stmt->var_decl.is_public) {
-                        register_export(mod, stmt->var_decl.name, NULL);
+                    break;
+                    
+                case NODE_FUNCTION:
+                case NODE_PUBLIC_FUNCTION:
+                    {
+                        Value func_val;
+                        func_val.type = 4;
+                        func_val.func_val.node = stmt;
+                        func_val.func_val.closure = (Environment*)mod->env;
+                        env_set((Environment*)mod->env, stmt->function.name, func_val);
+                        if (stmt->type == NODE_PUBLIC_FUNCTION || stmt->function.is_public) {
+                            register_export(mod, stmt->function.name, NULL);
+                        }
                     }
-                }
-                break;
-                
-            case NODE_FUNCTION:
-            case NODE_PUBLIC_FUNCTION:
-                // Enregistrer la fonction
-                {
-                    Value func_val;
-                    func_val.type = 4;
-                    func_val.func_val.node = stmt;
-                    func_val.func_val.closure = (Environment*)mod->env;
-                    env_set((Environment*)mod->env, stmt->function.name, func_val);
-                    if (stmt->type == NODE_PUBLIC_FUNCTION || stmt->function.is_public) {
-                        register_export(mod, stmt->function.name, NULL);
+                    break;
+                    
+                case NODE_STRUCT:
+                    {
+                        Value struct_val;
+                        struct_val.type = 6;
+                        struct_val.struct_val.struct_name = strdup(stmt->struct_def.name);
+                        struct_val.struct_val.fields = NULL;
+                        struct_val.struct_val.field_count = 0;
+                        env_set((Environment*)mod->env, stmt->struct_def.name, struct_val);
+                        if (stmt->struct_def.is_public) {
+                            register_export(mod, stmt->struct_def.name, NULL);
+                        }
                     }
-                }
-                break;
-                
-            case NODE_STRUCT:
-                // Enregistrer la structure
-                {
-                    Value struct_val;
-                    struct_val.type = 6;
-                    struct_val.struct_val.struct_name = strdup(stmt->struct_def.name);
-                    struct_val.struct_val.fields = NULL;
-                    struct_val.struct_val.field_count = 0;
-                    env_set((Environment*)mod->env, stmt->struct_def.name, struct_val);
-                    if (stmt->struct_def.is_public) {
-                        register_export(mod, stmt->struct_def.name, NULL);
-                    }
-                }
-                break;
-                
-            case NODE_IMPL:
-                // Enregistrer l'implémentation
-                register_impl(stmt->impl.name, stmt);
-                break;
-                
-            case NODE_EXPORT:
-                // Marquer comme exporté
-                register_export(mod, stmt->export.name, NULL);
-                break;
-                
-            default:
-                // Pour les autres types (expressions, etc.)
-                break;
+                    break;
+                    
+                case NODE_IMPL:
+                    register_impl(stmt->impl.name, stmt);
+                    break;
+                    
+                case NODE_EXPORT:
+                    register_export(mod, stmt->export.name, NULL);
+                    break;
+                    
+                default:
+                    break;
+            }
         }
     }
-}
     
     // 8. Marquer comme chargé
     mod->status = MODULE_STATUS_LOADED;
@@ -475,14 +414,14 @@ if (program_root && program_root->type == NODE_PROGRAM) {
     Value module_val;
     module_val.type = 7;
     module_val.int_val = (int)mod;
-    env_set(parent_env, alias ? alias : mod->name, module_val);
+    env_set(parent_env, alias ? alias : mod->module_name, module_val);
     
     // 10. Nettoyage
     free_ast(program_root);
     program_root = NULL;
     free(source);
     
-    return (LoadedModule*)mod;
+    return mod;
 }
 
 // ==================== FONCTIONS D'ACCÈS ====================
@@ -498,7 +437,7 @@ void register_module(ModuleRegistry* reg, LoadedModule* mod) {
 
 LoadedModule* find_module(ModuleRegistry* reg, char* path) {
     (void)reg;
-    return (LoadedModule*)find_module_by_path(path);
+    return find_module_by_path(path);
 }
 
 void free_module_registry(ModuleRegistry* reg) {
@@ -513,14 +452,14 @@ void free_module_registry(ModuleRegistry* reg) {
 void dump_modules(void) {
     printf("\n=== MODULE REGISTRY ===\n");
     for (int i = 0; i < module_count; i++) {
-        GoscriptModule* mod = modules[i];
+        LoadedModule* mod = modules[i];
         printf("Module %d:\n", i);
-        printf("  Path: %s\n", mod->path ? mod->path : "(null)");
-        printf("  Name: %s\n", mod->name ? mod->name : "(null)");
+        printf("  Path: %s\n", mod->module_path ? mod->module_path : "(null)");
+        printf("  Name: %s\n", mod->module_name ? mod->module_name : "(null)");
         printf("  Alias: %s\n", mod->alias ? mod->alias : "(null)");
         printf("  Status: %d\n", mod->status);
         printf("  RefCount: %d\n", mod->ref_count);
-        printf("  Exports: %d\n", mod->constraints.exported_count);
+        printf("  Exports: %d\n", mod->constraints.allowed_count);
         printf("\n");
     }
     printf("Total modules: %d\n", module_count);

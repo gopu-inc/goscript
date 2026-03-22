@@ -885,25 +885,26 @@ int evaluate_statement(ASTNode* node, Environment* env, char* current_file) {
         }
         
         case NODE_IMPORT: {
-            // Version simplifiée pour l'instant
-            printf("Import: %s", node->import.path);
-            if (node->import.alias) printf(" as %s", node->import.alias);
-            printf("\n");
-            
-            // Version complète (à décommenter quand load_module est prêt)
-            /*
-            LoadedModule* module = load_module(
-                get_module_registry(),
-                env,
-                current_file,
-                node->import.path,
-                node->import.alias,
-                node->import.constraints
-            );
-            (void)module;
-            */
-            return 0;
-        }
+    // Charger le module
+    ModuleRegistry* reg = get_module_registry();
+    LoadedModule* module = load_module(
+        reg,
+        env,
+        current_file,
+        node->import.path,
+        node->import.alias,
+        node->import.constraints
+    );
+    
+    if (module) {
+        // Le module est chargé, la valeur est déjà dans l'environnement
+        // via load_module qui appelle env_set
+        return 0;
+    } else {
+        fprintf(stderr, "Failed to load module: %s\n", node->import.path);
+        return 0;
+    }
+}
         
         case NODE_EXPR_STMT: {
             evaluate_expr(node->expr_stmt.expr, env);

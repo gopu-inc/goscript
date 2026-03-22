@@ -398,7 +398,13 @@ ASTNode* create_impl_node(char* name, ASTNodeList* methods) {
     node->impl.methods = methods;
     return node;
 }
-
+ASTNode* create_return_struct_field_node(char* struct_name, char* field_name) {
+    ASTNode* node = malloc(sizeof(ASTNode));
+    node->type = NODE_RETURN_STRUCT_FIELD;
+    node->return_struct_field.struct_name = strdup(struct_name);
+    node->return_struct_field.field_name = strdup(field_name);
+    return node;
+}
 ASTNode* create_member_access(ASTNode* object, char* member) {
     ASTNode* node = malloc(sizeof(ASTNode));
     node->type = NODE_MEMBER_ACCESS;

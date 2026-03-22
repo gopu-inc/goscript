@@ -981,12 +981,15 @@ int evaluate_statement(ASTNode* node, Environment* env, char* current_file) {
         default: return 0;
     }
 }
+void init_interpreter() {
+    init_libc();
+}
 
 void interpret_program(ASTNode* program) {
     Environment* global = create_env(NULL);
     init_interpreter();
     register_native_c_functions(global);
-    
+    get_module_registry();
     // 1. Enregistrer TOUTES les fonctions (mais ne pas les exécuter)
     for (int i = 0; i < program->program.statements->count; i++) {
         ASTNode* stmt = program->program.statements->nodes[i];
@@ -1055,9 +1058,6 @@ void interpret_program(ASTNode* program) {
     free(global);
 }
 
-void init_interpreter() {
-    init_libc();
-}
 // ==================== NETTOYAGE DE LA MÉMOIRE ====================
 
 void free_impl_table() {

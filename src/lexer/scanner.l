@@ -48,6 +48,9 @@ void yyerror(const char* msg);
 "sandbox"               { return TOKEN_SANDBOX; }
 "security"              { return TOKEN_SECURITY; }
 "timeout"               { return TOKEN_TIMEOUT; }
+"muts"                  { return TOKEN_MUTS; }
+"unsafe"                { return TOKEN_UNSAFE; }
+"_"                     { return TOKEN_UNDERSCORE; } // Pour le cas par défaut du match
 
  /* Identifiants */
 [a-zA-Z_][a-zA-Z0-9_]*  { 

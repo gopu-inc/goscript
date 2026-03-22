@@ -12,6 +12,15 @@ ASTNodeList* create_node_list() {
     list->capacity = 0;
     return list;
 }
+ASTNode* create_struct_extend_node(char* name, char* parent, ASTNodeList* fields) {
+    ASTNode* node = malloc(sizeof(ASTNode));
+    node->type = NODE_STRUCT_EXTENDS;
+    node->struct_extend.name = strdup(name);
+    node->struct_extend.parent = strdup(parent);
+    node->struct_extend.fields = fields;
+    node->struct_extend.is_public = 0;
+    return node;
+}
 
 void add_to_node_list(ASTNodeList* list, ASTNode* node) {
     if (!list) return;

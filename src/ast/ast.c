@@ -155,7 +155,12 @@ ASTNode* create_const_node(char* name, ASTNode* value) {
     node->var_decl.is_public = 0;  // Ajoutez cette ligne
     return node;
 }
-
+ASTNode* create_unsafe_node(ASTNodeList* body) {
+    ASTNode* node = malloc(sizeof(ASTNode));
+    node->type = NODE_UNSAFE;
+    node->unsafe_block.body = body;
+    return node;
+}
 ASTNode* create_if_node(ASTNode* condition, ASTNodeList* then_branch, ASTNodeList* else_branch) {
     ASTNode* node = malloc(sizeof(ASTNode));
     node->type = NODE_IF;

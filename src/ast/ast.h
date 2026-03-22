@@ -35,6 +35,7 @@ typedef enum {
     NODE_CALL,
     NODE_METHOD_CALL,
     NODE_ARRAY,
+    NODE_UNSAFE,
     NODE_ARRAY_TYPE,
     NODE_STRUCT,
     NODE_STRUCT_INIT,
@@ -104,7 +105,20 @@ typedef struct ASTNode {
         struct {
             ASTNodeList* statements;
         } program;
-        
+          struct {
+           struct ASTNodeList* body;
+        } unsafe_block;
+     struct {
+    struct ASTNode* target; // l'expression à tester
+    struct ASTNodeList* cases;
+} match_expr;
+
+// Struct pour une branche
+struct {
+    struct ASTNode* pattern;
+    struct ASTNode* body;
+} match_case;
+
         /* Import/Export */
         struct {
             char* path;

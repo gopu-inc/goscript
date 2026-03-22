@@ -149,11 +149,11 @@ void print_ast(ASTNode* node, int depth) {
             break;
            
         
-        case NODE_STATIC_ACCESS:
-    // Affiche l'objet (le module)
-            print_ast(node->member.object, 0); 
-            printf("::%s", node->member.member_name);
-            break;
+       case NODE_STATIC_ACCESS:
+           printf("StaticAccess: ");
+           print_ast(node->static_access.object, 0);
+           printf("::%s\n", node->static_access.member);
+           break;
 
         case NODE_IMPORT:
             printf("Import: %s", node->import.path);

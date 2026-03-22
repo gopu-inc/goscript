@@ -557,8 +557,9 @@ primary_expr:
     | TOKEN_NIL {
         $$ = create_nil_node();
     }
-    | TOKEN_IDENTIFIER TOKEN_DOT TOKEN_IDENTIFIER {  // add.name
-        $$ = create_return_struct_field_node($1, $3);
+    | TOKEN_IDENTIFIER {
+        $$ = create_identifier_node($1);
+    }
     | TOKEN_LPAREN expression TOKEN_RPAREN {
         $$ = $2;
     }

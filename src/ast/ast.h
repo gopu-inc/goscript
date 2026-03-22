@@ -112,6 +112,13 @@ typedef struct ASTNode {
     struct ASTNode* target; // l'expression à tester
     struct ASTNodeList* cases;
 } match_expr;
+/* Variables mutables */
+struct {
+    char* name;
+    struct ASTNode* var_type;
+    struct ASTNode* value;
+    int is_public;
+} muts_decl;
 
 // Struct pour une branche
 

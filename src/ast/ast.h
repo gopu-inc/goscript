@@ -60,6 +60,8 @@ typedef enum {
     NODE_PATTERN_WILDCARD,
     NODE_CONSTRAINT,
     NODE_CONSTRAINT_LIST,
+    NODE_STRUCT_EXTENDS,
+    NODE_MATCH_STRUCT,
     NODE_MODULE,
     NODE_ASSIGN_OP
 } NodeType;
@@ -114,6 +116,22 @@ typedef struct ASTNode {
     struct ASTNode* target; // l'expression à tester
     struct ASTNodeList* cases;
 } match_expr;
+struct {
+    char* name;
+    char* parent;
+    ASTNodeList* fields;
+    int is_public;
+} struct_extend;
+
+/* Pattern matching sur structure */
+struct {
+    char* struct_name;
+    struct {
+        char* field_name;
+        struct ASTNode* pattern;
+    }* fields;
+    int field_count;
+} match_struct;
 /* Return struct field */
 struct {
     char* struct_name;

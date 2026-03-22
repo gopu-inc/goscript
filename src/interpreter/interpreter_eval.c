@@ -799,7 +799,7 @@ case NODE_METHOD_CALL: {
                         has_return = 1;
                         break;
                     } else {
-                        evaluate_statement(stmt, func_env,,  NULL);
+                        evaluate_statement(stmt, func_env, NULL);
                     }
                 }
                 

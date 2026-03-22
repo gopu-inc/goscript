@@ -662,47 +662,80 @@ Value evaluate_expr(ASTNode* node, Environment* env) {
         }
         
         // ==================== APPEL DE MÉTHODE ====================
-        case NODE_METHOD_CALL: {
-            Value obj = evaluate_expr(node->method_call.object, env);
-            
-            if (obj.type == 6) {
-                char* method_name = node->method_call.method;
-                ASTNode* impl_node = find_impl(obj.struct_val.struct_name);
+case NODE_METHOD_CALL: {
+    Value obj = evaluate_expr(node->method_call.object, env);
+    
+    // Cas 1: Structure (type 6)
+    if (obj.type == 6) {
+        char* method_name = node->method_call.method;
+        ASTNode* impl_node = find_impl(obj.struct_val.struct_name);
+        
+        if (impl_node) {
+            ASTNode* method = find_method(impl_node, method_name);
+            if (method) {
+                Environment* method_env = create_env(env);
+                if (method->function.params && method->function.params->count > 0) {
+                    ASTNode* first_param = method->function.params->nodes[0];
+                    env_set(method_env, first_param->identifier.name, obj);
+                    if (node->method_call.args) {
+                        for (int i = 0; i < node->method_call.args->count && (i + 1) < method->function.params->count; i++) {
+                            Value arg_val = evaluate_expr(node->method_call.args->nodes[i], env);
+                            ASTNode* param = method->function.params->nodes[i + 1];
+                            env_set(method_env, param->identifier.name, arg_val);
+                        }
+                    }
+                } else {
+                    env_set(method_env, "self", obj);
+                }
                 
-                if (impl_node) {
-                    ASTNode* method = find_method(impl_node, method_name);
-                    if (method) {
-                        Environment* method_env = create_env(env);
-                        if (method->function.params && method->function.params->count > 0) {
-                            ASTNode* first_param = method->function.params->nodes[0];
-                            env_set(method_env, first_param->identifier.name, obj);
-                            
-                            if (node->method_call.args) {
-                                for (int i = 0; i < node->method_call.args->count && (i + 1) < method->function.params->count; i++) {
-                                    Value arg_val = evaluate_expr(node->method_call.args->nodes[i], env);
-                                    ASTNode* param = method->function.params->nodes[i + 1];
-                                    env_set(method_env, param->identifier.name, arg_val);
-                                }
-                            }
-                        } else {
-                            env_set(method_env, "self", obj);
-                        }
-                        
-                        for (int i = 0; i < method->function.body->count; i++) {
-                            ASTNode* stmt = method->function.body->nodes[i];
-                            if (stmt->type == NODE_RETURN) {
-                                result = evaluate_expr(stmt->return_stmt.value, method_env);
-                                break;
-                            } else {
-                                evaluate_statement(stmt, method_env, NULL);
-                            }
-                        }
-                        free(method_env);
+                for (int i = 0; i < method->function.body->count; i++) {
+                    ASTNode* stmt = method->function.body->nodes[i];
+                    if (stmt->type == NODE_RETURN) {
+                        result = evaluate_expr(stmt->return_stmt.value, method_env);
+                        break;
+                    } else {
+                        evaluate_statement(stmt, method_env, NULL);
                     }
                 }
+                free(method_env);
             }
-            break;
         }
+    }
+    // === NOUVEAU : Cas 2: Module (type 7) ===
+    else if (obj.type == 7) {
+        LoadedModule* module = (LoadedModule*)obj.int_val;
+        char* method_name = node->method_call.method;
+        Value* func = env_get(module->env, method_name);
+        
+        if (func && func->type == 4) {
+            Environment* func_env = create_env(func->func_val.closure);
+            
+            if (node->method_call.args && func->func_val.node->function.params) {
+                int arg_count = node->method_call.args->count;
+                int param_count = func->func_val.node->function.params->count;
+                for (int i = 0; i < arg_count && i < param_count; i++) {
+                    Value arg_val = evaluate_expr(node->method_call.args->nodes[i], env);
+                    ASTNode* param = func->func_val.node->function.params->nodes[i];
+                    env_set(func_env, param->identifier.name, arg_val);
+                }
+            }
+            
+            for (int i = 0; i < func->func_val.node->function.body->count; i++) {
+                ASTNode* stmt = func->func_val.node->function.body->nodes[i];
+                if (stmt->type == NODE_RETURN) {
+                    result = evaluate_expr(stmt->return_stmt.value, func_env);
+                    break;
+                } else {
+                    evaluate_statement(stmt, func_env, NULL);
+                }
+            }
+            free(func_env);
+        } else {
+            fprintf(stderr, "Error: Function '%s' not found in module\n", method_name);
+        }
+    }
+    break;
+}
         
         // ==================== APPEL DE FONCTION ====================
         case NODE_CALL: {
@@ -924,13 +957,13 @@ int evaluate_statement(ASTNode* node, Environment* env, char* current_file) {
 void init_interpreter() {
     init_libc();
 }
-
 void interpret_program(ASTNode* program) {
     Environment* global = create_env(NULL);
     init_interpreter();
     register_native_c_functions(global);
     get_module_registry();
-    // 1. Enregistrer TOUTES les fonctions (mais ne pas les exécuter)
+    
+    // 1. Enregistrer les fonctions
     for (int i = 0; i < program->program.statements->count; i++) {
         ASTNode* stmt = program->program.statements->nodes[i];
         if (stmt->type == NODE_FUNCTION || stmt->type == NODE_PUBLIC_FUNCTION) {
@@ -942,11 +975,10 @@ void interpret_program(ASTNode* program) {
         }
     }
     
-    // 2. Enregistrer les structures (pour les méthodes)
+    // 2. Enregistrer les structures
     for (int i = 0; i < program->program.statements->count; i++) {
         ASTNode* stmt = program->program.statements->nodes[i];
         if (stmt->type == NODE_STRUCT) {
-            // Enregistrer la structure
             Value struct_val;
             struct_val.type = 6;
             struct_val.struct_val.struct_name = strdup(stmt->struct_def.name);
@@ -964,7 +996,15 @@ void interpret_program(ASTNode* program) {
         }
     }
     
-    // 4. Chercher la fonction main (point d'entrée)
+    // === NOUVEAU : 3.5 Exécuter les imports ===
+    for (int i = 0; i < program->program.statements->count; i++) {
+        ASTNode* stmt = program->program.statements->nodes[i];
+        if (stmt->type == NODE_IMPORT) {
+            evaluate_statement(stmt, global, NULL);
+        }
+    }
+    
+    // 4. Chercher la fonction main
     ASTNode* main_func = NULL;
     for (int i = 0; i < program->program.statements->count; i++) {
         ASTNode* stmt = program->program.statements->nodes[i];
@@ -974,19 +1014,15 @@ void interpret_program(ASTNode* program) {
         }
     }
     
-    // 5. Exécuter UNIQUEMENT main si elle existe
+    // 5. Exécuter main
     if (main_func) {
-        // Créer un environnement pour main
         Environment* main_env = create_env(global);
-        
-        // Exécuter le corps de main
         for (int i = 0; i < main_func->function.body->count; i++) {
             int ret = evaluate_statement(main_func->function.body->nodes[i], main_env, NULL);
             if (ret) break;
         }
         free(main_env);
     } else {
-        // Si pas de main, exécuter les expressions à la racine
         for (int i = 0; i < program->program.statements->count; i++) {
             ASTNode* stmt = program->program.statements->nodes[i];
             if (stmt->type == NODE_EXPR_STMT) {

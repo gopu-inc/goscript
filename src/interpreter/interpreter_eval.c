@@ -645,22 +645,34 @@ Value evaluate_expr(ASTNode* node, Environment* env) {
         
         // ==================== ACCÈS STATIQUE (MODULE) ====================
         case NODE_STATIC_ACCESS: {
-            Value obj = evaluate_expr(node->static_access.object, env);
-            
-            if (obj.type == 7) {
-                LoadedModule* module = (LoadedModule*)obj.int_val;
-                char* member_name = node->static_access.member;
-                Value* val = env_get(module->env, member_name);
-                if (val) {
-                    result = *val;
-                } else {
-                    result.type = 0;
-                    result.int_val = 0;
-                }
-            }
+    Value obj = evaluate_expr(node->static_access.object, env);
+    
+    if (obj.type == 7) {  // Type Module
+        LoadedModule* mod = (LoadedModule*)obj.int_val;
+        if (!mod || !mod->env) {
+            fprintf(stderr, "Error: Module not initialized\n");
+            result.type = 0;
+            result.int_val = 0;
             break;
         }
         
+        char* member_name = node->static_access.member;
+        Value* val = env_get(mod->env, member_name);
+        
+        if (val) {
+            result = *val;
+        } else {
+            fprintf(stderr, "Undefined: %s in module %s\n", 
+                    member_name, mod->module_name);
+            result.type = 0;
+            result.int_val = 0;
+        }
+    } else {
+        result.type = 0;
+        result.int_val = 0;
+    }
+    break;
+}
         // ==================== APPEL DE MÉTHODE ====================
 case NODE_METHOD_CALL: {
     Value obj = evaluate_expr(node->method_call.object, env);

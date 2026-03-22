@@ -647,32 +647,20 @@ Value evaluate_expr(ASTNode* node, Environment* env) {
         // ==================== ACCÈS STATIQUE (MODULE) ====================
         case NODE_STATIC_ACCESS: {
     Value obj = evaluate_expr(node->static_access.object, env);
+    printf("DEBUG: Static access to %s, obj.type = %d\n", node->static_access.member, obj.type);
     
-    if (obj.type == 7) {  // Type Module
+    if (obj.type == 7) {
         LoadedModule* mod = (LoadedModule*)obj.int_val;
-        if (!mod || !mod->env) {
-            fprintf(stderr, "Error: Module not initialized\n");
-            result.type = 0;
-            result.int_val = 0;
-            break;
-        }
+        printf("DEBUG: Module name = %s, env var_count = %d\n", mod->module_name, mod->env->var_count);
         
-        char* member_name = node->static_access.member;
-        Value* val = env_get(mod->env, member_name);
-        
+        Value* val = env_get(mod->env, node->static_access.member);
         if (val) {
-            result = *val;
-        } else {
-            fprintf(stderr, "Undefined: %s in module %s\n", 
-                    member_name, mod->module_name);
-            result.type = 0;
-            result.int_val = 0;
+            printf("DEBUG: Found %s in module\n", node->static_access.member);
+            return *val;
         }
-    } else {
-        result.type = 0;
-        result.int_val = 0;
+        printf("DEBUG: %s NOT found in module\n", node->static_access.member);
     }
-    break;
+    return (Value){.type = 0};
 }
         // ==================== APPEL DE MÉTHODE ====================
 case NODE_METHOD_CALL: {
@@ -823,11 +811,15 @@ int evaluate_statement(ASTNode* node, Environment* env, char* current_file) {
             return 0;
         }
         
-        case NODE_CONST: {
-            Value val = evaluate_expr(node->var_decl.value, env);
-            env_set(env, node->var_decl.name, val);
-            return 0;
-        }
+        case NODE_CONST:
+    printf("DEBUG: Evaluating const %s\n", node->var_decl.name);
+    Value val = evaluate_expr(node->var_decl.value, env);
+    env_set(env, node->var_decl.name, val);
+    if (node->var_decl.is_public) {
+        printf("DEBUG: Const %s is public\n", node->var_decl.name);
+    }
+    return 0;
+
        
      case NODE_RETURN: {
          Value val = evaluate_expr(node->return_stmt.value, env);

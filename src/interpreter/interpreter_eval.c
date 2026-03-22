@@ -3,6 +3,7 @@
 #include <ffi.h>
 
 
+static char* current_source_file = NULL;
 // ==================== GESTION DES IMPLÉMENTATIONS ====================
 
 typedef struct {

@@ -137,7 +137,20 @@ statement:
         $$ = create_expr_statement($1);
     }
     ;
+nnl_statement:
+    TOKEN_NNL TOKEN_IDENTIFIER TOKEN_LBRACE statement_list TOKEN_RBRACE {
+        $$ = create_nnl_node($2, $4);
+    }
+    ;
 
+jmp_statement:
+    TOKEN_JMP TOKEN_IDENTIFIER {
+        $$ = create_jmp_node($2, NULL);
+    }
+    | TOKEN_JMP TOKEN_IDENTIFIER expression {
+        $$ = create_jmp_node($2, $3);
+    }
+    ;
 // Nouvelles règles d'import
 import_statement:
     TOKEN_IMPORT TOKEN_IDENTIFIER {

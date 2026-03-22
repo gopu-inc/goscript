@@ -422,6 +422,7 @@ void add_field_init(ASTNodeList* list, ASTNode* init);
 /* ==================== Nœuds principaux ==================== */
 ASTNode* create_program_node(ASTNodeList* statements);
 
+ASTNode* create_struct_extend_node(char* name, char* parent, ASTNodeList* fields);
 /* Imports et exports */
 ASTNode* create_import_node(char* path, char* alias, ASTNode* constraints);
 ASTNode* create_export_node(char* name);

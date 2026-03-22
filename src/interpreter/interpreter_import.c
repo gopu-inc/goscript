@@ -388,58 +388,85 @@ LoadedModule* load_module(ModuleRegistry* reg, Environment* parent_env,
     register_native_c_functions((Environment*)mod->env);
     
     // 7. Évaluer le contenu du module pour remplir son environnement
-    if (program_root && program_root->type == NODE_PROGRAM) {
-        for (int i = 0; i < program_root->program.statements->count; i++) {
-            ASTNode* stmt = program_root->program.statements->nodes[i];
-            
-            switch (stmt->type) {
-                case NODE_CONST:
-                case NODE_LET: {
-                    // Évaluer la constante/variable
+    // 7. Évaluer le contenu du module pour remplir son environnement
+if (program_root && program_root->type == NODE_PROGRAM) {
+    for (int i = 0; i < program_root->program.statements->count; i++) {
+        ASTNode* stmt = program_root->program.statements->nodes[i];
+        
+        switch (stmt->type) {
+            case NODE_MODULE:
+                // Ignorer la déclaration module, elle est juste informative
+                // Le nom du module est déjà dans mod->name
+                break;
+                
+            case NODE_CONST:
+                // Traiter les constantes (même avec pub)
+                {
                     Value val = evaluate_expr(stmt->var_decl.value, (Environment*)mod->env);
                     env_set((Environment*)mod->env, stmt->var_decl.name, val);
-                    break;
+                    if (stmt->var_decl.is_public) {
+                        register_export(mod, stmt->var_decl.name, NULL);
+                    }
                 }
+                break;
                 
-                case NODE_FUNCTION:
-                case NODE_PUBLIC_FUNCTION: {
-                    // Enregistrer la fonction
+            case NODE_LET:
+                // Traiter les variables
+                {
+                    Value val = evaluate_expr(stmt->var_decl.value, (Environment*)mod->env);
+                    env_set((Environment*)mod->env, stmt->var_decl.name, val);
+                    if (stmt->var_decl.is_public) {
+                        register_export(mod, stmt->var_decl.name, NULL);
+                    }
+                }
+                break;
+                
+            case NODE_FUNCTION:
+            case NODE_PUBLIC_FUNCTION:
+                // Enregistrer la fonction
+                {
                     Value func_val;
                     func_val.type = 4;
                     func_val.func_val.node = stmt;
                     func_val.func_val.closure = (Environment*)mod->env;
                     env_set((Environment*)mod->env, stmt->function.name, func_val);
-                    break;
+                    if (stmt->type == NODE_PUBLIC_FUNCTION || stmt->function.is_public) {
+                        register_export(mod, stmt->function.name, NULL);
+                    }
                 }
+                break;
                 
-                case NODE_STRUCT: {
-                    // Enregistrer la structure
+            case NODE_STRUCT:
+                // Enregistrer la structure
+                {
                     Value struct_val;
                     struct_val.type = 6;
                     struct_val.struct_val.struct_name = strdup(stmt->struct_def.name);
                     struct_val.struct_val.fields = NULL;
                     struct_val.struct_val.field_count = 0;
                     env_set((Environment*)mod->env, stmt->struct_def.name, struct_val);
-                    break;
+                    if (stmt->struct_def.is_public) {
+                        register_export(mod, stmt->struct_def.name, NULL);
+                    }
                 }
+                break;
                 
-                case NODE_IMPL: {
-                    // Enregistrer l'implémentation
-                    register_impl(stmt->impl.name, stmt);
-                    break;
-                }
+            case NODE_IMPL:
+                // Enregistrer l'implémentation
+                register_impl(stmt->impl.name, stmt);
+                break;
                 
-                case NODE_EXPORT: {
-                    // Marquer comme exporté
-                    register_export(mod, stmt->export.name, NULL);
-                    break;
-                }
+            case NODE_EXPORT:
+                // Marquer comme exporté
+                register_export(mod, stmt->export.name, NULL);
+                break;
                 
-                default:
-                    break;
-            }
+            default:
+                // Pour les autres types (expressions, etc.)
+                break;
         }
     }
+}
     
     // 8. Marquer comme chargé
     mod->status = MODULE_STATUS_LOADED;

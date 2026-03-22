@@ -8,6 +8,9 @@
 /* Types de nœuds AST */
 typedef enum {
     NODE_PROGRAM,
+    NODE_NNL,
+    NODE_JMP,
+    NODE_NNL_CONTEXT,
     NODE_MUTS,
     NODE_IMPORT,
     NODE_EXPORT,
@@ -116,6 +119,22 @@ typedef struct ASTNode {
     struct ASTNode* target; // l'expression à tester
     struct ASTNodeList* cases;
 } match_expr;
+
+// Dans l'union ASTNode
+/* Non-local jumps */
+struct {
+    char* label;
+    struct ASTNode* body;
+} nnl_stmt;
+
+struct {
+    char* label;
+    struct ASTNode* value;
+} jmp_stmt;
+
+struct {
+    struct ASTNodeList* contexts;
+} nnl_context;
 struct {
     char* name;
     char* parent;

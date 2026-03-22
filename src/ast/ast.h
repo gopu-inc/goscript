@@ -28,7 +28,6 @@ typedef enum {
     NODE_BINARY_OP,
     NODE_UNARY_OP,
     NODE_NUMBER, 
-    NODE_UNSAFE,
     NODE_FLOAT,
     NODE_STRING,
     NODE_BOOL,

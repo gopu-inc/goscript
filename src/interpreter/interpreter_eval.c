@@ -827,12 +827,13 @@ int evaluate_statement(ASTNode* node, Environment* env, char* current_file) {
             env_set(env, node->var_decl.name, val);
             return 0;
         }
-        
-        case NODE_RETURN: {
-            Value val = evaluate_expr(node->return_stmt.value, env);
-            print_value(val, 1);
-            return 1;
-        }
+       
+     case NODE_RETURN: {
+         Value val = evaluate_expr(node->return_stmt.value, env);
+         return_value = val;
+    // NE PAS imprimer ici - laissons le caller s'en charge
+         return 1;  // 1 = return encountered 
+      }
         
         case NODE_IF: {
             Value cond = evaluate_expr(node->if_stmt.condition, env);
@@ -1025,7 +1026,9 @@ void interpret_program(ASTNode* program) {
             break;
         }
     }
-    
+   if (ret == 1) {
+       printf("%d\n", return_value.int_val);  // Ou print_value(return_value, 1)
+   } 
     // 5. Exécuter main
     if (main_func) {
         Environment* main_env = create_env(global);

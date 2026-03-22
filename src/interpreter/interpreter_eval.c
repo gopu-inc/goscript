@@ -1260,7 +1260,64 @@ int evaluate_statement(ASTNode* node, Environment* env, char* current_file) {
             }
             return 0;
         }
+        // Structure pour stocker les contextes de saut
+
+case NODE_NNL: {
+    // Créer un nouveau contexte
+    NnlContext* ctx = malloc(sizeof(NnlContext));
+    ctx->label = node->nnl_stmt.label;
+    ctx->next = nnl_stack;
+    
+    // Sauvegarder le contexte
+    if (setjmp(ctx->env) == 0) {
+        // Premier passage
+        nnl_stack = ctx;
         
+        // Exécuter le corps
+        for (int i = 0; i < node->nnl_stmt.body->count; i++) {
+            int ret = evaluate_statement(node->nnl_stmt.body->nodes[i], env, current_file);
+            if (ret == 1) { // return
+                // Nettoyer la pile
+                nnl_stack = ctx->next;
+                free(ctx);
+                return 1;
+            }
+        }
+        
+        // Nettoyer
+        nnl_stack = ctx->next;
+        free(ctx);
+    } else {
+        // Retour après longjmp
+        Value val = ctx->return_value;
+        nnl_stack = ctx->next;
+        free(ctx);
+        
+        // Si c'est un return, propager
+        return 1;
+    }
+    return 0;
+}
+
+case NODE_JMP: {
+    char* label = node->jmp_stmt.label;
+    NnlContext* ctx = find_nnl_context(label);
+    
+    if (ctx) {
+        // Stocker la valeur de retour
+        if (node->jmp_stmt.value) {
+            ctx->return_value = evaluate_expr(node->jmp_stmt.value, env);
+        } else {
+            ctx->return_value = (Value){.type = 0, .int_val = 0};
+        }
+        
+        // Sauter
+        longjmp(ctx->env, 1);
+    } else {
+        fprintf(stderr, "Error: No nnl context for label '%s'\n", label);
+    }
+    return 0;
+}
         case NODE_WHILE: {
             while (1) {
                 Value cond = evaluate_expr(node->while_stmt.condition, env);

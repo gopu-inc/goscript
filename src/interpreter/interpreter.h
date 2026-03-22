@@ -48,9 +48,11 @@ typedef struct Environment {
     int var_capacity;
 } Environment;
 // Structure pour un module chargé
+
 typedef struct LoadedModule {
     char* module_path;      // Chemin absolu
     char* module_name;      // Nom du module
+    char* alias;            // Alias d'import (optionnel)
     Environment* env;       // Environnement propre au module
     int status;             // 0: loading, 1: loaded, -1: error
     int ref_count;          // Nombre de références
@@ -62,7 +64,6 @@ typedef struct LoadedModule {
         int allow_ffi;         // 1 = FFI autorisé
     } constraints;
 } LoadedModule;
-
 // Table globale des modules
 typedef struct ModuleRegistry {
     LoadedModule** modules;

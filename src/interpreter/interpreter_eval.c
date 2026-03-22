@@ -24,6 +24,14 @@ void register_impl(char* struct_name, ASTNode* impl_node) {
     impl_table[impl_count].impl_node = impl_node;
     impl_count++;
 }
+void dump_module_env(LoadedModule* mod) {
+    if (!mod || !mod->env) return;
+    printf("--- Symboles dans le module [%s] ---\n", mod->module_name);
+    for (int i = 0; i < mod->env->var_count; i++) {
+        printf("  [%d] %s (Type: %d)\n", i, mod->env->vars[i].name, mod->env->vars[i].value.type);
+    }
+    printf("-----------------------------------\n");
+}
 
 // Trouver une implémentation par nom de structure
 ASTNode* find_impl(char* struct_name) {

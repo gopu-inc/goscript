@@ -114,10 +114,6 @@ typedef struct ASTNode {
 } match_expr;
 
 // Struct pour une branche
-struct {
-    struct ASTNode* pattern;
-    struct ASTNode* body;
-} match_case;
 
         /* Import/Export */
         struct {

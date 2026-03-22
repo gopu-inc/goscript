@@ -35,7 +35,14 @@ ASTNode* find_impl(char* struct_name) {
     return NULL;
 }
 
-// Trouver une méthode dans une implémentation
+static ModuleRegistry* module_registry = NULL;
+
+ModuleRegistry* get_module_registry(void) {
+    if (!module_registry) {
+        module_registry = init_module_registry();
+    }
+    return module_registry;
+}
 
 // Handle global pour la libc (ouvert une seule fois)
 extern ASTNode* program_root;
@@ -902,6 +909,19 @@ int evaluate_statement(ASTNode* node, Environment* env) {
                 if (break_flag) break;
             }
             return 0;
+        }
+        
+        case NODE_IMPORT: {
+    // Charger le module 
+            LoadedModule* module = load_module(
+                get_module_registry(),
+                env,
+                current_file,  // Vous devez passer le fichier courant
+                node->import.path,
+                node->import.alias,
+                node->import.constraints
+                );
+            break;
         }
         
         case NODE_FOR: {

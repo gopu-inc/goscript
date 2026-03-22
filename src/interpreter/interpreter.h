@@ -86,6 +86,7 @@ int is_name_allowed(LoadedModule* module, char* name);
 int is_ffi_allowed(LoadedModule* module);
 // Fonctions de gestion des modules
 ModuleRegistry* init_module_registry();
+void register_native_c_functions(Environment* env);
 void register_module(ModuleRegistry* reg, LoadedModule* mod);
 LoadedModule* find_module(ModuleRegistry* reg, char* path);
 void free_module_registry(ModuleRegistry* reg);

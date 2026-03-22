@@ -518,6 +518,11 @@ void free_ast(ASTNode* node) {
     if (!node) return;
     
     switch (node->type) {
+        case NODE_MUTS:
+            free(node->muts_decl.name);
+            if (node->muts_decl.var_type) free_ast(node->muts_decl.var_type);
+            if (node->muts_decl.value) free_ast(node->muts_decl.value);
+            break;
         case NODE_PROGRAM:
             if (node->program.statements) {
                 for (int i = 0; i < node->program.statements->count; i++) {

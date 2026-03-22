@@ -344,12 +344,12 @@ ASTNode* create_array_type_node(ASTNode* element_type) {
     node->array_type.element_type = element_type;
     return node;
 }
-
 ASTNode* create_struct_node(char* name, ASTNodeList* fields) {
     ASTNode* node = malloc(sizeof(ASTNode));
     node->type = NODE_STRUCT;
     node->struct_def.name = strdup(name);
     node->struct_def.fields = fields;
+    node->struct_def.is_public = 0;  // Ajouter cette ligne
     return node;
 }
 

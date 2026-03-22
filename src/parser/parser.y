@@ -384,6 +384,9 @@ struct_decl:
     TOKEN_STRUCT TOKEN_IDENTIFIER TOKEN_LBRACE struct_fields TOKEN_RBRACE {
         $$ = create_struct_node($2, $4);
     }
+    | TOKEN_STRUCT TOKEN_IDENTIFIER TOKEN_EXTENDS TOKEN_IDENTIFIER TOKEN_LBRACE struct_fields TOKEN_RBRACE {
+        $$ = create_struct_extend_node($2, $4, $6);
+    }
     ;
 
 struct_fields:

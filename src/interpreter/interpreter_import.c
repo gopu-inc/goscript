@@ -297,7 +297,7 @@ int is_ffi_allowed(LoadedModule* module) {
     return 1;
 }
 
-// ==================== CHARGEMENT DE MODULE ====================
+// ==================== CHARGEMENT DE MODULE ===================
 
 LoadedModule* load_module(ModuleRegistry* reg, Environment* parent_env,
                           char* current_file, char* import_path, 
@@ -364,16 +364,16 @@ LoadedModule* load_module(ModuleRegistry* reg, Environment* parent_env,
     FILE* old_yyin = yyin;
     int old_lineno = yylineno;
     
-yyin = fmemopen(source, size, "r");
-if (!yyin) {
-    free(source);
-    mod->status = MODULE_STATUS_ERROR;
-    return NULL;
-}
-
-yylineno = 1;  // Réinitialiser le compteur de lignes pour le module
-
-int parse_result = yyparse();
+    yyin = fmemopen(source, size, "r");
+    if (!yyin) {
+        free(source);
+        mod->status = MODULE_STATUS_ERROR;
+        return NULL;
+    }
+    
+    yylineno = 1;  // Réinitialiser le compteur de lignes
+    
+    int parse_result = yyparse();
     fclose(yyin);
     yyin = old_yyin;
     yylineno = old_lineno;
@@ -384,67 +384,78 @@ int parse_result = yyparse();
         return NULL;
     }
     
-    // 6. Enregistrer les fonctions
-    for (int i = 0; i < program_root->program.statements->count; i++) {
-        ASTNode* stmt = program_root->program.statements->nodes[i];
-        if (stmt->type == NODE_FUNCTION || stmt->type == NODE_PUBLIC_FUNCTION) {
-            Value func_val;
-            func_val.type = 4;
-            func_val.func_val.node = stmt;
-            func_val.func_val.closure = mod->env;
-            env_set(mod->env, stmt->function.name, func_val);
+    // ==================== AMÉLIORATION 1 ====================
+    // Évaluer le contenu du module pour remplir son environnement
+    if (program_root && program_root->type == NODE_PROGRAM) {
+        for (int i = 0; i < program_root->program.statements->count; i++) {
+            ASTNode* stmt = program_root->program.statements->nodes[i];
+            // On évalue chaque statement dans l'environnement ISOLÉ du module
+            if (stmt->type == NODE_CONST) {
+                // Évaluer la constante
+                Value const_val = evaluate_expr(stmt->var_decl.value, mod->env);
+                env_set(mod->env, stmt->var_decl.name, const_val);
+                // Marquer comme exporté si public
+                if (stmt->var_decl.is_public) {
+                    register_export(mod, stmt->var_decl.name, NULL);
+                }
+            } 
+            else if (stmt->type == NODE_FUNCTION || stmt->type == NODE_PUBLIC_FUNCTION) {
+                // Enregistrer la fonction
+                Value func_val;
+                func_val.type = 4;
+                func_val.func_val.node = stmt;
+                func_val.func_val.closure = mod->env;
+                env_set(mod->env, stmt->function.name, func_val);
+                // Marquer comme exporté si public
+                if (stmt->function.is_public) {
+                    register_export(mod, stmt->function.name, NULL);
+                }
+            }
+            else if (stmt->type == NODE_STRUCT) {
+                // Enregistrer la structure
+                Value struct_val;
+                struct_val.type = 6;
+                struct_val.struct_val.struct_name = strdup(stmt->struct_def.name);
+                struct_val.struct_val.fields = NULL;
+                struct_val.struct_val.field_count = 0;
+                env_set(mod->env, stmt->struct_def.name, struct_val);
+                // Marquer comme exporté si public
+                if (stmt->struct_def.is_public) {
+                    register_export(mod, stmt->struct_def.name, NULL);
+                }
+            }
+            else if (stmt->type == NODE_IMPL) {
+                // Enregistrer l'implémentation
+                register_impl(stmt->impl.name, stmt);
+            }
+            else if (stmt->type == NODE_EXPORT) {
+                // Traiter les exports
+                register_export(mod, stmt->export.name, NULL);
+            }
+            else if (stmt->type == NODE_EXPR_STMT) {
+                // Exécuter les expressions à la racine
+                evaluate_statement(stmt, mod->env, mod->path);
+            }
         }
     }
+    // ==================== FIN AMÉLIORATION 1 ====================
     
-    // 7. Enregistrer les constantes
-    for (int i = 0; i < program_root->program.statements->count; i++) {
-        ASTNode* stmt = program_root->program.statements->nodes[i];
-        if (stmt->type == NODE_CONST) {
-            Value const_val = evaluate_expr(stmt->var_decl.value, mod->env);
-            env_set(mod->env, stmt->var_decl.name, const_val);
-        } else if (stmt->type == NODE_STRUCT) {
-            Value struct_val;
-            struct_val.type = 6;
-            struct_val.struct_val.struct_name = strdup(stmt->struct_def.name);
-            struct_val.struct_val.fields = NULL;
-            struct_val.struct_val.field_count = 0;
-            env_set(mod->env, stmt->struct_def.name, struct_val);
-        }
-    }
-    
-    // 8. Traiter les exports
-    for (int i = 0; i < program_root->program.statements->count; i++) {
-        ASTNode* stmt = program_root->program.statements->nodes[i];
-        if (stmt->type == NODE_EXPORT) {
-            register_export(mod, stmt->export.name, NULL);
-        }
-    }
-    
-    // 9. Exécuter les expressions à la racine
-    for (int i = 0; i < program_root->program.statements->count; i++) {
-        ASTNode* stmt = program_root->program.statements->nodes[i];
-        if (stmt->type == NODE_EXPR_STMT) {
-            evaluate_statement(stmt, mod->env, mod->path);
-        }
-    }
-    
-    // 10. Marquer comme chargé
+    // 6. Marquer comme chargé
     mod->status = MODULE_STATUS_LOADED;
     
-    // 11. Lier le module à l'environnement parent
+    // 7. Lier le module à l'environnement parent
     Value module_val;
     module_val.type = 7;
     module_val.int_val = (int)mod;
     env_set(parent_env, alias ? alias : mod->name, module_val);
     
-    // 12. Nettoyage
+    // 8. Nettoyage
     free_ast(program_root);
     program_root = NULL;
     free(source);
     
     return (LoadedModule*)mod;
 }
-
 // ==================== FONCTIONS D'ACCÈS ====================
 
 ModuleRegistry* init_module_registry(void) {

@@ -1,20 +1,343 @@
 #include "interpreter.h"
-#include <dlfcn.h>
-#include <ffi.h>
+#include <libgen.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
+extern ASTNode* program_root;
+extern int yyparse(void);
+extern FILE* yyin;
+extern void free_ast(ASTNode* node);
+extern void evaluate_statement(ASTNode* node, Environment* env);
+extern Value evaluate_expr(ASTNode* node, Environment* env);
 
-// ==================== GESTION DES IMPLÉMENTATIONS ====================
+// ==================== RÉSOLVEUR DE CHEMIN ====================
 
-typedef struct {
-    char* struct_name;
-    ASTNode* impl_node;
-} ImplEntry;
+char* resolve_module_path(char* current_file, char* import_path) {
+    char* result = NULL;
+    
+    // Chemin absolu ?
+    if (import_path[0] == '/') {
+        result = strdup(import_path);
+    }
+    // Chemin relatif (commence par . ou ..)
+    else if (import_path[0] == '.') {
+        char* dir = strdup(current_file);
+        char* dirname_ptr = dirname(dir);
+        
+        char full_path[1024];
+        if (import_path[1] == '/') {
+            // ./module
+            snprintf(full_path, sizeof(full_path), "%s/%s", dirname_ptr, import_path + 2);
+        } else if (import_path[1] == '.' && import_path[2] == '/') {
+            // ../module
+            char* parent = dirname(dirname_ptr);
+            snprintf(full_path, sizeof(full_path), "%s/%s", parent, import_path + 3);
+        } else {
+            snprintf(full_path, sizeof(full_path), "%s/%s", dirname_ptr, import_path);
+        }
+        
+        result = strdup(full_path);
+        free(dir);
+    }
+    // Module standard
+    else {
+        char* paths[] = {
+            "/usr/local/lib/goscript/granul/packages/",
+            "/usr/lib/goscript/",
+            "./modules/"
+        };
+        
+        for (int i = 0; i < 3; i++) {
+            char full_path[1024];
+            snprintf(full_path, sizeof(full_path), "%s%s", paths[i], import_path);
+            
+            // Vérifier si c'est un dossier avec __self__.gjs
+            char self_path[1024];
+            snprintf(self_path, sizeof(self_path), "%s/__self__.gjs", full_path);
+            if (access(self_path, F_OK) == 0) {
+                result = strdup(self_path);
+                break;
+            }
+            
+            // Vérifier si c'est un fichier .gjs
+            snprintf(self_path, sizeof(self_path), "%s.gjs", full_path);
+            if (access(self_path, F_OK) == 0) {
+                result = strdup(self_path);
+                break;
+            }
+        }
+    }
+    
+    return result;
+}
+
+// ==================== GESTION DE LA TABLE DES MODULES ====================
+
+ModuleRegistry* init_module_registry(void) {
+    ModuleRegistry* reg = malloc(sizeof(ModuleRegistry));
+    reg->modules = NULL;
+    reg->count = 0;
+    reg->capacity = 0;
+    return reg;
+}
+
+void register_module(ModuleRegistry* reg, LoadedModule* mod) {
+    if (reg->count >= reg->capacity) {
+        reg->capacity = reg->capacity == 0 ? 10 : reg->capacity * 2;
+        reg->modules = realloc(reg->modules, reg->capacity * sizeof(LoadedModule*));
+    }
+    reg->modules[reg->count++] = mod;
+}
+
+LoadedModule* find_module(ModuleRegistry* reg, char* path) {
+    for (int i = 0; i < reg->count; i++) {
+        if (strcmp(reg->modules[i]->module_path, path) == 0) {
+            return reg->modules[i];
+        }
+    }
+    return NULL;
+}
+
+void free_module_registry(ModuleRegistry* reg) {
+    if (!reg) return;
+    for (int i = 0; i < reg->count; i++) {
+        if (reg->modules[i]) {
+            free(reg->modules[i]->module_path);
+            free(reg->modules[i]->module_name);
+            if (reg->modules[i]->constraints.allowed_names) {
+                for (int j = 0; j < reg->modules[i]->constraints.allowed_count; j++) {
+                    free(reg->modules[i]->constraints.allowed_names[j]);
+                }
+                free(reg->modules[i]->constraints.allowed_names);
+            }
+            free(reg->modules[i]);
+        }
+    }
+    free(reg->modules);
+    free(reg);
+}
+
+// ==================== TRAITEMENT DES CONTRAINTES ====================
+
+void process_constraints(LoadedModule* module, ASTNode* constraints) {
+    if (!constraints) return;
+    
+    if (constraints->type == NODE_CONSTRAINT) {
+        if (strcmp(constraints->constraint.constraint_type, "only") == 0) {
+            if (constraints->constraint.list) {
+                module->constraints.allowed_count = constraints->constraint.list->count;
+                module->constraints.allowed_names = malloc(module->constraints.allowed_count * sizeof(char*));
+                for (int i = 0; i < module->constraints.allowed_count; i++) {
+                    ASTNode* name_node = constraints->constraint.list->nodes[i];
+                    if (name_node->type == NODE_IDENTIFIER) {
+                        module->constraints.allowed_names[i] = strdup(name_node->identifier.name);
+                    }
+                }
+            }
+        } else if (strcmp(constraints->constraint.constraint_type, "timeout") == 0) {
+            module->constraints.timeout_ms = constraints->constraint.int_value;
+        } else if (strcmp(constraints->constraint.constraint_type, "sandbox") == 0) {
+            module->constraints.sandbox = 1;
+        } else if (strcmp(constraints->constraint.constraint_type, "allow_ffi") == 0) {
+            module->constraints.allow_ffi = constraints->constraint.int_value;
+        }
+    } else if (constraints->type == NODE_CONSTRAINT_LIST) {
+        process_constraints(module, constraints->constraint_list.a);
+        process_constraints(module, constraints->constraint_list.b);
+    }
+}
+
+// ==================== CHARGEMENT D'UN MODULE ====================
+
+LoadedModule* load_module(ModuleRegistry* reg, Environment* parent_env,
+                          char* current_file, char* import_path, 
+                          char* alias, ASTNode* constraints) {
+    // 1. Résoudre le chemin du module
+    char* module_path = resolve_module_path(current_file, import_path);
+    if (!module_path) {
+        fprintf(stderr, "Module not found: %s\n", import_path);
+        return NULL;
+    }
+    
+    // 2. Vérifier si le module est déjà chargé
+    LoadedModule* existing = find_module(reg, module_path);
+    if (existing) {
+        existing->ref_count++;
+        free(module_path);
+        return existing;
+    }
+    
+    // 3. Créer un nouvel environnement isolé pour le module
+    Environment* module_env = create_env(NULL);
+    
+    // 4. Ouvrir et parser le fichier du module
+    FILE* f = fopen(module_path, "r");
+    if (!f) {
+        fprintf(stderr, "Cannot open module file: %s\n", module_path);
+        free(module_path);
+        free(module_env);
+        return NULL;
+    }
+    
+    // Sauvegarder l'ancien yyin
+    FILE* old_yyin = yyin;
+    yyin = f;
+    
+    // Parser le fichier du module
+    int parse_result = yyparse();
+    
+    fclose(f);
+    yyin = old_yyin;
+    
+    if (parse_result != 0 || !program_root) {
+        fprintf(stderr, "Parse error in module: %s\n", module_path);
+        free(module_path);
+        free(module_env);
+        return NULL;
+    }
+    
+    // 5. Créer la structure du module
+    LoadedModule* module = malloc(sizeof(LoadedModule));
+    module->module_path = module_path;
+    module->module_name = alias ? strdup(alias) : strdup(import_path);
+    module->env = module_env;
+    module->status = 1;
+    module->ref_count = 1;
+    
+    // 6. Initialiser les contraintes par défaut
+    module->constraints.allowed_names = NULL;
+    module->constraints.allowed_count = 0;
+    module->constraints.timeout_ms = 0;
+    module->constraints.sandbox = 0;
+    module->constraints.allow_ffi = 1;
+    
+    // 7. Traiter les contraintes si présentes
+    if (constraints) {
+        process_constraints(module, constraints);
+    }
+    
+    // 8. Enregistrer toutes les fonctions du module
+    for (int i = 0; i < program_root->program.statements->count; i++) {
+        ASTNode* stmt = program_root->program.statements->nodes[i];
+        if (stmt->type == NODE_FUNCTION || stmt->type == NODE_PUBLIC_FUNCTION) {
+            Value func_val;
+            func_val.type = 4;  // Type FUNCTION
+            func_val.func_val.node = stmt;
+            func_val.func_val.closure = module_env;
+            env_set(module_env, stmt->function.name, func_val);
+        }
+    }
+    
+    // 9. Enregistrer les constantes du module
+    for (int i = 0; i < program_root->program.statements->count; i++) {
+        ASTNode* stmt = program_root->program.statements->nodes[i];
+        if (stmt->type == NODE_CONST) {
+            Value const_val = evaluate_expr(stmt->var_decl.value, module_env);
+            env_set(module_env, stmt->var_decl.name, const_val);
+        }
+    }
+    
+    // 10. Enregistrer les structures du module
+    for (int i = 0; i < program_root->program.statements->count; i++) {
+        ASTNode* stmt = program_root->program.statements->nodes[i];
+        if (stmt->type == NODE_STRUCT) {
+            Value struct_val;
+            struct_val.type = 6;  // Type STRUCT
+            struct_val.struct_val.struct_name = strdup(stmt->struct_def.name);
+            struct_val.struct_val.fields = NULL;
+            struct_val.struct_val.field_count = 0;
+            env_set(module_env, stmt->struct_def.name, struct_val);
+        }
+    }
+    
+    // 11. Enregistrer les implémentations du module
+    for (int i = 0; i < program_root->program.statements->count; i++) {
+        ASTNode* stmt = program_root->program.statements->nodes[i];
+        if (stmt->type == NODE_IMPL) {
+            register_impl(stmt->impl.name, stmt);
+            
+            // Enregistrer les méthodes
+            for (int j = 0; j < stmt->impl.methods->count; j++) {
+                ASTNode* method = stmt->impl.methods->nodes[j];
+                if (method->type == NODE_FUNCTION) {
+                    char method_full_name[256];
+                    snprintf(method_full_name, sizeof(method_full_name), "%s::%s", 
+                             stmt->impl.name, method->function.name);
+                    Value func_val;
+                    func_val.type = 4;
+                    func_val.func_val.node = method;
+                    func_val.func_val.closure = module_env;
+                    env_set(module_env, method_full_name, func_val);
+                }
+            }
+        }
+    }
+    
+    // 12. Exporter les symboles publics (pub)
+    for (int i = 0; i < program_root->program.statements->count; i++) {
+        ASTNode* stmt = program_root->program.statements->nodes[i];
+        if (stmt->type == NODE_EXPORT) {
+            Value* exported = env_get(module_env, stmt->export.name);
+            if (exported) {
+                env_set(module_env, stmt->export.name, *exported);
+            }
+        }
+    }
+    
+    // 13. Exécuter le module (si des expressions à la racine)
+    for (int i = 0; i < program_root->program.statements->count; i++) {
+        ASTNode* stmt = program_root->program.statements->nodes[i];
+        if (stmt->type == NODE_EXPR_STMT) {
+            evaluate_statement(stmt, module_env);
+        }
+    }
+    
+    // 14. Enregistrer le module dans le registre
+    register_module(reg, module);
+    
+    // 15. CRUCIAL: Lier le module à l'environnement parent avec son alias
+    Value module_val;
+    module_val.type = 7;  // Type MODULE
+    module_val.int_val = (int)module;
+    if (parent_env) {
+        env_set(parent_env, module->module_name, module_val);
+    }
+    
+    // 16. Nettoyer le programme_root temporaire
+    free_ast(program_root);
+    program_root = NULL;
+    
+    return module;
+}
+
+// ==================== VÉRIFICATION DES PERMISSIONS ====================
+
+int is_name_allowed(LoadedModule* module, char* name) {
+    if (!module) return 1;
+    if (module->constraints.allowed_count == 0) return 1;
+    
+    for (int i = 0; i < module->constraints.allowed_count; i++) {
+        if (strcmp(module->constraints.allowed_names[i], name) == 0) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+int is_ffi_allowed(LoadedModule* module) {
+    if (!module) return 1;
+    return module->constraints.allow_ffi;
+}
+
+// ==================== ENREGISTREMENT DES IMPLÉMENTATIONS ====================
 
 static ImplEntry* impl_table = NULL;
 static int impl_count = 0;
 static int impl_capacity = 0;
 
-// Enregistrer une implémentation
 void register_impl(char* struct_name, ASTNode* impl_node) {
     if (impl_count >= impl_capacity) {
         impl_capacity = impl_capacity == 0 ? 10 : impl_capacity * 2;
@@ -25,7 +348,6 @@ void register_impl(char* struct_name, ASTNode* impl_node) {
     impl_count++;
 }
 
-// Trouver une implémentation par nom de structure
 ASTNode* find_impl(char* struct_name) {
     for (int i = 0; i < impl_count; i++) {
         if (strcmp(impl_table[i].struct_name, struct_name) == 0) {
@@ -35,232 +357,6 @@ ASTNode* find_impl(char* struct_name) {
     return NULL;
 }
 
-// Trouver une méthode dans une implémentation
-
-// Handle global pour la libc (ouvert une seule fois)
-extern ASTNode* program_root;
-static void* libc_handle = NULL;
-static int libc_initialized = 0;
-
-// Initialiser le handle de la libc
-void init_libc() {
-    if (!libc_initialized) {
-        // Sur Alpine Linux, la libc est musl
-        libc_handle = dlopen("libc.musl-x86.so.1", RTLD_LAZY);
-        if (!libc_handle) {
-            // Essayer avec le nom standard
-            libc_handle = dlopen("libc.so.6", RTLD_LAZY);
-        }
-        if (!libc_handle) {
-            // Essayer avec NULL pour le programme courant
-            libc_handle = dlopen(NULL, RTLD_LAZY);
-        }
-        libc_initialized = 1;
-    }
-}
-
-// Fonction pour appeler une fonction C via FFI
-Value call_c_function_ffi(void* func_ptr, Value* args, int arg_count, ffi_type* ret_type, ffi_type** arg_types) {
-    Value result = {0};
-    
-    if (!func_ptr) {
-        fprintf(stderr, "Error: NULL function pointer\n");
-        return result;
-    }
-    
-    // Préparer la CIF (Call Interface)
-    ffi_cif cif;
-    ffi_status status = ffi_prep_cif(&cif, FFI_DEFAULT_ABI, arg_count, ret_type, arg_types);
-    
-    if (status != FFI_OK) {
-        fprintf(stderr, "Error: ffi_prep_cif failed with status %d\n", status);
-        return result;
-    }
-    
-    // Préparer les valeurs
-    void** values = malloc(arg_count * sizeof(void*));
-    void* ret_val = malloc(32);
-    
-    for (int i = 0; i < arg_count; i++) {
-        switch (args[i].type) {
-            case 0: values[i] = &args[i].int_val; break;
-            case 1: values[i] = &args[i].float_val; break;
-            case 2: values[i] = &args[i].string_val; break;
-            case 3: values[i] = &args[i].bool_val; break;
-            default: values[i] = NULL;
-        }
-    }
-    
-    ffi_call(&cif, FFI_FN(func_ptr), ret_val, values);
-    
-    if (ret_type == &ffi_type_sint32 || ret_type == &ffi_type_sint) {
-        result.type = 0;
-        result.int_val = *(int*)ret_val;
-    } else if (ret_type == &ffi_type_sint64) {
-        result.type = 0;
-        result.int_val = *(long long*)ret_val;
-    } else if (ret_type == &ffi_type_float) {
-        result.type = 1;
-        result.float_val = *(float*)ret_val;
-    } else if (ret_type == &ffi_type_double) {
-        result.type = 1;
-        result.float_val = *(double*)ret_val;
-    } else if (ret_type == &ffi_type_pointer) {
-        result.type = 2;
-        char* str = *(char**)ret_val;
-        result.string_val = str ? strdup(str) : strdup("");
-    } else if (ret_type == &ffi_type_void) {
-        result.type = 0;
-        result.int_val = 0;
-    }
-    
-    free(values);
-    free(ret_val);
-    return result;
-}
-
-// Fonction pour appeler puts
-Value call_puts(Value* args, int arg_count) {
-    Value result = {0};
-    if (arg_count > 0 && args[0].type == 2) {
-        printf("%s\n", args[0].string_val);
-    }
-    return result;
-}
-
-// Fonction pour appeler putchar
-Value call_putchar(Value* args, int arg_count) {
-    Value result = {0};
-    if (arg_count > 0 && args[0].type == 0) {
-        putchar(args[0].int_val);
-        result.int_val = args[0].int_val;
-    }
-    return result;
-}
-
-void print_value(Value val, int newline) {
-    switch (val.type) {
-        case 0: printf("%d", val.int_val); break;
-        case 1: printf("%f", val.float_val); break;
-        case 2: printf("%s", val.string_val); break;
-        case 3: printf("%s", val.bool_val ? "true" : "false"); break;
-        default: printf("unknown");
-    }
-    if (newline) printf("\n");
-}
-
-void register_native_c_functions(Environment* env) {
-    init_libc();
-    
-    if (libc_handle) {
-        void* strlen_ptr = dlsym(libc_handle, "strlen");
-        if (strlen_ptr) {
-            ffi_type* arg_types[] = {&ffi_type_pointer};
-            Value func_val;
-            func_val.type = 5;
-            func_val.cfunc_val.func_ptr = strlen_ptr;
-            func_val.cfunc_val.ret_type = &ffi_type_sint32;
-            func_val.cfunc_val.arg_count = 1;
-            func_val.cfunc_val.arg_types = malloc(sizeof(ffi_type*));
-            func_val.cfunc_val.arg_types[0] = &ffi_type_pointer;
-            ffi_prep_cif(&func_val.cfunc_val.cif, FFI_DEFAULT_ABI, 1, &ffi_type_sint32, arg_types);
-            env_set(env, "strlen", func_val);
-        }
-        
-        void* strcmp_ptr = dlsym(libc_handle, "strcmp");
-        if (strcmp_ptr) {
-            ffi_type* arg_types[] = {&ffi_type_pointer, &ffi_type_pointer};
-            Value func_val;
-            func_val.type = 5;
-            func_val.cfunc_val.func_ptr = strcmp_ptr;
-            func_val.cfunc_val.ret_type = &ffi_type_sint32;
-            func_val.cfunc_val.arg_count = 2;
-            func_val.cfunc_val.arg_types = malloc(2 * sizeof(ffi_type*));
-            func_val.cfunc_val.arg_types[0] = &ffi_type_pointer;
-            func_val.cfunc_val.arg_types[1] = &ffi_type_pointer;
-            ffi_prep_cif(&func_val.cfunc_val.cif, FFI_DEFAULT_ABI, 2, &ffi_type_sint32, arg_types);
-            env_set(env, "strcmp", func_val);
-        }
-        
-        void* atoi_ptr = dlsym(libc_handle, "atoi");
-        if (atoi_ptr) {
-            ffi_type* arg_types[] = {&ffi_type_pointer};
-            Value func_val;
-            func_val.type = 5;
-            func_val.cfunc_val.func_ptr = atoi_ptr;
-            func_val.cfunc_val.ret_type = &ffi_type_sint32;
-            func_val.cfunc_val.arg_count = 1;
-            func_val.cfunc_val.arg_types = malloc(sizeof(ffi_type*));
-            func_val.cfunc_val.arg_types[0] = &ffi_type_pointer;
-            ffi_prep_cif(&func_val.cfunc_val.cif, FFI_DEFAULT_ABI, 1, &ffi_type_sint32, arg_types);
-            env_set(env, "atoi", func_val);
-        }
-        
-        void* system_ptr = dlsym(libc_handle, "system");
-        if (system_ptr) {
-            ffi_type* arg_types[] = {&ffi_type_pointer};
-            Value func_val;
-            func_val.type = 5;
-            func_val.cfunc_val.func_ptr = system_ptr;
-            func_val.cfunc_val.ret_type = &ffi_type_sint32;
-            func_val.cfunc_val.arg_count = 1;
-            func_val.cfunc_val.arg_types = malloc(sizeof(ffi_type*));
-            func_val.cfunc_val.arg_types[0] = &ffi_type_pointer;
-            ffi_prep_cif(&func_val.cfunc_val.cif, FFI_DEFAULT_ABI, 1, &ffi_type_sint32, arg_types);
-            env_set(env, "system", func_val);
-        }
-        
-        void* malloc_ptr = dlsym(libc_handle, "malloc");
-        if (malloc_ptr) {
-            ffi_type* arg_types[] = {&ffi_type_sint32};
-            Value func_val;
-            func_val.type = 5;
-            func_val.cfunc_val.func_ptr = malloc_ptr;
-            func_val.cfunc_val.ret_type = &ffi_type_pointer;
-            func_val.cfunc_val.arg_count = 1;
-            func_val.cfunc_val.arg_types = malloc(sizeof(ffi_type*));
-            func_val.cfunc_val.arg_types[0] = &ffi_type_sint32;
-            ffi_prep_cif(&func_val.cfunc_val.cif, FFI_DEFAULT_ABI, 1, &ffi_type_pointer, arg_types);
-            env_set(env, "malloc", func_val);
-        }
-        
-        void* free_ptr = dlsym(libc_handle, "free");
-        if (free_ptr) {
-            ffi_type* arg_types[] = {&ffi_type_pointer};
-            Value func_val;
-            func_val.type = 5;
-            func_val.cfunc_val.func_ptr = free_ptr;
-            func_val.cfunc_val.ret_type = &ffi_type_void;
-            func_val.cfunc_val.arg_count = 1;
-            func_val.cfunc_val.arg_types = malloc(sizeof(ffi_type*));
-            func_val.cfunc_val.arg_types[0] = &ffi_type_pointer;
-            ffi_prep_cif(&func_val.cfunc_val.cif, FFI_DEFAULT_ABI, 1, &ffi_type_void, arg_types);
-            env_set(env, "free", func_val);
-        }
-    }
-    
-    // puts et putchar
-    Value puts_func;
-    puts_func.type = 5;
-    puts_func.cfunc_val.func_ptr = (void*)call_puts;
-    puts_func.cfunc_val.ret_type = &ffi_type_sint32;
-    puts_func.cfunc_val.arg_count = 1;
-    puts_func.cfunc_val.arg_types = malloc(sizeof(ffi_type*));
-    puts_func.cfunc_val.arg_types[0] = &ffi_type_pointer;
-    ffi_prep_cif(&puts_func.cfunc_val.cif, FFI_DEFAULT_ABI, 1, &ffi_type_sint32, (ffi_type*[]){&ffi_type_pointer});
-    env_set(env, "puts", puts_func);
-    
-    Value putchar_func;
-    putchar_func.type = 5;
-    putchar_func.cfunc_val.func_ptr = (void*)call_putchar;
-    putchar_func.cfunc_val.ret_type = &ffi_type_sint32;
-    putchar_func.cfunc_val.arg_count = 1;
-    putchar_func.cfunc_val.arg_types = malloc(sizeof(ffi_type*));
-    putchar_func.cfunc_val.arg_types[0] = &ffi_type_sint32;
-    ffi_prep_cif(&putchar_func.cfunc_val.cif, FFI_DEFAULT_ABI, 1, &ffi_type_sint32, (ffi_type*[]){&ffi_type_sint32});
-    env_set(env, "putchar", putchar_func);
-}
-// cette fonction pour trouver une méthode dans une implémentation
 ASTNode* find_method(ASTNode* impl_node, char* method_name) {
     if (!impl_node || impl_node->type != NODE_IMPL) return NULL;
     
@@ -274,741 +370,7 @@ ASTNode* find_method(ASTNode* impl_node, char* method_name) {
     return NULL;
 }
 
-
-Value call_method(Value* obj, char* method_name, ASTNodeList* args, Environment* env) {
-    Value result = {0};
-    
-    if (obj->type != 6) return result;
-    
-    // Chercher l'implémentation
-    ASTNode* impl_node = find_impl(obj->struct_val.struct_name);
-    
-    if (!impl_node) return result;
-    
-    // Chercher la méthode
-    ASTNode* method = find_method(impl_node, method_name);
-    
-    if (!method) return result;
-    
-    // Créer l'environnement de la méthode
-    Environment* method_env = create_env(env);
-    
-    // Lier self
-    env_set(method_env, "self", *obj);
-    
-    // Lier les arguments
-    if (args) {
-        for (int i = 0; i < args->count; i++) {
-            Value arg_val = evaluate_expr(args->nodes[i], env);
-            if (method->function.params && i < method->function.params->count) {
-                ASTNode* param = method->function.params->nodes[i];
-                env_set(method_env, param->identifier.name, arg_val);
-            }
-        }
-    }
-    
-    // Exécuter la méthode
-    for (int i = 0; i < method->function.body->count; i++) {
-        ASTNode* stmt = method->function.body->nodes[i];
-        if (stmt->type == NODE_RETURN) {
-            result = evaluate_expr(stmt->return_stmt.value, method_env);
-            break;
-        } else {
-            evaluate_statement(stmt, method_env);
-        }
-    }
-    
-    free(method_env);
-    return result;
-}
-
-
-
-Value evaluate_expr(ASTNode* node, Environment* env) {
-    Value result = {0};
-    
-    switch (node->type) {
-        case NODE_NUMBER:
-            result.type = 0;
-            result.int_val = node->number.value;
-            break;
-            
-        case NODE_FLOAT:
-            result.type = 1;
-            result.float_val = node->float_val.value;
-            break;
-            
-        case NODE_STRING:
-            result.type = 2;
-            result.string_val = strdup(node->string_val.value);
-            break;
-            
-        case NODE_BOOL:
-            result.type = 3;
-            result.bool_val = node->bool_val.value;
-            break;
-            
-        case NODE_NIL:
-            result.type = 0;
-            result.int_val = 0;
-            break;
-            
-        case NODE_IDENTIFIER: {
-            Value* val = env_get(env, node->identifier.name);
-            if (val) {
-                result = *val;
-            } else {
-                fprintf(stderr, "Undefined: %s\n", node->identifier.name);
-            }
-            break;
-        }
-        
-        case NODE_BINARY_OP: {
-            // Gestion des assignations composées
-            if (node->binary.op == OP_ADD_ASSIGN ||
-                node->binary.op == OP_SUB_ASSIGN ||
-                node->binary.op == OP_MUL_ASSIGN ||
-                node->binary.op == OP_DIV_ASSIGN ||
-                node->binary.op == OP_MOD_ASSIGN) {
-                
-                if (node->binary.left->type == NODE_IDENTIFIER) {
-                    char* var_name = node->binary.left->identifier.name;
-                    Value* current = env_get(env, var_name);
-                    Value right_val = evaluate_expr(node->binary.right, env);
-                    Value new_val = {0};
-                    
-                    if (current) {
-                        switch (node->binary.op) {
-                            case OP_ADD_ASSIGN:
-                                if (current->type == 0 && right_val.type == 0) {
-                                    new_val.type = 0;
-                                    new_val.int_val = current->int_val + right_val.int_val;
-                                } else if (current->type == 1 && right_val.type == 1) {
-                                    new_val.type = 1;
-                                    new_val.float_val = current->float_val + right_val.float_val;
-                                } else if (current->type == 2 || right_val.type == 2) {
-                                    char buf1[128], buf2[128];
-                                    char* left_str = "";
-                                    char* right_str = "";
-                                    if (current->type == 0) { sprintf(buf1, "%d", current->int_val); left_str = buf1; }
-                                    else if (current->type == 1) { sprintf(buf1, "%f", current->float_val); left_str = buf1; }
-                                    else if (current->type == 2) left_str = current->string_val;
-                                    else if (current->type == 3) left_str = current->bool_val ? "true" : "false";
-                                    if (right_val.type == 0) { sprintf(buf2, "%d", right_val.int_val); right_str = buf2; }
-                                    else if (right_val.type == 1) { sprintf(buf2, "%f", right_val.float_val); right_str = buf2; }
-                                    else if (right_val.type == 2) right_str = right_val.string_val;
-                                    else if (right_val.type == 3) right_str = right_val.bool_val ? "true" : "false";
-                                    new_val.type = 2;
-                                    new_val.string_val = malloc(strlen(left_str) + strlen(right_str) + 1);
-                                    strcpy(new_val.string_val, left_str);
-                                    strcat(new_val.string_val, right_str);
-                                }
-                                break;
-                            case OP_SUB_ASSIGN:
-                                if (current->type == 0 && right_val.type == 0) {
-                                    new_val.type = 0;
-                                    new_val.int_val = current->int_val - right_val.int_val;
-                                } else if (current->type == 1 && right_val.type == 1) {
-                                    new_val.type = 1;
-                                    new_val.float_val = current->float_val - right_val.float_val;
-                                }
-                                break;
-                            case OP_MUL_ASSIGN:
-                                if (current->type == 0 && right_val.type == 0) {
-                                    new_val.type = 0;
-                                    new_val.int_val = current->int_val * right_val.int_val;
-                                } else if (current->type == 1 && right_val.type == 1) {
-                                    new_val.type = 1;
-                                    new_val.float_val = current->float_val * right_val.float_val;
-                                }
-                                break;
-                            case OP_DIV_ASSIGN:
-                                if (current->type == 0 && right_val.type == 0 && right_val.int_val != 0) {
-                                    new_val.type = 0;
-                                    new_val.int_val = current->int_val / right_val.int_val;
-                                } else if (current->type == 1 && right_val.type == 1 && right_val.float_val != 0) {
-                                    new_val.type = 1;
-                                    new_val.float_val = current->float_val / right_val.float_val;
-                                }
-                                break;
-                            case OP_MOD_ASSIGN:
-                                if (current->type == 0 && right_val.type == 0 && right_val.int_val != 0) {
-                                    new_val.type = 0;
-                                    new_val.int_val = current->int_val % right_val.int_val;
-                                }
-                                break;
-                        }
-                        env_set(env, var_name, new_val);
-                        result = new_val;
-                    }
-                }
-                break;
-            }
-            
-            // Assignation simple
-            if (node->binary.op == OP_ASSIGN) {
-                if (node->binary.left->type == NODE_IDENTIFIER) {
-                    char* var_name = node->binary.left->identifier.name;
-                    Value right_val = evaluate_expr(node->binary.right, env);
-                    env_set(env, var_name, right_val);
-                    result = right_val;
-                }
-                break;
-            }
-            
-            // Opérations binaires standard
-            Value left = evaluate_expr(node->binary.left, env);
-            Value right = evaluate_expr(node->binary.right, env);
-            
-            switch (node->binary.op) {
-                case OP_ADD:
-                    if (left.type == 0 && right.type == 0) {
-                        result.type = 0;
-                        result.int_val = left.int_val + right.int_val;
-                    } else if (left.type == 1 && right.type == 1) {
-                        result.type = 1;
-                        result.float_val = left.float_val + right.float_val;
-                    } else if (left.type == 2 || right.type == 2) {
-                        char buf1[128], buf2[128];
-                        char* left_str = "";
-                        char* right_str = "";
-                        if (left.type == 0) { sprintf(buf1, "%d", left.int_val); left_str = buf1; }
-                        else if (left.type == 1) { sprintf(buf1, "%f", left.float_val); left_str = buf1; }
-                        else if (left.type == 2) left_str = left.string_val;
-                        else if (left.type == 3) left_str = left.bool_val ? "true" : "false";
-                        if (right.type == 0) { sprintf(buf2, "%d", right.int_val); right_str = buf2; }
-                        else if (right.type == 1) { sprintf(buf2, "%f", right.float_val); right_str = buf2; }
-                        else if (right.type == 2) right_str = right.string_val;
-                        else if (right.type == 3) right_str = right.bool_val ? "true" : "false";
-                        result.type = 2;
-                        result.string_val = malloc(strlen(left_str) + strlen(right_str) + 1);
-                        strcpy(result.string_val, left_str);
-                        strcat(result.string_val, right_str);
-                    }
-                    break;
-                    
-                case OP_SUB:
-                    if (left.type == 0 && right.type == 0) {
-                        result.type = 0;
-                        result.int_val = left.int_val - right.int_val;
-                    } else if (left.type == 1 && right.type == 1) {
-                        result.type = 1;
-                        result.float_val = left.float_val - right.float_val;
-                    }
-                    break;
-                    
-                case OP_MUL:
-                    if (left.type == 0 && right.type == 0) {
-                        result.type = 0;
-                        result.int_val = left.int_val * right.int_val;
-                    } else if (left.type == 1 && right.type == 1) {
-                        result.type = 1;
-                        result.float_val = left.float_val * right.float_val;
-                    }
-                    break;
-                    
-                case OP_DIV:
-                    if (left.type == 0 && right.type == 0 && right.int_val != 0) {
-                        result.type = 0;
-                        result.int_val = left.int_val / right.int_val;
-                    } else if (left.type == 1 && right.type == 1 && right.float_val != 0) {
-                        result.type = 1;
-                        result.float_val = left.float_val / right.float_val;
-                    }
-                    break;
-                    
-                case OP_MOD:
-                    if (left.type == 0 && right.type == 0 && right.int_val != 0) {
-                        result.type = 0;
-                        result.int_val = left.int_val % right.int_val;
-                    }
-                    break;
-                    
-                case OP_LT:
-                    result.type = 3;
-                    if (left.type == 0 && right.type == 0) result.bool_val = left.int_val < right.int_val;
-                    else if (left.type == 1 && right.type == 1) result.bool_val = left.float_val < right.float_val;
-                    break;
-                    
-                case OP_GT:
-                    result.type = 3;
-                    if (left.type == 0 && right.type == 0) result.bool_val = left.int_val > right.int_val;
-                    else if (left.type == 1 && right.type == 1) result.bool_val = left.float_val > right.float_val;
-                    break;
-                    
-                case OP_LTE:
-                    result.type = 3;
-                    if (left.type == 0 && right.type == 0) result.bool_val = left.int_val <= right.int_val;
-                    else if (left.type == 1 && right.type == 1) result.bool_val = left.float_val <= right.float_val;
-                    break;
-                    
-                case OP_GTE:
-                    result.type = 3;
-                    if (left.type == 0 && right.type == 0) result.bool_val = left.int_val >= right.int_val;
-                    else if (left.type == 1 && right.type == 1) result.bool_val = left.float_val >= right.float_val;
-                    break;
-                    
-                case OP_EQ:
-                    result.type = 3;
-                    if (left.type == 0 && right.type == 0) result.bool_val = left.int_val == right.int_val;
-                    else if (left.type == 1 && right.type == 1) result.bool_val = left.float_val == right.float_val;
-                    else if (left.type == 2 && right.type == 2) result.bool_val = strcmp(left.string_val, right.string_val) == 0;
-                    else if (left.type == 3 && right.type == 3) result.bool_val = left.bool_val == right.bool_val;
-                    break;
-                    
-                case OP_NEQ:
-                    result.type = 3;
-                    if (left.type == 0 && right.type == 0) result.bool_val = left.int_val != right.int_val;
-                    else if (left.type == 1 && right.type == 1) result.bool_val = left.float_val != right.float_val;
-                    break;
-                    
-                case OP_AND:
-                    result.type = 3;
-                    if (left.type == 3 && right.type == 3) result.bool_val = left.bool_val && right.bool_val;
-                    break;
-                    
-                case OP_OR:
-                    result.type = 3;
-                    if (left.type == 3 && right.type == 3) result.bool_val = left.bool_val || right.bool_val;
-                    break;
-                    
-                default:
-                    result.type = 0;
-                    result.int_val = 0;
-                    break;
-            }
-            break;
-        }
-        
-        case NODE_UNARY_OP: {
-            Value operand = evaluate_expr(node->unary.operand, env);
-            switch (node->unary.op) {
-                case OP_NOT:
-                    result.type = 3;
-                    result.bool_val = !operand.bool_val;
-                    break;
-                case OP_NEG:
-                    if (operand.type == 0) {
-                        result.type = 0;
-                        result.int_val = -operand.int_val;
-                    }
-                    break;
-                default: break;
-            }
-            break;
-        }
-
-        case NODE_IMPL: {
-    // Les implémentations sont stockées dans l'environnement global
-    // On ne fait rien ici, elles sont déjà enregistrées
-    result.type = 0;
-    result.int_val = 0;
-    break;
-}
-
-// ==================== INITIALISATION DES STRUCTURES ====================
-
-case NODE_STRUCT_INIT: {
-    result.type = 6;
-    result.struct_val.struct_name = strdup(node->struct_init.name);
-    
-    int field_count = 0;
-    if (node->struct_init.fields) {
-        field_count = node->struct_init.fields->count;
-    }
-    
-    result.struct_val.field_count = field_count;
-    result.struct_val.fields = malloc(field_count * sizeof(*result.struct_val.fields));
-    
-    for (int i = 0; i < field_count; i++) {
-        ASTNode* field_node = node->struct_init.fields->nodes[i];
-        if (field_node->type == NODE_FIELD_INIT) {
-            result.struct_val.fields[i].name = strdup(field_node->field_init.name);
-            result.struct_val.fields[i].value = malloc(sizeof(Value));
-            *(result.struct_val.fields[i].value) = evaluate_expr(field_node->field_init.value, env);
-        } else {
-            result.struct_val.fields[i].name = NULL;
-            result.struct_val.fields[i].value = NULL;
-        }
-    }
-    break;
-}
-
-// ==================== ACCÈS AUX MEMBRES ====================
-
-case NODE_MEMBER_ACCESS: {
-    Value obj = evaluate_expr(node->member.object, env);
-    
-    if (obj.type == 6) {
-        char* member_name = node->member.member;
-        
-        // Recherche linéaire du champ par son nom
-        Value* found = NULL;
-        for (int i = 0; i < obj.struct_val.field_count; i++) {
-            if (obj.struct_val.fields[i].name && 
-                strcmp(obj.struct_val.fields[i].name, member_name) == 0) {
-                found = obj.struct_val.fields[i].value;
-                break;
-            }
-        }
-        
-        if (found) {
-            result = *found;
-        } else {
-            fprintf(stderr, "Field '%s' not found in struct '%s'\n", 
-                    member_name, obj.struct_val.struct_name);
-            result.type = 0;
-            result.int_val = 0;
-        }
-    } else {
-        result.type = 0;
-        result.int_val = 0;
-    }
-    break;
-}
-// ==================== APPEL DE MÉTHODE ====================
-
-case NODE_METHOD_CALL: {
-    Value obj = evaluate_expr(node->method_call.object, env);
-    
-    if (obj.type == 6) {
-        char* method_name = node->method_call.method;
-        
-        // Chercher l'implémentation de la structure
-        ASTNode* impl_node = find_impl(obj.struct_val.struct_name);
-        
-        if (impl_node) {
-            // Chercher la méthode par son nom
-            ASTNode* method = find_method(impl_node, method_name);
-            
-            if (method) {
-                Environment* method_env = create_env(env);
-                
-                // ==================== CORRECTION ICI ====================
-                // Lier l'objet (l'instance) au PREMIER paramètre déclaré
-                if (method->function.params && method->function.params->count > 0) {
-                    // Le premier paramètre reçoit l'instance (peu importe son nom)
-                    ASTNode* first_param = method->function.params->nodes[0];
-                    env_set(method_env, first_param->identifier.name, obj);
-                    
-                    // Lier les arguments supplémentaires (décalés de 1)
-                    if (node->method_call.args) {
-                        for (int i = 0; i < node->method_call.args->count && (i + 1) < method->function.params->count; i++) {
-                            Value arg_val = evaluate_expr(node->method_call.args->nodes[i], env);
-                            ASTNode* param = method->function.params->nodes[i + 1];
-                            env_set(method_env, param->identifier.name, arg_val);
-                        }
-                    }
-                } else {
-                    // Fallback : s'il n'y a pas de paramètre, on injecte "self"
-                    env_set(method_env, "self", obj);
-                }
-                // ==================== FIN CORRECTION ====================
-                
-                // Exécuter la méthode
-                Value ret_val = {0};
-                for (int i = 0; i < method->function.body->count; i++) {
-                    ASTNode* stmt = method->function.body->nodes[i];
-                    if (stmt->type == NODE_RETURN) {
-                        ret_val = evaluate_expr(stmt->return_stmt.value, method_env);
-                        break;
-                    } else {
-                        evaluate_statement(stmt, method_env);
-                    }
-                }
-                
-                free(method_env);
-                result = ret_val;
-            } else {
-                fprintf(stderr, "Method '%s' not found in struct '%s'\n", 
-                        method_name, obj.struct_val.struct_name);
-                result.type = 0;
-                result.int_val = 0;
-            }
-        } else {
-            fprintf(stderr, "No implementation found for struct '%s'\n", 
-                    obj.struct_val.struct_name);
-            result.type = 0;
-            result.int_val = 0;
-        }
-    } else {
-        result.type = 0;
-        result.int_val = 0;
-    }
-    break;
-}
-        case NODE_CALL: {
-            char* func_name = node->call.callee->identifier.name;
-            Value* func = env_get(env, func_name);
-            
-            // Fonction Goscript (type 4)
-            if (func && func->type == 4) {
-                Environment* func_env = create_env(func->func_val.closure);
-                
-                if (node->call.args && func->func_val.node->function.params) {
-                    int arg_count = node->call.args->count;
-                    int param_count = func->func_val.node->function.params->count;
-                    
-                    for (int i = 0; i < arg_count && i < param_count; i++) {
-                        Value arg_val = evaluate_expr(node->call.args->nodes[i], env);
-                        ASTNode* param = func->func_val.node->function.params->nodes[i];
-                        env_set(func_env, param->identifier.name, arg_val);
-                    }
-                }
-                
-                Value ret_val = {0};
-                ret_val.type = 0;
-                ret_val.int_val = 0;
-                int has_return = 0;
-                
-                for (int i = 0; i < func->func_val.node->function.body->count; i++) {
-                    ASTNode* stmt = func->func_val.node->function.body->nodes[i];
-                    
-                    if (stmt->type == NODE_RETURN) {
-                        ret_val = evaluate_expr(stmt->return_stmt.value, func_env);
-                        has_return = 1;
-                        break;
-                    } else {
-                        evaluate_statement(stmt, func_env);
-                    }
-                }
-                
-                free(func_env);
-                
-                if (has_return) {
-                    result = ret_val;
-                } else {
-                    result.type = 0;
-                    result.int_val = 0;
-                }
-            }
-            // Fonction C via FFI (type 5)
-            else if (func && func->type == 5) {
-                int arg_count = node->call.args ? node->call.args->count : 0;
-                Value* args = malloc(arg_count * sizeof(Value));
-                
-                for (int i = 0; i < arg_count; i++) {
-                    args[i] = evaluate_expr(node->call.args->nodes[i], env);
-                }
-                
-                result = call_c_function_ffi(func->cfunc_val.func_ptr, args, arg_count,
-                                             func->cfunc_val.ret_type, func->cfunc_val.arg_types);
-                free(args);
-            }
-            // Fonctions natives
-            else if (strcmp(func_name, "print") == 0) {
-                if (node->call.args && node->call.args->count > 0) {
-                    Value arg = evaluate_expr(node->call.args->nodes[0], env);
-                    print_value(arg, 0);
-                }
-                result.type = 0;
-                result.int_val = 0;
-            }
-            else if (strcmp(func_name, "println") == 0) {
-                if (node->call.args && node->call.args->count > 0) {
-                    Value arg = evaluate_expr(node->call.args->nodes[0], env);
-                    print_value(arg, 1);
-                } else {
-                    printf("\n");
-                }
-                result.type = 0;
-                result.int_val = 0;
-            }
-            else {
-                fprintf(stderr, "Error: Undefined function '%s'\n", func_name);
-                result.type = 0;
-                result.int_val = 0;
-            }
-            break;
-        }
-        
-        default:
-            break;
-    }
-    
-    return result;
-}
-int evaluate_statement(ASTNode* node, Environment* env) {
-    switch (node->type) {
-        case NODE_LET: {
-            Value val = evaluate_expr(node->var_decl.value, env);
-            env_set(env, node->var_decl.name, val);
-            return 0;
-        }
-        
-        case NODE_RETURN: {
-            Value val = evaluate_expr(node->return_stmt.value, env);
-            print_value(val, 1);
-            return 1;
-        }
-        
-        case NODE_IF: {
-            Value cond = evaluate_expr(node->if_stmt.condition, env);
-            if (cond.type == 3 && cond.bool_val) {
-                for (int i = 0; i < node->if_stmt.then_branch->count; i++) {
-                    if (evaluate_statement(node->if_stmt.then_branch->nodes[i], env)) return 1;
-                }
-            } else if (node->if_stmt.else_branch) {
-                for (int i = 0; i < node->if_stmt.else_branch->count; i++) {
-                    if (evaluate_statement(node->if_stmt.else_branch->nodes[i], env)) return 1;
-                }
-            }
-            return 0;
-        }
-        
-        case NODE_WHILE: {
-            while (1) {
-                Value cond = evaluate_expr(node->while_stmt.condition, env);
-                if (cond.type != 3 || !cond.bool_val) break;
-                for (int i = 0; i < node->while_stmt.body->count; i++) {
-                    if (evaluate_statement(node->while_stmt.body->nodes[i], env)) return 1;
-                }
-            }
-            return 0;
-        }
-        
-        case NODE_LOOP: {
-            while (1) {
-                int break_flag = 0;
-                for (int i = 0; i < node->loop_stmt.body->count; i++) {
-                    int ret = evaluate_statement(node->loop_stmt.body->nodes[i], env);
-                    if (ret == 1) return 1;
-                    if (ret == 2) { break_flag = 1; break; }
-                }
-                if (break_flag) break;
-            }
-            return 0;
-        }
-        
-        case NODE_FOR: {
-    // La boucle for a trois parties: init, condition, increment
-    // Structure: for init; condition; increment { body }
-    
-    // 1. Exécuter l'initialisation (déclaration de variable)
-            if (node->for_range.start) {
-                evaluate_statement(node->for_range.start, env);
-            }
-    
-    // 2. Boucler tant que la condition est vraie
-            while (1) {
-        // Vérifier la condition
-                if (node->for_range.end) {
-                    Value cond = evaluate_expr(node->for_range.end, env);
-                    if (cond.type != 3 || !cond.bool_val) {
-                        break;  // Condition fausse, sortir de la boucle
-                    }
-                }
-        
-        // Exécuter le corps de la boucle
-                for (int i = 0; i < node->for_range.body->count; i++) {
-                    int ret = evaluate_statement(node->for_range.body->nodes[i], env);
-                    if (ret == 1) return 1;  // return
-                    if (ret == 2) {  // break
-                        return 0;
-                    }
-                }
-        
-        // 3. Exécuter l'incrémentation
-                if (node->for_range.var) {
-            // Pour l'instant, l'incrémentation est déjà dans le for
-            // format: for i = 0; i < 5; i = i + 1
-            // L'incrémentation est stockée dans node->for_range.start
-            // mais en réalité elle est dans la troisième expression
-                }
-            }
-            return 0;
-        }
-        case NODE_BREAK:
-            return 2;
-            
-        case NODE_EXPR_STMT: {
-            evaluate_expr(node->expr_stmt.expr, env);
-            return 0;
-        }
-        
-        default: return 0;
-    }
-}
-
-void interpret_program(ASTNode* program) {
-    Environment* global = create_env(NULL);
-    init_interpreter();
-    register_native_c_functions(global);
-    
-    // 1. Enregistrer TOUTES les fonctions (mais ne pas les exécuter)
-    for (int i = 0; i < program->program.statements->count; i++) {
-        ASTNode* stmt = program->program.statements->nodes[i];
-        if (stmt->type == NODE_FUNCTION || stmt->type == NODE_PUBLIC_FUNCTION) {
-            Value func_val;
-            func_val.type = 4;
-            func_val.func_val.node = stmt;
-            func_val.func_val.closure = global;
-            env_set(global, stmt->function.name, func_val);
-        }
-    }
-    
-    // 2. Enregistrer les structures (pour les méthodes)
-    for (int i = 0; i < program->program.statements->count; i++) {
-        ASTNode* stmt = program->program.statements->nodes[i];
-        if (stmt->type == NODE_STRUCT) {
-            // Enregistrer la structure
-            Value struct_val;
-            struct_val.type = 6;
-            struct_val.struct_val.struct_name = strdup(stmt->struct_def.name);
-            struct_val.struct_val.fields = NULL;
-            struct_val.struct_val.field_count = 0;
-            env_set(global, stmt->struct_def.name, struct_val);
-        }
-    }
-    
-    // 3. Enregistrer les implémentations
-    for (int i = 0; i < program->program.statements->count; i++) {
-        ASTNode* stmt = program->program.statements->nodes[i];
-        if (stmt->type == NODE_IMPL) {
-            register_impl(stmt->impl.name, stmt);
-        }
-    }
-    
-    // 4. Chercher la fonction main (point d'entrée)
-    ASTNode* main_func = NULL;
-    for (int i = 0; i < program->program.statements->count; i++) {
-        ASTNode* stmt = program->program.statements->nodes[i];
-        if (stmt->type == NODE_FUNCTION && strcmp(stmt->function.name, "main") == 0) {
-            main_func = stmt;
-            break;
-        }
-    }
-    
-    // 5. Exécuter UNIQUEMENT main si elle existe
-    if (main_func) {
-        // Créer un environnement pour main
-        Environment* main_env = create_env(global);
-        
-        // Exécuter le corps de main
-        for (int i = 0; i < main_func->function.body->count; i++) {
-            int ret = evaluate_statement(main_func->function.body->nodes[i], main_env);
-            if (ret) break;
-        }
-        free(main_env);
-    } else {
-        // Si pas de main, exécuter les expressions à la racine
-        for (int i = 0; i < program->program.statements->count; i++) {
-            ASTNode* stmt = program->program.statements->nodes[i];
-            if (stmt->type == NODE_EXPR_STMT) {
-                evaluate_statement(stmt, global);
-            }
-        }
-    }
-    
-    free(global);
-}
-
-void init_interpreter() {
-    init_libc();
-}
-// ==================== NETTOYAGE DE LA MÉMOIRE ====================
-
-void free_impl_table() {
+void free_impl_table(void) {
     for (int i = 0; i < impl_count; i++) {
         free(impl_table[i].struct_name);
     }

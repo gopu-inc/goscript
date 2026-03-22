@@ -267,6 +267,10 @@ return_type:
     | TOKEN_COLON type {
         $$ = $2;
     }
+    | TOKEN_ARROW primary_expr {
+        // Pour les retours directs: -> expr
+        $$ = create_return_direct_node($2);
+    }
     ;
 
 let_decl:

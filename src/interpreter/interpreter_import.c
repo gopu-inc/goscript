@@ -11,7 +11,7 @@ extern int yyparse(void);
 extern FILE* yyin;
 extern void free_ast(ASTNode* node);
 extern int evaluate_statement(ASTNode* node, Environment* env);
-extern Value evaluate_expr(ASTNode* node, Environment* env);
+extern Value evaluate_expr(ASTNode* node, Environment* env, char* current_file);
 extern void interpret_program(ASTNode* program);
 extern void register_impl(char* struct_name, ASTNode* impl_node);
 extern void env_set(Environment* env, char* name, Value value);

@@ -143,15 +143,16 @@ ASTNode* create_let_node(char* name, ASTNode* type, ASTNode* value) {
     node->var_decl.name = strdup(name);
     node->var_decl.var_type = type;
     node->var_decl.value = value;
+    node->var_decl.is_public = 0;  // Ajoutez cette ligne
     return node;
 }
-
 ASTNode* create_const_node(char* name, ASTNode* value) {
     ASTNode* node = malloc(sizeof(ASTNode));
     node->type = NODE_CONST;
     node->var_decl.name = strdup(name);
     node->var_decl.var_type = NULL;
     node->var_decl.value = value;
+    node->var_decl.is_public = 0;  // Ajoutez cette ligne
     return node;
 }
 

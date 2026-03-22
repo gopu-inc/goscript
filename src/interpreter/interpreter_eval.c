@@ -315,26 +315,10 @@ Value call_method(Value* obj, char* method_name, ASTNodeList* args, Environment*
             }
         }
     }
-    
-    for (int i = 0; i < method->function.body->count; i++) {
-        ASTNode* stmt = method->function.body->nodes[i];
-        if (stmt->type == NODE_RETURN) {
-            result = evaluate_expr(stmt->return_stmt.value, method_env);
-            break;
-        } else {
-            evaluate_statement(stmt, method_env, NULL);  // Ajoutez NULL comme current_file
-        }
-    }
-    
-    free(method_env);
-    return result;
-}
-
-Value evaluate_expr(ASTNode* node, Environment* env) {
+    Value evaluate_expr(ASTNode* node, Environment* env) {
     Value result = {0};
     
     switch (node->type) {
-        // ==================== VALEURS LITTÉRALES ====================
         case NODE_NUMBER:
             result.type = 0;
             result.int_val = node->number.value;
@@ -360,7 +344,6 @@ Value evaluate_expr(ASTNode* node, Environment* env) {
             result.int_val = 0;
             break;
             
-        // ==================== IDENTIFIANT ====================
         case NODE_IDENTIFIER: {
             Value* val = env_get(env, node->identifier.name);
             if (val) {
@@ -371,7 +354,6 @@ Value evaluate_expr(ASTNode* node, Environment* env) {
             break;
         }
         
-        // ==================== OPÉRATIONS BINAIRES ====================
         case NODE_BINARY_OP: {
             // Gestion des assignations composées
             if (node->binary.op == OP_ADD_ASSIGN ||
@@ -467,101 +449,66 @@ Value evaluate_expr(ASTNode* node, Environment* env) {
                         strcat(result.string_val, right_str);
                     }
                     break;
-                    
                 case OP_SUB:
                     if (left.type == 0 && right.type == 0) {
                         result.type = 0;
                         result.int_val = left.int_val - right.int_val;
-                    } else if (left.type == 1 && right.type == 1) {
-                        result.type = 1;
-                        result.float_val = left.float_val - right.float_val;
                     }
                     break;
-                    
                 case OP_MUL:
                     if (left.type == 0 && right.type == 0) {
                         result.type = 0;
                         result.int_val = left.int_val * right.int_val;
-                    } else if (left.type == 1 && right.type == 1) {
-                        result.type = 1;
-                        result.float_val = left.float_val * right.float_val;
                     }
                     break;
-                    
                 case OP_DIV:
                     if (left.type == 0 && right.type == 0 && right.int_val != 0) {
                         result.type = 0;
                         result.int_val = left.int_val / right.int_val;
-                    } else if (left.type == 1 && right.type == 1 && right.float_val != 0) {
-                        result.type = 1;
-                        result.float_val = left.float_val / right.float_val;
                     }
                     break;
-                    
                 case OP_MOD:
                     if (left.type == 0 && right.type == 0 && right.int_val != 0) {
                         result.type = 0;
                         result.int_val = left.int_val % right.int_val;
                     }
                     break;
-                    
                 case OP_LT:
                     result.type = 3;
                     if (left.type == 0 && right.type == 0) result.bool_val = left.int_val < right.int_val;
-                    else if (left.type == 1 && right.type == 1) result.bool_val = left.float_val < right.float_val;
                     break;
-                    
                 case OP_GT:
                     result.type = 3;
                     if (left.type == 0 && right.type == 0) result.bool_val = left.int_val > right.int_val;
-                    else if (left.type == 1 && right.type == 1) result.bool_val = left.float_val > right.float_val;
                     break;
-                    
                 case OP_LTE:
                     result.type = 3;
                     if (left.type == 0 && right.type == 0) result.bool_val = left.int_val <= right.int_val;
-                    else if (left.type == 1 && right.type == 1) result.bool_val = left.float_val <= right.float_val;
                     break;
-                    
                 case OP_GTE:
                     result.type = 3;
                     if (left.type == 0 && right.type == 0) result.bool_val = left.int_val >= right.int_val;
-                    else if (left.type == 1 && right.type == 1) result.bool_val = left.float_val >= right.float_val;
                     break;
-                    
                 case OP_EQ:
                     result.type = 3;
                     if (left.type == 0 && right.type == 0) result.bool_val = left.int_val == right.int_val;
-                    else if (left.type == 1 && right.type == 1) result.bool_val = left.float_val == right.float_val;
                     else if (left.type == 2 && right.type == 2) result.bool_val = strcmp(left.string_val, right.string_val) == 0;
-                    else if (left.type == 3 && right.type == 3) result.bool_val = left.bool_val == right.bool_val;
                     break;
-                    
                 case OP_NEQ:
                     result.type = 3;
                     if (left.type == 0 && right.type == 0) result.bool_val = left.int_val != right.int_val;
-                    else if (left.type == 1 && right.type == 1) result.bool_val = left.float_val != right.float_val;
                     break;
-                    
                 case OP_AND:
                     result.type = 3;
                     if (left.type == 3 && right.type == 3) result.bool_val = left.bool_val && right.bool_val;
                     break;
-                    
                 case OP_OR:
                     result.type = 3;
                     if (left.type == 3 && right.type == 3) result.bool_val = left.bool_val || right.bool_val;
                     break;
-                    
-                case OP_RANGE:
-                    result.type = 0;
-                    result.int_val = 0;
-                    break;
-                    
                 case OP_PIPE:
                     result = right;
                     break;
-                    
                 default:
                     result.type = 0;
                     result.int_val = 0;
@@ -570,7 +517,6 @@ Value evaluate_expr(ASTNode* node, Environment* env) {
             break;
         }
         
-        // ==================== OPÉRATIONS UNAIRES ====================
         case NODE_UNARY_OP: {
             Value operand = evaluate_expr(node->unary.operand, env);
             switch (node->unary.op) {
@@ -585,26 +531,17 @@ Value evaluate_expr(ASTNode* node, Environment* env) {
                     }
                     break;
                 default:
-                    result.type = 0;
-                    result.int_val = 0;
                     break;
             }
             break;
         }
         
-        // ==================== STRUCTURE INIT ====================
         case NODE_STRUCT_INIT: {
             result.type = 6;
             result.struct_val.struct_name = strdup(node->struct_init.name);
-            
-            int field_count = 0;
-            if (node->struct_init.fields) {
-                field_count = node->struct_init.fields->count;
-            }
-            
+            int field_count = node->struct_init.fields ? node->struct_init.fields->count : 0;
             result.struct_val.field_count = field_count;
             result.struct_val.fields = malloc(field_count * sizeof(*result.struct_val.fields));
-            
             for (int i = 0; i < field_count; i++) {
                 ASTNode* field_node = node->struct_init.fields->nodes[i];
                 if (field_node->type == NODE_FIELD_INIT) {
@@ -619,10 +556,8 @@ Value evaluate_expr(ASTNode* node, Environment* env) {
             break;
         }
         
-        // ==================== ACCÈS MEMBRE ====================
         case NODE_MEMBER_ACCESS: {
             Value obj = evaluate_expr(node->member.object, env);
-            
             if (obj.type == 6) {
                 char* member_name = node->member.member;
                 Value* found = NULL;
@@ -633,138 +568,95 @@ Value evaluate_expr(ASTNode* node, Environment* env) {
                         break;
                     }
                 }
-                if (found) {
-                    result = *found;
-                } else {
-                    result.type = 0;
-                    result.int_val = 0;
+                if (found) result = *found;
+            }
+            break;
+        }
+        
+        case NODE_STATIC_ACCESS: {
+            Value obj = evaluate_expr(node->static_access.object, env);
+            if (obj.type == 7) {
+                LoadedModule* mod = (LoadedModule*)obj.int_val;
+                if (mod && mod->env) {
+                    char* member_name = node->static_access.member;
+                    Value* val = env_get(mod->env, member_name);
+                    if (val) result = *val;
                 }
             }
             break;
         }
         
-        // ==================== ACCÈS STATIQUE (MODULE) ====================
-       case NODE_STATIC_ACCESS: {
-    Value obj = evaluate_expr(node->static_access.object, env);
-    
-    // ==================== AMÉLIORATION 2 ====================
-    if (obj.type == 7) {  // Type Module
-        LoadedModule* mod = (LoadedModule*)obj.int_val;
-        
-        // Vérifier que le module est correctement initialisé
-        if (!mod || !mod->env) {
-            fprintf(stderr, "Error: Module not initialized\n");
-            result.type = 0;
-            result.int_val = 0;
-            break;
-        }
-        
-        char* member_name = node->static_access.member;
-        
-        // Chercher le symbole dans l'environnement du module
-        Value* val = env_get(mod->env, member_name);
-        
-        if (val) {
-            result = *val;
-        } else {
-            fprintf(stderr, "Undefined: %s in module %s\n", 
-                    member_name, mod->module_name);
-            result.type = 0;
-            result.int_val = 0;
-        }
-    }
-    // ==================== FIN AMÉLIORATION 2 ====================
-    else {
-        result.type = 0;
-        result.int_val = 0;
-    }
-    break;
-}
-}
-        // ==================== APPEL DE MÉTHODE ====================
-case NODE_METHOD_CALL: {
-    Value obj = evaluate_expr(node->method_call.object, env);
-    
-    // Cas 1: Structure (type 6)
-    if (obj.type == 6) {
-        char* method_name = node->method_call.method;
-        ASTNode* impl_node = find_impl(obj.struct_val.struct_name);
-        
-        if (impl_node) {
-            ASTNode* method = find_method(impl_node, method_name);
-            if (method) {
-                Environment* method_env = create_env(env);
-                if (method->function.params && method->function.params->count > 0) {
-                    ASTNode* first_param = method->function.params->nodes[0];
-                    env_set(method_env, first_param->identifier.name, obj);
-                    if (node->method_call.args) {
-                        for (int i = 0; i < node->method_call.args->count && (i + 1) < method->function.params->count; i++) {
-                            Value arg_val = evaluate_expr(node->method_call.args->nodes[i], env);
-                            ASTNode* param = method->function.params->nodes[i + 1];
-                            env_set(method_env, param->identifier.name, arg_val);
+        case NODE_METHOD_CALL: {
+            Value obj = evaluate_expr(node->method_call.object, env);
+            
+            if (obj.type == 6) {
+                char* method_name = node->method_call.method;
+                ASTNode* impl_node = find_impl(obj.struct_val.struct_name);
+                if (impl_node) {
+                    ASTNode* method = find_method(impl_node, method_name);
+                    if (method) {
+                        Environment* method_env = create_env(env);
+                        if (method->function.params && method->function.params->count > 0) {
+                            ASTNode* first_param = method->function.params->nodes[0];
+                            env_set(method_env, first_param->identifier.name, obj);
+                            if (node->method_call.args) {
+                                for (int i = 0; i < node->method_call.args->count && (i + 1) < method->function.params->count; i++) {
+                                    Value arg_val = evaluate_expr(node->method_call.args->nodes[i], env);
+                                    ASTNode* param = method->function.params->nodes[i + 1];
+                                    env_set(method_env, param->identifier.name, arg_val);
+                                }
+                            }
+                        } else {
+                            env_set(method_env, "self", obj);
                         }
-                    }
-                } else {
-                    env_set(method_env, "self", obj);
-                }
-                
-                for (int i = 0; i < method->function.body->count; i++) {
-                    ASTNode* stmt = method->function.body->nodes[i];
-                    if (stmt->type == NODE_RETURN) {
-                        result = evaluate_expr(stmt->return_stmt.value, method_env);
-                        break;
-                    } else {
-                        evaluate_statement(stmt, method_env, NULL);
+                        for (int i = 0; i < method->function.body->count; i++) {
+                            ASTNode* stmt = method->function.body->nodes[i];
+                            if (stmt->type == NODE_RETURN) {
+                                result = evaluate_expr(stmt->return_stmt.value, method_env);
+                                break;
+                            } else {
+                                evaluate_statement(stmt, method_env, NULL);
+                            }
+                        }
+                        free(method_env);
                     }
                 }
-                free(method_env);
-            }
-        }
-    }
-    // === NOUVEAU : Cas 2: Module (type 7) ===
-    else if (obj.type == 7) {
-        LoadedModule* module = (LoadedModule*)obj.int_val;
-        char* method_name = node->method_call.method;
-        Value* func = env_get(module->env, method_name);
-        
-        if (func && func->type == 4) {
-            Environment* func_env = create_env(func->func_val.closure);
-            
-            if (node->method_call.args && func->func_val.node->function.params) {
-                int arg_count = node->method_call.args->count;
-                int param_count = func->func_val.node->function.params->count;
-                for (int i = 0; i < arg_count && i < param_count; i++) {
-                    Value arg_val = evaluate_expr(node->method_call.args->nodes[i], env);
-                    ASTNode* param = func->func_val.node->function.params->nodes[i];
-                    env_set(func_env, param->identifier.name, arg_val);
+            } else if (obj.type == 7) {
+                LoadedModule* mod = (LoadedModule*)obj.int_val;
+                if (mod && mod->env) {
+                    char* method_name = node->method_call.method;
+                    Value* func = env_get(mod->env, method_name);
+                    if (func && func->type == 4) {
+                        Environment* func_env = create_env(func->func_val.closure);
+                        if (node->method_call.args && func->func_val.node->function.params) {
+                            for (int i = 0; i < node->method_call.args->count && i < func->func_val.node->function.params->count; i++) {
+                                Value arg_val = evaluate_expr(node->method_call.args->nodes[i], env);
+                                ASTNode* param = func->func_val.node->function.params->nodes[i];
+                                env_set(func_env, param->identifier.name, arg_val);
+                            }
+                        }
+                        for (int i = 0; i < func->func_val.node->function.body->count; i++) {
+                            ASTNode* stmt = func->func_val.node->function.body->nodes[i];
+                            if (stmt->type == NODE_RETURN) {
+                                result = evaluate_expr(stmt->return_stmt.value, func_env);
+                                break;
+                            } else {
+                                evaluate_statement(stmt, func_env, NULL);
+                            }
+                        }
+                        free(func_env);
+                    }
                 }
             }
-            
-            for (int i = 0; i < func->func_val.node->function.body->count; i++) {
-                ASTNode* stmt = func->func_val.node->function.body->nodes[i];
-                if (stmt->type == NODE_RETURN) {
-                    result = evaluate_expr(stmt->return_stmt.value, func_env);
-                    break;
-                } else {
-                    evaluate_statement(stmt, func_env, NULL);
-                }
-            }
-            free(func_env);
-        } else {
-            fprintf(stderr, "Error: Function '%s' not found in module\n", method_name);
+            break;
         }
-    }
-    break;
-}
         
-        // ==================== APPEL DE FONCTION ====================
         case NODE_CALL: {
             char* func_name = node->call.callee->identifier.name;
             Value* func = env_get(env, func_name);
             
             if (func && func->type == 4) {
                 Environment* func_env = create_env(func->func_val.closure);
-                
                 if (node->call.args && func->func_val.node->function.params) {
                     for (int i = 0; i < node->call.args->count && i < func->func_val.node->function.params->count; i++) {
                         Value arg_val = evaluate_expr(node->call.args->nodes[i], env);
@@ -772,7 +664,6 @@ case NODE_METHOD_CALL: {
                         env_set(func_env, param->identifier.name, arg_val);
                     }
                 }
-                
                 for (int i = 0; i < func->func_val.node->function.body->count; i++) {
                     ASTNode* stmt = func->func_val.node->function.body->nodes[i];
                     if (stmt->type == NODE_RETURN) {
@@ -808,10 +699,6 @@ case NODE_METHOD_CALL: {
                 }
                 result.type = 0;
                 result.int_val = 0;
-            } else {
-                fprintf(stderr, "Error: Undefined function '%s'\n", func_name);
-                result.type = 0;
-                result.int_val = 0;
             }
             break;
         }
@@ -822,6 +709,20 @@ case NODE_METHOD_CALL: {
     
     return result;
 }
+    for (int i = 0; i < method->function.body->count; i++) {
+        ASTNode* stmt = method->function.body->nodes[i];
+        if (stmt->type == NODE_RETURN) {
+            result = evaluate_expr(stmt->return_stmt.value, method_env);
+            break;
+        } else {
+            evaluate_statement(stmt, method_env, NULL);  // Ajoutez NULL comme current_file
+        }
+    }
+    
+    free(method_env);
+    return result;
+}
+
 int evaluate_statement(ASTNode* node, Environment* env, char* current_file) {
     switch (node->type) {
         case NODE_LET: {

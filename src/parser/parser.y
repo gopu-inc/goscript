@@ -273,8 +273,14 @@ let_decl:
         node->var_decl.is_public = 1;
         $$ = node;
     }
+    // Ajoute ces deux règles pour muts:
+    | TOKEN_MUTS TOKEN_IDENTIFIER TOKEN_ASSIGN expression {
+        $$ = create_muts_node($2, NULL, $4);
+    }
+    | TOKEN_MUTS TOKEN_IDENTIFIER TOKEN_COLON type TOKEN_ASSIGN expression {
+        $$ = create_muts_node($2, $4, $6);
+    }
     ;
-
 const_decl:
     TOKEN_CONST TOKEN_IDENTIFIER TOKEN_ASSIGN expression {
         $$ = create_const_node($2, $4);

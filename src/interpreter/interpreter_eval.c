@@ -830,7 +830,6 @@ int evaluate_statement(ASTNode* node, Environment* env, char* current_file) {
        
      case NODE_RETURN: {
          Value val = evaluate_expr(node->return_stmt.value, env);
-         return_value = val;
     // NE PAS imprimer ici - laissons le caller s'en charge
          return 1;  // 1 = return encountered 
       }
@@ -1023,12 +1022,9 @@ void interpret_program(ASTNode* program) {
         ASTNode* stmt = program->program.statements->nodes[i];
         if (stmt->type == NODE_FUNCTION && strcmp(stmt->function.name, "main") == 0) {
             main_func = stmt;
-            break;
-        }
+            break;        }
     }
-   if (ret == 1) {
-       printf("%d\n", return_value.int_val);  // Ou print_value(return_value, 1)
-   } 
+   
     // 5. Exécuter main
     if (main_func) {
         Environment* main_env = create_env(global);

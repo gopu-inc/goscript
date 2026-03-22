@@ -125,6 +125,7 @@ statement:
     | const_decl
     | if_statement
     | for_statement
+    | unsafe_stmt
     | while_statement
     | loop_statement
     | match_statement
@@ -323,22 +324,29 @@ loop_statement:
     }
     ;
 
-match_expr:
+
+match_statement:
     TOKEN_MATCH expression TOKEN_LBRACE match_cases TOKEN_RBRACE {
         $$ = create_match_node($2, $4);
     }
     ;
 
 match_cases:
-    match_case { $$ = create_node_list(); add_to_node_list($$, $1); }
-    | match_cases match_case { add_to_node_list($1, $2); $$ = $1; }
+    match_case {
+        $$ = create_node_list();
+        add_to_node_list($$, $1);
+    }
+    | match_cases match_case {
+        add_to_node_list($1, $2);
+        $$ = $1;
+    }
     ;
 
 match_case:
-    expression TOKEN_FAT_ARROW statement { $$ = create_match_case($1, $3); }
-    | TOKEN_UNDERSCORE TOKEN_FAT_ARROW statement { $$ = create_match_case(create_wildcard_node(), $3); }
+    pattern TOKEN_FAT_ARROW expression {
+        $$ = create_match_case_node($1, $3);
+    }
     ;
-
 
 pattern:
     TOKEN_NUMBER {

@@ -803,70 +803,31 @@ case NODE_METHOD_CALL: {
 }
 int evaluate_statement(ASTNode* node, Environment* env, char* current_file) {
     switch (node->type) {
-        case NODE_LET: {
+        case NODE_LET:
+        case NODE_CONST: {
             Value val = evaluate_expr(node->var_decl.value, env);
             env_set(env, node->var_decl.name, val);
             return 0;
         }
         
-        case NODE_CONST:
-    
-    Value val = evaluate_expr(node->var_decl.value, env);
-    env_set(env, node->var_decl.name, val);
-    if (node->var_decl.is_public) {
-        
-    }
-    return 0;
-
-       
-     case NODE_RETURN: {
-         Value val = evaluate_expr(node->return_stmt.value, env);
-    // NE PAS imprimer ici - laissons le caller s'en charge
-         return 1;  // 1 = return encountered 
-      }
-        // Dans evaluate_statement, ajoute :
-
-case NODE_UNSAFE:
-    for (int i = 0; i < node->unsafe_block.body->count; i++) {
-        int ret = evaluate_statement(node->unsafe_block.body->nodes[i], env, current_file);
-        if (ret == 1) return 1;
-        if (ret == 2) return 2;
-    }
-    return 0;
-
-case NODE_MATCH: {
-    Value target = evaluate_expr(node->match_stmt.value, env);
-    for (int i = 0; i < node->match_stmt.cases->count; i++) {
-        ASTNode* case_node = node->match_stmt.cases->nodes[i];
-        if (case_node->type == NODE_MATCH_CASE) {
-            Value pattern = evaluate_expr(case_node->match_case.pattern, env);
-            // Comparaison simple
-            int match = 0;
-            if (target.type == pattern.type) {
-                if (target.type == 0 && target.int_val == pattern.int_val) match = 1;
-                else if (target.type == 1 && target.float_val == pattern.float_val) match = 1;
-                else if (target.type == 2 && strcmp(target.string_val, pattern.string_val) == 0) match = 1;
-                else if (target.type == 3 && target.bool_val == pattern.bool_val) match = 1;
-            }
-            if (match) {
-                Value result = evaluate_expr(case_node->match_case.value, env);
-                // Stocker le résultat ou l'afficher selon le besoin
-                return 0;
-            }
+        case NODE_RETURN: {
+            Value val = evaluate_expr(node->return_stmt.value, env);
+            return 1;  // retourne 1 pour indiquer un return
         }
-    }
-    return 0;
-}
         
         case NODE_IF: {
             Value cond = evaluate_expr(node->if_stmt.condition, env);
             if (cond.type == 3 && cond.bool_val) {
                 for (int i = 0; i < node->if_stmt.then_branch->count; i++) {
-                    if (evaluate_statement(node->if_stmt.then_branch->nodes[i], env, current_file)) return 1;
+                    int ret = evaluate_statement(node->if_stmt.then_branch->nodes[i], env, current_file);
+                    if (ret == 1) return 1;
+                    if (ret == 2) return 2;
                 }
             } else if (node->if_stmt.else_branch) {
                 for (int i = 0; i < node->if_stmt.else_branch->count; i++) {
-                    if (evaluate_statement(node->if_stmt.else_branch->nodes[i], env, current_file)) return 1;
+                    int ret = evaluate_statement(node->if_stmt.else_branch->nodes[i], env, current_file);
+                    if (ret == 1) return 1;
+                    if (ret == 2) return 2;
                 }
             }
             return 0;
@@ -877,7 +838,9 @@ case NODE_MATCH: {
                 Value cond = evaluate_expr(node->while_stmt.condition, env);
                 if (cond.type != 3 || !cond.bool_val) break;
                 for (int i = 0; i < node->while_stmt.body->count; i++) {
-                    if (evaluate_statement(node->while_stmt.body->nodes[i], env, current_file)) return 1;
+                    int ret = evaluate_statement(node->while_stmt.body->nodes[i], env, current_file);
+                    if (ret == 1) return 1;
+                    if (ret == 2) break;
                 }
             }
             return 0;
@@ -885,13 +848,11 @@ case NODE_MATCH: {
         
         case NODE_LOOP: {
             while (1) {
-                int break_flag = 0;
                 for (int i = 0; i < node->loop_stmt.body->count; i++) {
                     int ret = evaluate_statement(node->loop_stmt.body->nodes[i], env, current_file);
                     if (ret == 1) return 1;
-                    if (ret == 2) { break_flag = 1; break; }
+                    if (ret == 2) break;
                 }
-                if (break_flag) break;
             }
             return 0;
         }
@@ -915,7 +876,7 @@ case NODE_MATCH: {
                     if (ret == 2) return 0;
                 }
                 
-                // Incrémentation (gérée par l'expression dans la boucle for)
+                // Incrémentation
                 if (node->for_range.var) {
                     // L'incrémentation est déjà dans le corps de la boucle
                 }
@@ -930,62 +891,60 @@ case NODE_MATCH: {
             return 3;
         
         case NODE_MATCH: {
-            Value val = evaluate_expr(node->match_stmt.value, env);
+            Value target = evaluate_expr(node->match_stmt.value, env);
             for (int i = 0; i < node->match_stmt.cases->count; i++) {
                 ASTNode* case_node = node->match_stmt.cases->nodes[i];
                 if (case_node->type == NODE_MATCH_CASE) {
-                    Value pattern_val = evaluate_expr(case_node->match_case.pattern, env);
-                    if (val.type == pattern_val.type) {
-                        int match = 0;
-                        if (val.type == 0 && val.int_val == pattern_val.int_val) match = 1;
-                        else if (val.type == 1 && val.float_val == pattern_val.float_val) match = 1;
-                        else if (val.type == 2 && strcmp(val.string_val, pattern_val.string_val) == 0) match = 1;
-                        else if (val.type == 3 && val.bool_val == pattern_val.bool_val) match = 1;
-                        
-                        if (match) {
-                            Value result = evaluate_expr(case_node->match_case.value, env);
-                            print_value(result, 1);
-                            return 0;
-                        }
+                    Value pattern = evaluate_expr(case_node->match_case.pattern, env);
+                    int match = 0;
+                    if (target.type == pattern.type) {
+                        if (target.type == 0 && target.int_val == pattern.int_val) match = 1;
+                        else if (target.type == 1 && target.float_val == pattern.float_val) match = 1;
+                        else if (target.type == 2 && strcmp(target.string_val, pattern.string_val) == 0) match = 1;
+                        else if (target.type == 3 && target.bool_val == pattern.bool_val) match = 1;
+                    }
+                    if (match) {
+                        evaluate_expr(case_node->match_case.value, env);
+                        return 0;
                     }
                 }
             }
             return 0;
         }
         
+        case NODE_UNSAFE: {
+            for (int i = 0; i < node->unsafe_block.body->count; i++) {
+                int ret = evaluate_statement(node->unsafe_block.body->nodes[i], env, current_file);
+                if (ret == 1) return 1;
+                if (ret == 2) return 2;
+            }
+            return 0;
+        }
+        
         case NODE_IMPORT: {
-    // Charger le module
-    ModuleRegistry* reg = get_module_registry();
-    LoadedModule* module = load_module(
-        reg,
-        env,
-        current_file,
-        node->import.path,
-        node->import.alias,
-        node->import.constraints
-    );
-    
-    if (module) {
-        // Le module est chargé, la valeur est déjà dans l'environnement
-        // via load_module qui appelle env_set
-        return 0;
-    } else {
-        fprintf(stderr, "Failed to load module: %s\n", node->import.path);
-        return 0;
-    }
-}
+            ModuleRegistry* reg = get_module_registry();
+            LoadedModule* module = load_module(
+                reg,
+                env,
+                current_file,
+                node->import.path,
+                node->import.alias,
+                node->import.constraints
+            );
+            
+            if (module) {
+                return 0;
+            } else {
+                fprintf(stderr, "Failed to load module: %s\n", node->import.path);
+                return 0;
+            }
+        }
         
         case NODE_EXPR_STMT: {
             evaluate_expr(node->expr_stmt.expr, env);
             return 0;
         }
-        /*
-        case NODE_STRUCT_DEF:
-        case NODE_ENUM_DEF:
-        case NODE_IMPL_DEF:
-            // Les définitions sont enregistrées au niveau global, rien à exécuter
-            return 0;
-        */
+        
         default:
             return 0;
     }

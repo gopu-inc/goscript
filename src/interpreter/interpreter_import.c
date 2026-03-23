@@ -126,9 +126,11 @@ char* resolve_module_path(char* current_file, char* import_path) {
     const char* search_paths[] = {
         "./modules",                      // modules/__builtin__.gjs
         "./lib",                          // lib/__builtin__.gjs
+        "./lib/std",
         "./src",                          // src/__builtin__.gjs
-        "/proc/goscript/protocole",       // Chemin spécial pour le builtin
+        "/usr/local/lib/goscript/protocole",       // Chemin spécial pour le builtin
         "/usr/local/lib/goscript",
+        "/usr/local/lib/goscript/std",
         "/usr/lib/goscript",
         "./",                             // ./__builtin__.gjs
         NULL
@@ -138,7 +140,7 @@ char* resolve_module_path(char* current_file, char* import_path) {
     if (strcmp(import_path, "__builtin__") == 0) {
         // Vérifier d'abord dans le chemin spécial
         char special_path[PATH_MAX];
-        snprintf(special_path, PATH_MAX, "/proc/goscript/protocole/__builtin__.gjs");
+        snprintf(special_path, PATH_MAX, "/usr/local/lib/goscript/protocole/__builtin__.gjs");
         if (access(special_path, F_OK) == 0) {
             if (realpath(special_path, resolved)) {
                 return strdup(resolved);

@@ -1,12 +1,18 @@
-// ============================================
-// TEST 1: Variables mutables (muts)
-// ============================================
-println("=== TEST 1: Mutable Variables ===")
-
-muts counter = 0
-println("Initial counter: " + counter)
-
-counter = counter + 1
+fn main() {
+    lt name = "Goscript"
+    lt version = "2.0"
+    lt year = 2026
+    
+    if year >= 2026 {
+        println("Welcome to " + name + " " + version)
+    }
+    
+    for i in [1, 2, 3, 4, 5] {
+        println("Count: " + i)
+    }
+      
+    ret 0
+}
 println("After increment: " + counter)
 
 counter = counter * 2

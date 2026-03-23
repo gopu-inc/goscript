@@ -1,4 +1,5 @@
-// Démo de coloration syntaxique Goscript
+fn main() { ret 0 }
+on syntaxique Goscript
 // Les couleurs devraient être variées
 
 // ============================================

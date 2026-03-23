@@ -8,49 +8,49 @@ if [ -z "$PROJECT_NAME" ]; then
 fi
 
 # Créer le projet
-mkdir -p $PROJECT_NAME
-cd $PROJECT_NAME
+mkdir -p "$PROJECT_NAME"
+cd "$PROJECT_NAME" || exit 1
 
 # Initialiser Git
 git init
 
 # Créer .gitattributes
 cat > .gitattributes << 'GITATTR'
-# Goscript language
-*.gjs linguist-language=Goscript
-*.gjs linguist-vendored=false
-*.gjs linguist-detectable=true
-*.gjs diff=goscript
-*.gjs merge=goscript
+*.gjs linguist-language=Goscript linguist-detectable=true linguist-color=#7c3aed
+*.c linguist-vendored
+*.h linguist-vendored
+*.sh linguist-vendored
+Makefile linguist-vendored
 GITATTR
 
 # Créer .gitignore
 cat > .gitignore << 'GITIGNORE'
-# Goscript
+*.o
 *.exe
 *.out
-*.o
-*.a
-*.so
-*.dylib
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# OS
 .DS_Store
-Thumbs.db
-
-# Logs
-*.log
+.vscode/
+*.swp
 GITIGNORE
 
 # Créer un exemple
-cat > main.gjs << 'EOF'
+cat > main.gjs << 'MAINEOF'
 fn main() {
     println("Hello, Goscript!")
     ret 0
 }
+MAINEOF
+
+# Créer README
+cat > README.md << 'README'
+# $PROJECT_NAME
+
+Goscript project.
+README
+
+# Premier commit
+git add .
+git commit -m "Initial commit"
+
+echo "✅ Project created: $PROJECT_NAME"
+cd ..

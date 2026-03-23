@@ -1,0 +1,6 @@
+# Goscript language
+*.gjs linguist-language=Goscript
+*.gjs linguist-vendored=false
+*.gjs linguist-detectable=true
+*.gjs diff=goscript
+*.gjs merge=goscript

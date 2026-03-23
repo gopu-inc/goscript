@@ -1050,11 +1050,21 @@ Value evaluate_expr(ASTNode* node, Environment* env) {
 
         
 
+// Dans evaluate_expr, ajouter le cas NODE_ARRAY :
+
 case NODE_ARRAY: {
     Value arr_val;
-    arr_val.type = 8; // Type array
-    arr_val.array_val.elements = node->array.elements;
-    arr_val.array_val.count = node->array.elements ? node->array.elements->count : 0;
+    arr_val.type = 8; // TYPE_ARRAY
+    // Allouer un tableau de valeurs
+    int count = node->array.elements ? node->array.elements->count : 0;
+    Value* elements = malloc(count * sizeof(Value));
+    
+    for (int i = 0; i < count; i++) {
+        elements[i] = evaluate_expr(node->array.elements->nodes[i], env);
+    }
+    
+    arr_val.array_val.elements = elements;
+    arr_val.array_val.count = count;
     return arr_val;
 }
 
@@ -1065,7 +1075,9 @@ case NODE_ARRAY_ACCESS: {
     if (arr.type == 8 && idx.type == 0) {
         int index = idx.int_val;
         if (index >= 0 && index < arr.array_val.count) {
-            return evaluate_expr(arr.array_val.elements->nodes[index], env);
+            return arr.array_val.elements[index];
+        } else {
+            fprintf(stderr, "Index out of bounds: %d\n", index);
         }
     }
     return (Value){.type = 0, .int_val = 0};
@@ -1073,7 +1085,7 @@ case NODE_ARRAY_ACCESS: {
 
 case NODE_LAMBDA: {
     Value lambda_val;
-    lambda_val.type = 9; // Type lambda
+    lambda_val.type = 9; // TYPE_LAMBDA
     lambda_val.lambda_val.node = node;
     lambda_val.lambda_val.closure = env;
     return lambda_val;
@@ -1196,62 +1208,126 @@ case NODE_METHOD_CALL: {
         
         // ==================== APPEL DE FONCTION ====================
         case NODE_CALL: {
-            char* func_name = node->call.callee->identifier.name;
-            Value* func = env_get(env, func_name);
-            
-            if (func && func->type == 4) {
-                Environment* func_env = create_env(func->func_val.closure);
-                
-                if (node->call.args && func->func_val.node->function.params) {
-                    for (int i = 0; i < node->call.args->count && i < func->func_val.node->function.params->count; i++) {
-                        Value arg_val = evaluate_expr(node->call.args->nodes[i], env);
-                        ASTNode* param = func->func_val.node->function.params->nodes[i];
-                        env_set(func_env, param->identifier.name, arg_val);
-                    }
+    Value callee = evaluate_expr(node->call.callee, env);
+    Value result = {0};
+    
+    // ========== FONCTION GOSCRIPT NORMALE ==========
+    if (callee.type == 4) {
+        Environment* func_env = create_env(callee.func_val.closure);
+        
+        // Lier les paramètres
+        if (node->call.args && callee.func_val.node->function.params) {
+            int arg_count = node->call.args->count;
+            int param_count = callee.func_val.node->function.params->count;
+            for (int i = 0; i < arg_count && i < param_count; i++) {
+                Value arg_val = evaluate_expr(node->call.args->nodes[i], env);
+                ASTNode* param = callee.func_val.node->function.params->nodes[i];
+                if (param->type == NODE_PARAM) {
+                    env_set(func_env, param->param.name, arg_val);
+                } else if (param->type == NODE_IDENTIFIER) {
+                    env_set(func_env, param->identifier.name, arg_val);
                 }
-                
-                for (int i = 0; i < func->func_val.node->function.body->count; i++) {
-                    ASTNode* stmt = func->func_val.node->function.body->nodes[i];
-                    if (stmt->type == NODE_RETURN) {
-                        result = evaluate_expr(stmt->return_stmt.value, func_env);
-                        break;
-                    } else {
-                        evaluate_statement(stmt, func_env, NULL);
-                    }
-                }
-                free(func_env);
-            } else if (func && func->type == 5) {
-                int arg_count = node->call.args ? node->call.args->count : 0;
-                Value* args = malloc(arg_count * sizeof(Value));
-                for (int i = 0; i < arg_count; i++) {
-                    args[i] = evaluate_expr(node->call.args->nodes[i], env);
-                }
-                result = call_c_function_ffi(func->cfunc_val.func_ptr, args, arg_count,
-                                             func->cfunc_val.ret_type, func->cfunc_val.arg_types);
-                free(args);
-            } else if (strcmp(func_name, "print") == 0) {
-                if (node->call.args && node->call.args->count > 0) {
-                    Value arg = evaluate_expr(node->call.args->nodes[0], env);
-                    print_value(arg, 0);
-                }
-                result.type = 0;
-                result.int_val = 0;
-            } else if (strcmp(func_name, "println") == 0) {
-                if (node->call.args && node->call.args->count > 0) {
-                    Value arg = evaluate_expr(node->call.args->nodes[0], env);
-                    print_value(arg, 1);
-                } else {
-                    printf("\n");
-                }
-                result.type = 0;
-                result.int_val = 0;
-            } else {
-                fprintf(stderr, "Error: Undefined function '%s'\n", func_name);
-                result.type = 0;
-                result.int_val = 0;
             }
-            break;
         }
+        
+        // Exécuter le corps de la fonction
+        for (int i = 0; i < callee.func_val.node->function.body->count; i++) {
+            ASTNode* stmt = callee.func_val.node->function.body->nodes[i];
+            if (stmt->type == NODE_RETURN) {
+                result = evaluate_expr(stmt->return_stmt.value, func_env);
+                break;
+            } else {
+                evaluate_statement(stmt, func_env, NULL);
+            }
+        }
+        
+        free(func_env);
+        return result;
+    }
+    
+    // ========== LAMBDA (FONCTION ANONYME) ==========
+    else if (callee.type == 9) {
+        Environment* lambda_env = create_env(callee.lambda_val.closure);
+        ASTNode* lambda_node = callee.lambda_val.node;
+        
+        // Lier les paramètres
+        if (node->call.args && lambda_node->lambda.params) {
+            int arg_count = node->call.args->count;
+            int param_count = lambda_node->lambda.params->count;
+            for (int i = 0; i < arg_count && i < param_count; i++) {
+                Value arg_val = evaluate_expr(node->call.args->nodes[i], env);
+                ASTNode* param = lambda_node->lambda.params->nodes[i];
+                if (param->type == NODE_PARAM) {
+                    env_set(lambda_env, param->param.name, arg_val);
+                } else if (param->type == NODE_IDENTIFIER) {
+                    env_set(lambda_env, param->identifier.name, arg_val);
+                }
+            }
+        }
+        
+        // Exécuter le corps du lambda
+        for (int i = 0; i < lambda_node->lambda.body->count; i++) {
+            ASTNode* stmt = lambda_node->lambda.body->nodes[i];
+            if (stmt->type == NODE_RETURN) {
+                result = evaluate_expr(stmt->return_stmt.value, lambda_env);
+                break;
+            } else {
+                evaluate_statement(stmt, lambda_env, NULL);
+            }
+        }
+        
+        free(lambda_env);
+        return result;
+    }
+    
+    // ========== FONCTION NATIVE C (FFI) ==========
+    else if (callee.type == 5) {
+        int arg_count = node->call.args ? node->call.args->count : 0;
+        Value* args = malloc(arg_count * sizeof(Value));
+        for (int i = 0; i < arg_count; i++) {
+            args[i] = evaluate_expr(node->call.args->nodes[i], env);
+        }
+        result = call_c_function_ffi(callee.cfunc_val.func_ptr, args, arg_count,
+                                     callee.cfunc_val.ret_type, callee.cfunc_val.arg_types);
+        free(args);
+        return result;
+    }
+    
+    // ========== FONCTIONS INTÉGRÉES (print, println) ==========
+    else if (callee.type == 0 && node->call.callee->type == NODE_IDENTIFIER) {
+        char* func_name = node->call.callee->identifier.name;
+        
+        if (strcmp(func_name, "print") == 0) {
+            if (node->call.args && node->call.args->count > 0) {
+                Value arg = evaluate_expr(node->call.args->nodes[0], env);
+                print_value(arg, 0);
+            }
+            result.type = 0;
+            result.int_val = 0;
+            return result;
+        }
+        else if (strcmp(func_name, "println") == 0) {
+            if (node->call.args && node->call.args->count > 0) {
+                Value arg = evaluate_expr(node->call.args->nodes[0], env);
+                print_value(arg, 1);
+            } else {
+                printf("\n");
+            }
+            result.type = 0;
+            result.int_val = 0;
+            return result;
+        }
+        else {
+            fprintf(stderr, "Error: Undefined function '%s'\n", func_name);
+        }
+    }
+    
+    else {
+        fprintf(stderr, "Error: Cannot call non-function value (type: %d)\n", callee.type);
+    }
+    
+    return (Value){.type = 0, .int_val = 0};
+}
         
         default:
             break;

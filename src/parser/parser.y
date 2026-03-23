@@ -74,7 +74,6 @@ ASTNode* program_root;
 
 /* Non-terminals */
 %type <node> module_decl
-%type <node> for_in_statement
 %type <node> continue_statement
 %type <node> import_constraints import_options
 %type <node_list> name_list

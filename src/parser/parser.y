@@ -88,6 +88,7 @@ ASTNode* program_root;
 %type <node_list> statement_list argument_list param_list struct_fields enum_variants array_items match_cases function_decl_list struct_init_fields
 %type <node> break_statement
 %type <node> nnl_statement jmp_statement
+%type <node> lambda_expr array_access
 %start program
 
 %%

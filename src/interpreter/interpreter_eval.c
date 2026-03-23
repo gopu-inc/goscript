@@ -1047,7 +1047,37 @@ Value evaluate_expr(ASTNode* node, Environment* env) {
             }
             break;
         }
-        
+
+        // Dans evaluate_expr, ajouter:
+
+case NODE_ARRAY: {
+    Value arr_val;
+    arr_val.type = 8; // Type array
+    arr_val.array_val.elements = node->array.elements;
+    arr_val.array_val.count = node->array.elements ? node->array.elements->count : 0;
+    return arr_val;
+}
+
+case NODE_ARRAY_ACCESS: {
+    Value arr = evaluate_expr(node->array_access.array, env);
+    Value idx = evaluate_expr(node->array_access.index, env);
+    
+    if (arr.type == 8 && idx.type == 0) {
+        int index = idx.int_val;
+        if (index >= 0 && index < arr.array_val.count) {
+            return evaluate_expr(arr.array_val.elements->nodes[index], env);
+        }
+    }
+    return (Value){.type = 0, .int_val = 0};
+}
+
+case NODE_LAMBDA: {
+    Value lambda_val;
+    lambda_val.type = 9; // Type lambda
+    lambda_val.lambda_val.node = node;
+    lambda_val.lambda_val.closure = env;
+    return lambda_val;
+}
         // ==================== ACCÈS MEMBRE ====================
         case NODE_MEMBER_ACCESS: {
             Value obj = evaluate_expr(node->member.object, env);

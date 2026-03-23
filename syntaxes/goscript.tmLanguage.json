@@ -1,0 +1,37 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Goscript",
+  "scopeName": "source.gjs",
+  "patterns": [
+    {
+      "name": "comment.line.double-slash.gjs",
+      "match": "//.*$"
+    },
+    {
+      "name": "string.quoted.double.gjs",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [{ "name": "constant.character.escape.gjs", "match": "\\\\." }]
+    },
+    {
+      "name": "keyword.control.gjs",
+      "match": "\\b(if|else|for|while|loop|break|continue|ret|import|export|impl|struct|new)\\b"
+    },
+    {
+      "name": "keyword.declaration.gjs",
+      "match": "\\b(fn|lt|cn|pub)\\b"
+    },
+    {
+      "name": "storage.type.gjs",
+      "match": "\\b(int|float|string|bool|void)\\b"
+    },
+    {
+      "name": "constant.numeric.gjs",
+      "match": "\\b[0-9]+(\\.[0-9]+)?\\b"
+    },
+    {
+      "name": "entity.name.function.gjs",
+      "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)(?=\\s*\\()"
+    }
+  ]
+}

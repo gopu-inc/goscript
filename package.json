@@ -1,7 +1,8 @@
 {
   "name": "goscript-language",
-  "version": "1.0.0",
-  "description": "Goscript language support",
+  "version": "2.0.0",
+  "description": "Goscript language support for GitHub, VS Code, and other editors",
+  "displayName": "Goscript",
   "main": "grammars/goscript.json",
   "repository": {
     "type": "git",
@@ -9,18 +10,39 @@
   },
   "keywords": [
     "goscript",
+    "gjs",
     "language",
     "grammar",
-    "syntax"
+    "syntax",
+    "highlighting",
+    "textmate",
+    "github"
   ],
   "author": "GOPU inc team",
   "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/gopu-inc/goscript/issues"
+  },
+  "homepage": "https://github.com/gopu-inc/goscript#readme",
+  "categories": [
+    "Programming Languages",
+    "Formatters"
+  ],
   "contributes": {
     "languages": [
       {
         "id": "goscript",
-        "aliases": ["Goscript", "goscript", "gjs"],
-        "extensions": [".gjs", ".gos"],
+        "aliases": [
+          "Goscript",
+          "goscript",
+          "gjs",
+          "gos"
+        ],
+        "extensions": [
+          ".gjs",
+          ".gos",
+          ".gscript"
+        ],
         "configuration": "./language-configuration.json"
       }
     ],
@@ -30,6 +52,20 @@
         "scopeName": "source.goscript",
         "path": "./grammars/goscript.json"
       }
+    ],
+    "themes": [
+      {
+        "label": "Goscript Dark",
+        "uiTheme": "vs-dark",
+        "path": "./themes/goscript-dark.json"
+      }
     ]
+  },
+  "scripts": {
+    "build": "jsonlint grammars/goscript.json --quiet",
+    "test": "npm run build && node scripts/validate.js"
+  },
+  "devDependencies": {
+    "jsonlint": "^1.6.3"
   }
 }

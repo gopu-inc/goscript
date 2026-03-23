@@ -13,5 +13,5 @@ src/*/*.y linguist-vendored
 */*/*.sh linguist-vendored
 */*.sh linguist-vendored
 *.sh linguist-vendored
-*/*.vim linguist-vendored
-*/*.snippets linguist-vendored
+*/*/*.vim linguist-vendored
+*/*/*.snippets linguist-vendored

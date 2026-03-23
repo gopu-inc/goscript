@@ -115,6 +115,15 @@ ASTNode* create_program_node(ASTNodeList* statements) {
     return node;
 }
 
+ASTNode* create_for_in_node(char* var, ASTNode* collection, ASTNodeList* body) {
+    ASTNode* node = malloc(sizeof(ASTNode));
+    node->type = NODE_FOR_IN;
+    node->for_in.var = strdup(var);
+    node->for_in.collection = collection;
+    node->for_in.body = body;
+    return node;
+}
+
 ASTNode* create_import_node(char* path, char* alias, ASTNode* constraints) {
     ASTNode* node = malloc(sizeof(ASTNode));
     node->type = NODE_IMPORT;

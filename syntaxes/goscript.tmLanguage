@@ -1,37 +1,333 @@
 {
   "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
   "name": "Goscript",
-  "scopeName": "source.gjs",
+  "scopeName": "source.goscript",
+  "fileTypes": ["gjs", "gos"],
+  "uuid": "2a5f6e8c-1b4d-4f3a-8e9c-7d2a5b8e6f4c",
   "patterns": [
     {
-      "name": "comment.line.double-slash.gjs",
-      "match": "//.*$"
+      "include": "#comments"
     },
     {
-      "name": "string.quoted.double.gjs",
-      "begin": "\"",
-      "end": "\"",
-      "patterns": [{ "name": "constant.character.escape.gjs", "match": "\\\\." }]
+      "include": "#strings"
     },
     {
-      "name": "keyword.control.gjs",
-      "match": "\\b(if|else|for|while|loop|break|continue|ret|import|export|impl|struct|new)\\b"
+      "include": "#keywords"
     },
     {
-      "name": "keyword.declaration.gjs",
-      "match": "\\b(fn|lt|cn|pub)\\b"
+      "include": "#types"
     },
     {
-      "name": "storage.type.gjs",
-      "match": "\\b(int|float|string|bool|void)\\b"
+      "include": "#functions"
     },
     {
-      "name": "constant.numeric.gjs",
-      "match": "\\b[0-9]+(\\.[0-9]+)?\\b"
+      "include": "#variables"
     },
     {
-      "name": "entity.name.function.gjs",
-      "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)(?=\\s*\\()"
+      "include": "#constants"
+    },
+    {
+      "include": "#operators"
+    },
+    {
+      "include": "#numbers"
+    },
+    {
+      "include": "#punctuation"
     }
-  ]
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.goscript",
+          "match": "//.*$"
+        },
+        {
+          "name": "comment.block.goscript",
+          "begin": "/\\*",
+          "end": "\\*/",
+          "patterns": [
+            {
+              "name": "comment.block.goscript",
+              "match": "."
+            }
+          ]
+        },
+        {
+          "name": "comment.documentation.goscript",
+          "match": "///.*$"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.goscript",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.goscript",
+              "match": "\\\\(?:[nrt\\\\\"'0]|x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|U[0-9a-fA-F]{8})"
+            },
+            {
+              "name": "variable.other.interpolation.goscript",
+              "begin": "\\$\\{",
+              "end": "\\}",
+              "patterns": [
+                {
+                  "include": "$self"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "string.quoted.single.goscript",
+          "begin": "'",
+          "end": "'",
+          "patterns": [
+            {
+              "name": "constant.character.escape.goscript",
+              "match": "\\\\(?:[nrt\\\\\"'0]|x[0-9a-fA-F]{2})"
+            }
+          ]
+        },
+        {
+          "name": "string.quoted.raw.goscript",
+          "begin": "`",
+          "end": "`"
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.goscript",
+          "match": "\\b(if|else|match|return|ret|break|continue|loop|while|for|in|as|from)\\b"
+        },
+        {
+          "name": "keyword.declaration.goscript",
+          "match": "\\b(fn|lt|cn|muts|const|struct|enum|impl|packet|module|import|export|pub|unsafe)\\b"
+        },
+        {
+          "name": "keyword.other.goscript",
+          "match": "\\b(nnl|jmp|new|extends|only|sandbox|timeout)\\b"
+        },
+        {
+          "name": "keyword.operator.goscript",
+          "match": "\\b(is|as|type|typeof)\\b"
+        }
+      ]
+    },
+    "types": {
+      "patterns": [
+        {
+          "name": "storage.type.primitive.goscript",
+          "match": "\\b(int|i8|i16|i32|i64|u8|u16|u32|u64|float|f32|f64|double|string|str|char|bool|boolean|void|nil|any|unknown)\\b"
+        },
+        {
+          "name": "storage.type.composite.goscript",
+          "match": "\\b(dict|map|array|list|vector|tuple)\\b"
+        },
+        {
+          "name": "storage.type.optional.goscript",
+          "match": "\\w+\\?"
+        }
+      ]
+    },
+    "functions": {
+      "patterns": [
+        {
+          "name": "entity.name.function.goscript",
+          "match": "\\bfn\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\(",
+          "captures": {
+            "1": {
+              "name": "entity.name.function.goscript"
+            }
+          }
+        },
+        {
+          "name": "entity.name.function.method.goscript",
+          "match": "\\bimpl\\s+\\w+\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\(",
+          "captures": {
+            "1": {
+              "name": "entity.name.function.method.goscript"
+            }
+          }
+        },
+        {
+          "name": "support.function.builtin.goscript",
+          "match": "\\b(print|println|len|cap|append|delete|panic|recover)\\b"
+        },
+        {
+          "name": "meta.function-call.goscript",
+          "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\(",
+          "captures": {
+            "1": {
+              "name": "variable.function.goscript"
+            }
+          }
+        },
+        {
+          "name": "meta.method-call.goscript",
+          "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\(",
+          "captures": {
+            "1": {
+              "name": "variable.function.method.goscript"
+            }
+          }
+        }
+      ]
+    },
+    "variables": {
+      "patterns": [
+        {
+          "name": "variable.other.goscript",
+          "match": "\\b[a-z_][a-zA-Z0-9_]*\\b"
+        },
+        {
+          "name": "variable.parameter.goscript",
+          "match": "\\b(self|this)\\b"
+        }
+      ]
+    },
+    "constants": {
+      "patterns": [
+        {
+          "name": "constant.language.goscript",
+          "match": "\\b(true|false|nil|null|none|_)\\b"
+        },
+        {
+          "name": "constant.other.goscript",
+          "match": "\\b[A-Z][A-Z0-9_]*\\b"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.arithmetic.goscript",
+          "match": "[+\\-*/%]"
+        },
+        {
+          "name": "keyword.operator.assignment.goscript",
+          "match": "(=|\\+=|-=|\\*=|/=|%=)"
+        },
+        {
+          "name": "keyword.operator.comparison.goscript",
+          "match": "(==|!=|<=|>=|<|>)"
+        },
+        {
+          "name": "keyword.operator.logical.goscript",
+          "match": "(&&|\\|\\||!)"
+        },
+        {
+          "name": "keyword.operator.bitwise.goscript",
+          "match": "(&|\\||\\^|<<|>>|~)"
+        },
+        {
+          "name": "keyword.operator.special.goscript",
+          "match": "(=>|->|::|\\.\\.|\\.\\.=|\\|>|\\?|\\?\\?)"
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.integer.goscript",
+          "match": "\\b[0-9]+\\b"
+        },
+        {
+          "name": "constant.numeric.hex.goscript",
+          "match": "\\b0x[0-9a-fA-F]+\\b"
+        },
+        {
+          "name": "constant.numeric.binary.goscript",
+          "match": "\\b0b[01]+\\b"
+        },
+        {
+          "name": "constant.numeric.octal.goscript",
+          "match": "\\b0o[0-7]+\\b"
+        },
+        {
+          "name": "constant.numeric.float.goscript",
+          "match": "\\b[0-9]+\\.[0-9]+\\b"
+        },
+        {
+          "name": "constant.numeric.float.goscript",
+          "match": "\\b[0-9]+[eE][+-]?[0-9]+\\b"
+        }
+      ]
+    },
+    "punctuation": {
+      "patterns": [
+        {
+          "name": "punctuation.definition.parameters.goscript",
+          "match": "[()]"
+        },
+        {
+          "name": "punctuation.definition.block.goscript",
+          "match": "[{}]"
+        },
+        {
+          "name": "punctuation.definition.array.goscript",
+          "match": "[\\[\\]]"
+        },
+        {
+          "name": "punctuation.separator.goscript",
+          "match": "[;,]"
+        },
+        {
+          "name": "punctuation.accessor.goscript",
+          "match": "\\."
+        },
+        {
+          "name": "punctuation.definition.type.goscript",
+          "match": ":"
+        }
+      ]
+    },
+    "structs": {
+      "patterns": [
+        {
+          "name": "entity.name.type.struct.goscript",
+          "match": "\\bstruct\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\b",
+          "captures": {
+            "1": {
+              "name": "entity.name.type.struct.goscript"
+            }
+          }
+        },
+        {
+          "name": "entity.name.type.enum.goscript",
+          "match": "\\benm\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\b",
+          "captures": {
+            "1": {
+              "name": "entity.name.type.enum.goscript"
+            }
+          }
+        },
+        {
+          "name": "entity.name.type.impl.goscript",
+          "match": "\\bimpl\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\b",
+          "captures": {
+            "1": {
+              "name": "entity.name.type.impl.goscript"
+            }
+          }
+        },
+        {
+          "name": "variable.other.field.goscript",
+          "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)\\s*:",
+          "captures": {
+            "1": {
+              "name": "variable.other.field.goscript"
+            }
+          }
+        }
+      ]
+    }
+  }
 }

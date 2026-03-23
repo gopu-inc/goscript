@@ -1,19 +1,70 @@
+
+# ============================================
+# BINARY DATA TYPES
+# ============================================
+
+*.aif binary
+*.aifc binary
+*.aiff binary
+*.au binary
+*.bmp binary
+*.exe binary
+*.gif binary
+*.ico binary
+*.jpg binary
+*.pdf binary
+*.png binary
+*.psd binary
+*.tar binary
+*.wav binary
+*.zip binary
+*.o binary
+*.so binary
+*.a binary
+*.dylib binary
+gd binary
+
+# ============================================
+# TEXT FILES - Line endings
+# ============================================
+
+# Default: LF for all text files
 * text=auto eol=lf
-*.bat eol=crlf
 
-*.gjs linguist-language=Goscript
-*/*gjs linguist-language=Goscript
-*.gjs linguist-language=Goscript
-*.gjs linguist-language=Goscript
-v.gjs linguist-language=Goscript
-.goscrignore linguist-language=ignore
+# CRLF for Windows files
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
 
-Dockerfile* linguist-language=Dockerfile
 # ============================================
-# COMPILER SOURCE (vendored - excluded)
+# GOSCRIPT - MAIN LANGUAGE
 # ============================================
 
-# All C/C++ source files are vendored
+# Goscript source files
+*.gjs text linguist-language=Goscript linguist-detectable=true linguist-color=#7c3aed
+*.gos text linguist-language=Goscript linguist-detectable=true linguist-color=#7c3aed
+
+# Goscript module files
+gjs.mod text linguist-language=Goscript
+
+# ============================================
+# LANGUAGE-AWARE DIFF HEADERS
+# ============================================
+
+*.c diff=cpp
+*.h diff=cpp
+*.gjs diff=goscript
+*.gos diff=goscript
+*.py diff=python
+*.md diff=markdown
+*.json diff=json
+*.yaml diff=yaml
+*.yml diff=yaml
+
+# ============================================
+# COMPILER SOURCE - Vendored (excluded from stats)
+# ============================================
+
 *.c linguist-vendored
 *.h linguist-vendored
 *.l linguist-vendored
@@ -21,20 +72,99 @@ Dockerfile* linguist-language=Dockerfile
 *.o linguist-generated
 *.so linguist-generated
 *.a linguist-generated
+*.dylib linguist-generated
+
+# Parser generated files
+parser.c linguist-generated
+parser.h linguist-generated
+scanner.c linguist-generated
 
 # ============================================
-# SCRIPTS AND TOOLS (vendored)
+# SCRIPTS AND TOOLS - Vendored
 # ============================================
 
 *.sh linguist-vendored
 *.py linguist-vendored
 Makefile linguist-vendored
 *.mk linguist-vendored
+*.pl linguist-vendored
+*.rb linguist-vendored
 
 # ============================================
-# VIM CONFIGURATION (vendored)
+# VIM CONFIGURATION - Vendored
 # ============================================
 
 *.vim linguist-vendored
 *.vimrc linguist-vendored
 *.snippets linguist-vendored
+
+# ============================================
+# JSON FILES - Force as JSON, not JavaScript
+# ============================================
+
+*.json text linguist-language=JSON linguist-detectable=false
+syntaxes/*.json linguist-language=JSON linguist-detectable=false
+grammars/*.json linguist-language=JSON linguist-detectable=false
+package.json linguist-language=JSON linguist-detectable=false
+language-configuration.json linguist-language=JSON linguist-detectable=false
+
+# ============================================
+# YAML FILES
+# ============================================
+
+*.yaml text linguist-language=YAML
+*.yml text linguist-language=YAML
+.github/*.yml linguist-language=YAML linguist-detectable=false
+
+# ============================================
+# DOCUMENTATION - Excluded from stats
+# ============================================
+
+*.md text linguist-documentation
+*.txt text linguist-documentation
+docs/* linguist-documentation
+Doc/* linguist-documentation
+README.md linguist-documentation
+
+# ============================================
+# GENERATED FILES - Excluded from diffs and stats
+# ============================================
+
+# Attribute to mark generated files
+[attr]generated linguist-generated=true diff=generated
+
+# Generated Goscript files
+*_generated.gjs generated
+*_pb.gjs generated
+*_test.gjs generated
+
+# Build artifacts
+build/ generated
+dist/ generated
+__pycache__/ generated
+
+# ============================================
+# EXAMPLES AND TESTS - Count as Goscript
+# ============================================
+
+exemples/*.gjs text linguist-language=Goscript linguist-detectable=true
+examples/*.gjs text linguist-language=Goscript linguist-detectable=true
+tests/*.gjs text linguist-language=Goscript linguist-detectable=true
+test_*.gjs text linguist-language=Goscript linguist-detectable=true
+*_test.gjs text linguist-language=Goscript linguist-detectable=true
+
+# ============================================
+# LIBRARY FILES - Count as Goscript
+# ============================================
+
+lib/*.gjs text linguist-language=Goscript linguist-detectable=true
+modules/*.gjs text linguist-language=Goscript linguist-detectable=true
+src/*.gjs text linguist-language=Goscript linguist-detectable=true
+
+# ============================================
+# IGNORE FILES
+# ============================================
+
+.goscrignore linguist-language=ignore
+.gitignore linguist-language=ignore
+.gitattributes linguist-language=ignore

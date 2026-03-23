@@ -562,6 +562,23 @@ unary_expr:
     }
     ;
 
+// Lambda expression
+lambda_expr:
+    TOKEN_LAMBDA param_list TOKEN_LBRACE statement_list TOKEN_RBRACE {
+        $$ = create_lambda_node($2, $4);
+    }
+    | TOKEN_LAMBDA TOKEN_LPAREN param_list TOKEN_RPAREN TOKEN_LBRACE statement_list TOKEN_RBRACE {
+        $$ = create_lambda_node($3, $6);
+    }
+    ;
+
+// Array access
+array_access:
+    primary_expr TOKEN_LBRACKET expression TOKEN_RBRACKET {
+        $$ = create_array_access_node($1, $3);
+    }
+    ;
+
 primary_expr:
     TOKEN_NUMBER {
         $$ = create_number_node($1);
@@ -591,6 +608,8 @@ primary_expr:
     | array_expr
     | struct_expr
     | member_access
+    | lambda_expr
+    | array_access
     ;
 
 member_access:

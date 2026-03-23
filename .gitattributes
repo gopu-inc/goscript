@@ -1,10 +1,10 @@
 * text=auto eol=lf
 *.bat eol=crlf
 
-*.v linguist-language=Goscript
-*.vv linguist-language=Goscript
-*.vsh linguist-language=Goscript
-v.mod linguist-language=Goscript
+*.gjs linguist-language=Goscript
+*.gjs linguist-language=Goscript
+*.gjs linguist-language=Goscript
+v.gjs linguist-language=Goscript
 .goscrignore linguist-language=ignore
 
 Dockerfile.* linguist-language=Dockerfile

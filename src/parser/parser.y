@@ -114,10 +114,17 @@ unsafe_stmt:
         $$ = create_unsafe_node($3);
     }
     ;
+continue_statement:
+    TOKEN_CONTINUE {
+        $$ = create_continue_node();
+    }
+    ;
+
 
 statement:
     import_statement
     | export_statement
+    | continue_statement
     | nnl_statement
     | jmp_statement
     | module_decl

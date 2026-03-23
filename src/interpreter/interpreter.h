@@ -26,11 +26,11 @@ typedef struct Value {
 
 struct {
     ASTNode* node;
-    struct Environment* closure;
+    struct ASTNodeList* closure;
 } lambda_val;
 
 struct {
-    ASTNodeList* elements;
+    Value* elements;
     int count;
 } array_val;
         struct {

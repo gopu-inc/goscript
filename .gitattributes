@@ -2,12 +2,13 @@
 *.bat eol=crlf
 
 *.gjs linguist-language=Goscript
+*/*gjs linguist-language=Goscript
 *.gjs linguist-language=Goscript
 *.gjs linguist-language=Goscript
 v.gjs linguist-language=Goscript
 .goscrignore linguist-language=ignore
 
-Dockerfile.* linguist-language=Dockerfile
+Dockerfile* linguist-language=Dockerfile
 # ============================================
 # COMPILER SOURCE (vendored - excluded)
 # ============================================

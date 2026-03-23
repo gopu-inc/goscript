@@ -23,6 +23,16 @@ typedef struct Value {
             struct ASTNode* node;
             struct Environment* closure;
         } func_val;
+
+struct {
+    ASTNode* node;
+    struct Environment* closure;
+} lambda_val;
+
+struct {
+    ASTNodeList* elements;
+    int count;
+} array_val;
         struct {
             void* func_ptr;
             ffi_cif cif;

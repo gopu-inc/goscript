@@ -5,11 +5,9 @@ color: "#7c3aed"
 extensions:
   - ".gjs"
   - ".gos"
-  - ".gscript"
 aliases:
   - "goscript"
   - "gjs"
-  - "gos"
 ace_mode: "text"
 codemirror_mode: "javascript"
 codemirror_mime_type: "text/x-goscript"
@@ -23,4 +21,3 @@ group: Goscript
 tm_scope: "source.goscript"
 wrap: true
 searchable: true
-font: "monospace"

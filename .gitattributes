@@ -3,130 +3,62 @@
 # ============================================
 
 # Goscript language files
-*.gjs linguist-language=Goscript
-*.gos linguist-language=Goscript
-*.gscript linguist-language=Goscript
-
-# Marquer comme détectable et non-vendored
-*.gjs linguist-detectable=true
-*.gjs linguist-vendored=false
-*.gjs linguist-generated=false
-*.gjs linguist-documentation=false
-
-# Couleur pour GitHub (violet)
-*.gjs linguist-color=#7c3aed
+*.gjs linguist-language=Goscript linguist-detectable=true linguist-color=#7c3aed
+*.gos linguist-language=Goscript linguist-detectable=true linguist-color=#7c3aed
 
 # Configuration pour le diff
 *.gjs diff=goscript
 *.gjs merge=goscript
 
 # ============================================
-# Grammaires et configurations du langage
+# Grammaires et configurations (exclure des stats)
 # ============================================
 
-# Marquer les fichiers de grammaire comme du code de configuration
-grammars/*.json linguist-language=JSON
-grammars/*.tmLanguage.json linguist-language=JSON
-.github/linguist.yml linguist-language=YAML
-language-configuration.json linguist-language=JSON
-package.json linguist-language=JSON
+# Grammaires TextMate - ne pas compter comme Goscript
+syntaxes/*.json linguist-language=JSON linguist-detectable=false
+grammars/*.json linguist-language=JSON linguist-detectable=false
+.github/linguist.yml linguist-language=YAML linguist-detectable=false
 
 # ============================================
-# Fichiers C/C++ du compilateur/interpréteur
+# Fichiers C du compilateur (vendored - exclus des stats)
 # ============================================
 
-# Tout le code C est marqué comme vendored (ne compte pas dans les stats)
-src/*.c linguist-vendored
-src/*.h linguist-vendored
-src/*/*.c linguist-vendored
-src/*/*.h linguist-vendored
+# Tout le code C est marqué comme vendored
 *.c linguist-vendored
 *.h linguist-vendored
-
-# Fichiers Flex/Bison
-src/*/*.l linguist-vendored
-src/*/*.y linguist-vendored
 *.l linguist-vendored
 *.y linguist-vendored
+*.o linguist-generated
 
 # ============================================
-# Scripts et outils
+# Scripts et outils (vendored)
 # ============================================
 
-# Scripts shell
-*/*/*.sh linguist-vendored
-*/*.sh linguist-vendored
 *.sh linguist-vendored
-
-# Scripts Python
 *.py linguist-vendored
-
-# ============================================
-# Fichiers de configuration Vim
-# ============================================
-
-# Vim configurations
-*/*/*.vim linguist-vendored
-*/*.vim linguist-vendored
-*.vim linguist-vendored
-*/*vimrc linguist-vendored
-*.vimrc linguist-vendored
-
-# Snippets
-*/*/*.snippets linguist-vendored
-*/*.snippets linguist-vendored
-*.snippets linguist-vendored
-
-# ============================================
-# Makefiles et builds
-# ============================================
-
-*Make* linguist-vendored
 Makefile linguist-vendored
 *.mk linguist-vendored
 
 # ============================================
-# Documentation
+# Configuration Vim (vendored)
 # ============================================
 
-# Documentation (ne compte pas comme code)
+*.vim linguist-vendored
+*.vimrc linguist-vendored
+*.snippets linguist-vendored
+
+# ============================================
+# Documentation (exclue des stats)
+# ============================================
+
 *.md linguist-documentation
-*.txt linguist-documentation
 docs/* linguist-documentation
 
 # ============================================
-# Exemples et tests
+# Exemples et tests (comptent comme Goscript)
 # ============================================
 
-# Les exemples sont du code Goscript mais marqués comme tests
-exemples/*.gjs linguist-language=Goscript
-exemples/*.gjs linguist-detectable=true
-tests/*.gjs linguist-language=Goscript
-tests/*.gjs linguist-detectable=true
-test_*.gjs linguist-language=Goscript
-*_test.gjs linguist-language=Goscript
-
-# ============================================
-# Fichiers générés
-# ============================================
-
-# Ne pas compter les fichiers générés
-*.o linguist-generated
-*.a linguist-generated
-*.so linguist-generated
-*.exe linguist-generated
-*.out linguist-generated
-
-# ============================================
-# Binaires et librairies
-# ============================================
-
-# Binaires
-gd linguist-vendored
-goscript linguist-vendored
-*.bin linguist-vendored
-
-# Librairies
-*.dylib linguist-vendored
-*.so linguist-vendored
-
+exemples/*.gjs linguist-language=Goscript linguist-detectable=true
+tests/*.gjs linguist-language=Goscript linguist-detectable=true
+test_*.gjs linguist-language=Goscript linguist-detectable=true
+*_test.gjs linguist-language=Goscript linguist-detectable=true

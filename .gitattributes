@@ -3,22 +3,22 @@
 # ============================================
 
 # Goscript language files
-*.gjs linguist-language=Goscript
-*.gos linguist-language=Goscript
-*.gscript linguist-language=Goscript
+exemples/*.gjs linguist-language=Goscript
+exemples/*.gos linguist-language=Goscript
+exemples/*.gscript linguist-language=Goscript
 
 # Marquer comme détectable et non-vendored
-*.gjs linguist-detectable=true
-*.gjs linguist-vendored=false
-*.gjs linguist-generated=false
-*.gjs linguist-documentation=false
+exemples/*.gjs linguist-detectable=true
+exemples/*.gjs linguist-vendored=false
+exemples/*.gjs linguist-generated=false
+exemples/*.gjs linguist-documentation=false
 
 # Couleur pour GitHub (violet)
-*.gjs linguist-color=#7c3aed
+exemples/*.gjs linguist-color=#7c3aed
 
 # Configuration pour le diff
-*.gjs diff=goscript
-*.gjs merge=goscript
+exemples/*.gjs diff=goscript
+exemples/*.gjs merge=goscript
 
 # ============================================
 # Grammaires et configurations du langage

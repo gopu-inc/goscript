@@ -1208,62 +1208,101 @@ case NODE_METHOD_CALL: {
         
         // ==================== APPEL DE FONCTION ====================
         case NODE_CALL: {
-            char* func_name = node->call.callee->identifier.name;
-            Value* func = env_get(env, func_name);
-            
-            if (func && func->type == 4) {
-                Environment* func_env = create_env(func->func_val.closure);
-                
-                if (node->call.args && func->func_val.node->function.params) {
-                    for (int i = 0; i < node->call.args->count && i < func->func_val.node->function.params->count; i++) {
-                        Value arg_val = evaluate_expr(node->call.args->nodes[i], env);
-                        ASTNode* param = func->func_val.node->function.params->nodes[i];
-                        env_set(func_env, param->identifier.name, arg_val);
-                    }
-                }
-                
-                for (int i = 0; i < func->func_val.node->function.body->count; i++) {
-                    ASTNode* stmt = func->func_val.node->function.body->nodes[i];
-                    if (stmt->type == NODE_RETURN) {
-                        result = evaluate_expr(stmt->return_stmt.value, func_env);
-                        break;
-                    } else {
-                        evaluate_statement(stmt, func_env, NULL);
-                    }
-                }
-                free(func_env);
-            } else if (func && func->type == 5) {
-                int arg_count = node->call.args ? node->call.args->count : 0;
-                Value* args = malloc(arg_count * sizeof(Value));
-                for (int i = 0; i < arg_count; i++) {
-                    args[i] = evaluate_expr(node->call.args->nodes[i], env);
-                }
-                result = call_c_function_ffi(func->cfunc_val.func_ptr, args, arg_count,
-                                             func->cfunc_val.ret_type, func->cfunc_val.arg_types);
-                free(args);
-            } else if (strcmp(func_name, "print") == 0) {
-                if (node->call.args && node->call.args->count > 0) {
-                    Value arg = evaluate_expr(node->call.args->nodes[0], env);
-                    print_value(arg, 0);
-                }
-                result.type = 0;
-                result.int_val = 0;
-            } else if (strcmp(func_name, "println") == 0) {
-                if (node->call.args && node->call.args->count > 0) {
-                    Value arg = evaluate_expr(node->call.args->nodes[0], env);
-                    print_value(arg, 1);
-                } else {
-                    printf("\n");
-                }
-                result.type = 0;
-                result.int_val = 0;
-            } else {
-                fprintf(stderr, "Error: Undefined function '%s'\n", func_name);
-                result.type = 0;
-                result.int_val = 0;
+    char* func_name = node->call.callee->identifier.name;
+    Value* func = env_get(env, func_name);
+    
+    if (func && func->type == 4) {
+        Environment* func_env = create_env(func->func_val.closure);
+        
+        if (node->call.args && func->func_val.node->function.params) {
+            for (int i = 0; i < node->call.args->count && i < func->func_val.node->function.params->count; i++) {
+                Value arg_val = evaluate_expr(node->call.args->nodes[i], env);
+                ASTNode* param = func->func_val.node->function.params->nodes[i];
+                env_set(func_env, param->identifier.name, arg_val);
             }
-            break;
         }
+        
+        for (int i = 0; i < func->func_val.node->function.body->count; i++) {
+            ASTNode* stmt = func->func_val.node->function.body->nodes[i];
+            if (stmt->type == NODE_RETURN) {
+                result = evaluate_expr(stmt->return_stmt.value, func_env);
+                break;
+            } else {
+                evaluate_statement(stmt, func_env, NULL);
+            }
+        }
+        free(func_env);
+    } 
+    else if (func && func->type == 5) {
+        int arg_count = node->call.args ? node->call.args->count : 0;
+        Value* args = malloc(arg_count * sizeof(Value));
+        for (int i = 0; i < arg_count; i++) {
+            args[i] = evaluate_expr(node->call.args->nodes[i], env);
+        }
+        result = call_c_function_ffi(func->cfunc_val.func_ptr, args, arg_count,
+                                     func->cfunc_val.ret_type, func->cfunc_val.arg_types);
+        free(args);
+    } 
+    // Gestion des lambdas
+    else if (func && func->type == 9) {
+        // Une lambda est un Value avec type 9 contenant un node lambda
+        ASTNode* lambda_node = func->lambda_val.node;
+        
+        if (lambda_node && lambda_node->type == NODE_LAMBDA) {
+            Environment* lambda_env = create_env(func->lambda_val.closure);
+            
+            // Passage des paramètres
+            if (node->call.args && lambda_node->lambda.params) {
+                for (int i = 0; i < node->call.args->count && 
+                           i < lambda_node->lambda.params->count; i++) {
+                    Value arg_val = evaluate_expr(node->call.args->nodes[i], env);
+                    ASTNode* param = lambda_node->lambda.params->nodes[i];
+                    env_set(lambda_env, param->identifier.name, arg_val);
+                }
+            }
+            
+            // Exécution du corps de la lambda
+            for (int i = 0; i < lambda_node->lambda.body->count; i++) {
+                ASTNode* stmt = lambda_node->lambda.body->nodes[i];
+                if (stmt->type == NODE_RETURN) {
+                    result = evaluate_expr(stmt->return_stmt.value, lambda_env);
+                    break;
+                } else {
+                    evaluate_statement(stmt, lambda_env, NULL);
+                }
+            }
+            free(lambda_env);
+        } else {
+            fprintf(stderr, "Error: Lambda value corrupted\n");
+            result.type = 0;
+            result.int_val = 0;
+        }
+    }
+    else if (strcmp(func_name, "print") == 0) {
+        if (node->call.args && node->call.args->count > 0) {
+            Value arg = evaluate_expr(node->call.args->nodes[0], env);
+            print_value(arg, 0);
+        }
+        result.type = 0;
+        result.int_val = 0;
+    } 
+    else if (strcmp(func_name, "println") == 0) {
+        if (node->call.args && node->call.args->count > 0) {
+            Value arg = evaluate_expr(node->call.args->nodes[0], env);
+            print_value(arg, 1);
+        } else {
+            printf("\n");
+        }
+        result.type = 0;
+        result.int_val = 0;
+    } 
+    else {
+        fprintf(stderr, "Error: Undefined function '%s'\n", func_name);
+        result.type = 0;
+        result.int_val = 0;
+    }
+    break;
+}
         
         default:
             break;

@@ -515,6 +515,10 @@ ASTNode* create_break_node(void);
 ASTNode* create_continue_node(void);
 ASTNode* create_for_in_node(char* var, ASTNode* collection, ASTNodeList* body);
 
+ASTNode* create_dict_node(ASTNodeList* entries);
+ASTNode* create_dict_access_node(ASTNode* dict, ASTNode* key);
+ASTNode* create_dict_type_node(ASTNode* key_type, ASTNode* value_type);
+
 /* Match */
 ASTNode* create_match_node(ASTNode* value, ASTNodeList* cases);
 ASTNode* create_match_case_node(ASTNode* pattern, ASTNode* value);

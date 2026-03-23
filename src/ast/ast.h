@@ -5,6 +5,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+// forware
+struct Environment;
+
 /* Types de nœuds AST */
 typedef enum {
     NODE_PROGRAM,
@@ -125,7 +128,7 @@ typedef struct ASTNode {
 struct {
     ASTNodeList* params;
     ASTNodeList* body;
-    Environment* closure;
+    struct Environment* closure;
 } lambda;
 
 /* Array access */

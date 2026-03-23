@@ -26,7 +26,7 @@ void yyerror(const char* msg);
 "while"                 { return TOKEN_WHILE; }
 "loop"                  { return TOKEN_LOOP; }
 "break"                 { return TOKEN_BREAK; }
-
+"lambda"                { return TOKEN_LAMBDA; }
 "nnl"                   { return TOKEN_NNL; }
 "jmp"                   { return TOKEN_JMP; }
 "continue"              { return TOKEN_CONTINUE; }

@@ -493,6 +493,7 @@ ASTNode* create_while_node(ASTNode* condition, ASTNodeList* body);
 ASTNode* create_loop_node(ASTNodeList* body);
 ASTNode* create_break_node(void);
 ASTNode* create_continue_node(void);
+ASTNode* create_for_in_node(char* var, ASTNode* collection, ASTNodeList* body);
 
 /* Match */
 ASTNode* create_match_node(ASTNode* value, ASTNodeList* cases);

@@ -1,37 +1,42 @@
 # ============================================
-# Goscript Language Configuration
+# GOSCRIPT LANGUAGE CONFIGURATION
 # ============================================
 
-# Goscript language files
+# Goscript files - main language
 *.gjs linguist-language=Goscript linguist-detectable=true linguist-color=#7c3aed
 *.gos linguist-language=Goscript linguist-detectable=true linguist-color=#7c3aed
 
-# Configuration pour le diff
-*.gjs diff=goscript
-*.gjs merge=goscript
+# All .gjs files are Goscript source code
+*.gjs linguist-vendored=false
+*.gjs linguist-generated=false
+*.gjs linguist-documentation=false
 
 # ============================================
-# Grammaires et configurations (exclure des stats)
+# CONFIGURATION FILES (excluded from stats)
 # ============================================
 
-# Grammaires TextMate - ne pas compter comme Goscript
+# Grammars and configs
 syntaxes/*.json linguist-language=JSON linguist-detectable=false
 grammars/*.json linguist-language=JSON linguist-detectable=false
 .github/linguist.yml linguist-language=YAML linguist-detectable=false
+package.json linguist-language=JSON linguist-detectable=false
+language-configuration.json linguist-language=JSON linguist-detectable=false
 
 # ============================================
-# Fichiers C du compilateur (vendored - exclus des stats)
+# COMPILER SOURCE (vendored - excluded)
 # ============================================
 
-# Tout le code C est marqué comme vendored
+# All C/C++ source files are vendored
 *.c linguist-vendored
 *.h linguist-vendored
 *.l linguist-vendored
 *.y linguist-vendored
 *.o linguist-generated
+*.so linguist-generated
+*.a linguist-generated
 
 # ============================================
-# Scripts et outils (vendored)
+# SCRIPTS AND TOOLS (vendored)
 # ============================================
 
 *.sh linguist-vendored
@@ -40,7 +45,7 @@ Makefile linguist-vendored
 *.mk linguist-vendored
 
 # ============================================
-# Configuration Vim (vendored)
+# VIM CONFIGURATION (vendored)
 # ============================================
 
 *.vim linguist-vendored
@@ -48,17 +53,26 @@ Makefile linguist-vendored
 *.snippets linguist-vendored
 
 # ============================================
-# Documentation (exclue des stats)
+# DOCUMENTATION (excluded)
 # ============================================
 
 *.md linguist-documentation
 docs/* linguist-documentation
+*.txt linguist-documentation
 
 # ============================================
-# Exemples et tests (comptent comme Goscript)
+# EXAMPLES AND TESTS (count as Goscript)
 # ============================================
 
 exemples/*.gjs linguist-language=Goscript linguist-detectable=true
+examples/*.gjs linguist-language=Goscript linguist-detectable=true
 tests/*.gjs linguist-language=Goscript linguist-detectable=true
 test_*.gjs linguist-language=Goscript linguist-detectable=true
 *_test.gjs linguist-language=Goscript linguist-detectable=true
+
+# ============================================
+# LIBRARY FILES (count as Goscript)
+# ============================================
+
+lib/*.gjs linguist-language=Goscript linguist-detectable=true
+modules/*.gjs linguist-language=Goscript linguist-detectable=true

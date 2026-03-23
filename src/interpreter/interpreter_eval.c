@@ -3,16 +3,6 @@
 #include <ffi.h>
 // Définir les types de valeurs
 
-#define TYPE_INT 0
-#define TYPE_FLOAT 1
-#define TYPE_STRING 2
-#define TYPE_BOOL 3
-#define TYPE_FUNCTION 4
-#define TYPE_CFUNCTION 5
-#define TYPE_STRUCT 6
-#define TYPE_MODULE 7
-#define TYPE_ARRAY 8
-#define TYPE_LAMBDA 9
 
 extern void register_native_c_functions(Environment* env);
 extern Value evaluate_expr(ASTNode* node, Environment* env);

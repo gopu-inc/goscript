@@ -1,17 +1,23 @@
-# .github/linguist.yml
-languages:
-  Goscript:
-    type: programming
-    color: "#7c3aed"
-    extensions:
-      - ".gjs"
-    aliases:
-      - "goscript"
-      - "gjs"
-    filenames:
-      - "goscriptfile"
-    ace_mode: "text"
-    tm_scope: "source.goscript"
-    codemirror_mode: "javascript"
-    codemirror_mime_type: "text/x-goscript"
-    wrap: true
+# GitHub Linguist configuration for Goscript
+name: Goscript
+type: programming
+color: "#7c3aed"
+extensions:
+  - ".gjs"
+  - ".gos"
+aliases:
+  - "goscript"
+  - "gjs"
+ace_mode: "javascript"
+codemirror_mode: "javascript"
+codemirror_mime_type: "text/javascript"
+filenames:
+  - "goscriptfile"
+interpreters:
+  - "goscript"
+language_id: 987654321
+group: Goscript
+tm_scope: "source.goscript"
+wrap: true
+searchable: true
+color: "#7c3aed"

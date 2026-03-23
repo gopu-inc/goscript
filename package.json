@@ -1,0 +1,35 @@
+{
+  "name": "goscript-language",
+  "version": "1.0.0",
+  "description": "Goscript language support",
+  "main": "grammars/goscript.json",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gopu-inc/goscript"
+  },
+  "keywords": [
+    "goscript",
+    "language",
+    "grammar",
+    "syntax"
+  ],
+  "author": "GOPU inc team",
+  "license": "MIT",
+  "contributes": {
+    "languages": [
+      {
+        "id": "goscript",
+        "aliases": ["Goscript", "goscript", "gjs"],
+        "extensions": [".gjs", ".gos"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "goscript",
+        "scopeName": "source.goscript",
+        "path": "./grammars/goscript.json"
+      }
+    ]
+  }
+}

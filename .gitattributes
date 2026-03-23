@@ -1,18 +1,28 @@
 # Goscript language files
 *.gjs linguist-language=Goscript
+*.gos linguist-language=Goscript
 *.gjs linguist-vendored=false
 *.gjs linguist-detectable=true
 *.gjs linguist-generated=false
 *.gjs linguist-documentation=false
+*.gjs linguist-color=#7c3aed
 
 # Pour les statistiques du langage
 *.gjs linguist-language=Goscript
+*.gos linguist-language=Goscript
 
 # Pour le diff
 *.gjs diff=goscript
+*.gos diff=goscript
 
 # Pour la fusion
 *.gjs merge=goscript
+*.gos merge=goscript
 
 # Pour GitHub/GitLab
 *.gjs linguist-language=Goscript
+*.gos linguist-language=Goscript
+
+# Grammaire et configuration
+grammars/* linguist-language=JSON
+.github/linguist.yml linguist-language=YAML

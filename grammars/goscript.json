@@ -1,0 +1,93 @@
+{
+  "name": "Goscript",
+  "scopeName": "source.goscript",
+  "fileTypes": ["gjs", "gos"],
+  "patterns": [
+    {
+      "name": "comment.line.double-slash.goscript",
+      "match": "//.*$"
+    },
+    {
+      "name": "comment.block.goscript",
+      "begin": "/\\*",
+      "end": "\\*/"
+    },
+    {
+      "name": "string.quoted.double.goscript",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        {
+          "name": "constant.character.escape.goscript",
+          "match": "\\\\[nrt\\\\\"']"
+        }
+      ]
+    },
+    {
+      "name": "constant.numeric.goscript",
+      "match": "\\b[0-9]+\\b"
+    },
+    {
+      "name": "constant.numeric.float.goscript",
+      "match": "\\b[0-9]+\\.[0-9]+\\b"
+    },
+    {
+      "name": "keyword.control.goscript",
+      "match": "\\b(if|else|match|return|ret|break|continue|loop|while|for|in)\\b"
+    },
+    {
+      "name": "keyword.declaration.goscript",
+      "match": "\\b(fn|lt|cn|muts|const|struct|enum|impl|packet|module|import|export|from|as)\\b"
+    },
+    {
+      "name": "keyword.operator.goscript",
+      "match": "(==|!=|<=|>=|&&|\\|\\||[+\\-*/%&|^=<>!])"
+    },
+    {
+      "name": "storage.type.goscript",
+      "match": "\\b(int|i32|i64|float|f32|f64|string|bool|void|dict|map|array)\\b"
+    },
+    {
+      "name": "constant.language.goscript",
+      "match": "\\b(true|false|nil|null)\\b"
+    },
+    {
+      "name": "entity.name.function.goscript",
+      "match": "\\bfn\\s+(\\w+)\\s*\\(",
+      "captures": {
+        "1": {
+          "name": "entity.name.function.goscript"
+        }
+      }
+    },
+    {
+      "name": "entity.name.struct.goscript",
+      "match": "\\bstruct\\s+(\\w+)\\b",
+      "captures": {
+        "1": {
+          "name": "entity.name.struct.goscript"
+        }
+      }
+    },
+    {
+      "name": "entity.name.enum.goscript",
+      "match": "\\benm\\s+(\\w+)\\b",
+      "captures": {
+        "1": {
+          "name": "entity.name.enum.goscript"
+        }
+      }
+    },
+    {
+      "name": "entity.name.impl.goscript",
+      "match": "\\bimpl\\s+(\\w+)\\b",
+      "captures": {
+        "1": {
+          "name": "entity.name.impl.goscript"
+        }
+      }
+    }
+  ],
+  "repository": {},
+  "uuid": "goscript-2024-01-01"
+}

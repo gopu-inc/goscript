@@ -23,7 +23,14 @@ typedef struct Value {
             struct ASTNode* node;
             struct Environment* closure;
         } func_val;
-
+        struct {
+            struct {
+                struct Value* key;
+                struct Value* value;
+            }* entries;
+            int count;
+            int capacity;
+        } dict_val;
 struct {
     ASTNode* node;
     struct Environment* closure;
@@ -61,6 +68,7 @@ typedef struct Environment {
     int var_capacity;
 } Environment;
 // Structure pour un module chargé
+#define VALUE_TYPE_DICT 10
 
 typedef struct LoadedModule {
     char* module_path;      // Chemin absolu

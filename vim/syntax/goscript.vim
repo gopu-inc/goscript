@@ -1,3 +1,4 @@
+
 " Vim syntax file for Goscript
 " Language: Goscript
 " Maintainer: GOPU inc team

@@ -1,46 +1,60 @@
-" ============================================
 " Configuration Vim pour Goscript
-" Maintainer: GOPU inc team
-" Version: 2.0
-" ============================================
-
-" Activation des fonctionnalités
 set nocompatible
 filetype plugin indent on
 syntax on
 
-" ============================================
-" Thème et couleurs
-" ============================================
-set background=dark
+" Couleurs
 set t_Co=256
 colorscheme goscript
 
-" ============================================
-" Interface
-" ============================================
+" Numéros de ligne
 set number
 set relativenumber
-set cursorline
-set showmatch
-set matchtime=2
-set ruler
-set laststatus=2
-set wildmenu
-set wildmode=list:longest,full
-set showcmd
-set title
 
-" ============================================
 " Indentation
-" ============================================
 set tabstop=4
 set shiftwidth=4
 set softtabstop=4
 set expandtab
 set autoindent
 set smartindent
-set smarttab
+
+" Recherche
+set hlsearch
+set incsearch
+set ignorecase
+set smartcase
+
+" Interface
+set cursorline
+set showmatch
+set matchtime=2
+set wildmenu
+set ruler
+set laststatus=2
+
+" Folding
+set foldmethod=syntax
+set foldlevel=99
+
+" Mappages utiles
+nnoremap <F5> :w<CR>:!./gd %<CR>
+nnoremap <F6> :w<CR>:!./gd -d %<CR>
+
+" Commande pour exécuter le fichier courant
+command! -buffer GsRun !./gd %
+command! -buffer GsDebug !./gd -d %
+
+" Commande pour formater
+command! -buffer GsFormat :%s/\t/    /g
+
+" Fonctions personnalisées
+function! GsStatus()
+  echo "Goscript mode active"
+endfunction
+
+autocmd FileType goscript call GsStatus()
+marttab
 
 " ============================================
 " Recherche

@@ -1,34 +1,35 @@
-// test_struct_new.gjs
+// Test simple des structures
+
 struct Person {
-    name: string,
-    age: int,
-    active: bool
+    name: string
+    age: int
 }
 
 fn main() {
-    println("=== STRUCT TEST ===\n")
+    println("=== TEST STRUCTURES ===\n")
     
-    // Utilisation de 'new' pour créer une structure
-    lt person = new Person{
+    // Créer une personne
+    muts p = new Person{
         name: "Alice",
-        age: 30,
-        active: true
+        age: 30
     }
     
-    println("   Nom: " + person.name)
-    println("   Âge: " + person.age)
-    println("   Actif: " + person.active)
+    println("Nom: " + p.name)
+    println("Age: " + p.age)
     
-    // Maintenant les conditions fonctionnent sans parenthèses !
-    lt a = 10
-    lt b = 20
+    // Modifier
+    p.age = 31
+    println("Nouvel age: " + p.age)
     
-    if a < b {
-        println("   a est plus petit que b")
-    } else {
-        println("   a est plus grand que b")
+    // Créer une autre
+    muts p2 = new Person{
+        name: "Bob",
+        age: 25
     }
     
-    println("\n=== TEST RÉUSSI ===")
+    println("Autre: " + p2.name + ", " + p2.age)
+    
+    println("\n=== OK ===")
+    
     ret 0
 }

@@ -1,48 +1,50 @@
-// Test des sauts non-locaux
+// Test des sauts non-locaux (nnl)
 
 fn main() {
-    println("=== TEST NON-LOCAL JUMPS ===\n")
+    println("=== TEST NNL ===\n")
     
-    // nnl avec label 'error'
-    nnl error {
+    // Test simple avec saut
+    nnl mylabel {
         println("Inside nnl block")
-        
-        // Tester une condition
-        muts x = 10
-        
-        if x > 5 {
-            println("x > 5, jumping to error")
-            jmp error "Too big value"
-        }
-        
-        println("This won't be executed")
+        println("About to jump...")
+        jmp mylabel
+        println("This line will never execute")
     }
     
     println("After nnl block\n")
     
-    // nnl avec valeur de retour
+    // Test avec condition
+    nnl error_handler {
+        muts x = 10
+        
+        if x > 5 {
+            println("x > 5, jumping to error_handler")
+            jmp error_handler
+        }
+        
+        println("This won't print")
+    }
+    
+    println("After error handler\n")
+    
+    // Test avec valeur
     nnl found {
         muts arr = [1, 2, 3, 4, 5]
         muts target = 3
-        
         muts i = 0
-        while i < len(arr) {
+        
+        while i < 5 {
             if arr[i] == target {
                 println("Found " + target + " at index " + i)
-                jmp found i
+                jmp found
             }
             i = i + 1
         }
         
         println("Not found")
-        jmp found -1
     }
     
     println("\n=== FIN ===")
     
     ret 0
-}
-
-fn len(arr) {
-    ret arr[0]
 }

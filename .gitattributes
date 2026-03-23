@@ -1,5 +1,5 @@
 *.gjs linguist-language=Goscript
-*.gjs linguist-language=Rust
+*.gjs linguist-language=Goscript
 # Marquer les fichiers C comme du code généré ou de la documentation 
 # pour qu'ils ne polluent pas tes statistiques de langage
 src/*.c linguist-vendored

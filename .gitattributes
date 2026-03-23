@@ -1,27 +1,13 @@
-# ============================================
-# GOSCRIPT LANGUAGE CONFIGURATION
-# ============================================
+* text=auto eol=lf
+*.bat eol=crlf
 
-# Goscript files - main language
-*.gjs linguist-language=Goscript linguist-detectable=true linguist-color=#7c3aed
-*.gos linguist-language=Goscript linguist-detectable=true linguist-color=#7c3aed
+*.v linguist-language=Goscript
+*.vv linguist-language=Goscript
+*.vsh linguist-language=Goscript
+v.mod linguist-language=Goscript
+.goscrignore linguist-language=ignore
 
-# All .gjs files are Goscript source code
-*.gjs linguist-vendored=false
-*.gjs linguist-generated=false
-*.gjs linguist-documentation=false
-
-# ============================================
-# CONFIGURATION FILES (excluded from stats)
-# ============================================
-
-# Grammars and configs
-syntaxes/*.json linguist-language=JSON linguist-detectable=false
-grammars/*.json linguist-language=JSON linguist-detectable=false
-.github/linguist.yml linguist-language=YAML linguist-detectable=false
-package.json linguist-language=JSON linguist-detectable=false
-language-configuration.json linguist-language=JSON linguist-detectable=false
-
+Dockerfile.* linguist-language=Dockerfile
 # ============================================
 # COMPILER SOURCE (vendored - excluded)
 # ============================================
@@ -51,28 +37,3 @@ Makefile linguist-vendored
 *.vim linguist-vendored
 *.vimrc linguist-vendored
 *.snippets linguist-vendored
-
-# ============================================
-# DOCUMENTATION (excluded)
-# ============================================
-
-*.md linguist-documentation
-docs/* linguist-documentation
-*.txt linguist-documentation
-
-# ============================================
-# EXAMPLES AND TESTS (count as Goscript)
-# ============================================
-
-exemples/*.gjs linguist-language=Goscript linguist-detectable=true
-examples/*.gjs linguist-language=Goscript linguist-detectable=true
-tests/*.gjs linguist-language=Goscript linguist-detectable=true
-test_*.gjs linguist-language=Goscript linguist-detectable=true
-*_test.gjs linguist-language=Goscript linguist-detectable=true
-
-# ============================================
-# LIBRARY FILES (count as Goscript)
-# ============================================
-
-lib/*.gjs linguist-language=Goscript linguist-detectable=true
-modules/*.gjs linguist-language=Goscript linguist-detectable=true

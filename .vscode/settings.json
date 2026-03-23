@@ -1,0 +1,8 @@
+{
+  "files.associations": {
+    "*.gjs": "goscript"
+  },
+  "linguist.language": "goscript",
+  "editor.tabSize": 4,
+  "editor.insertSpaces": true
+}

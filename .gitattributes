@@ -1,0 +1,18 @@
+# Goscript language files
+*.gjs linguist-language=Goscript
+*.gjs linguist-vendored=false
+*.gjs linguist-detectable=true
+*.gjs linguist-generated=false
+*.gjs linguist-documentation=false
+
+# Pour les statistiques du langage
+*.gjs linguist-language=Goscript
+
+# Pour le diff
+*.gjs diff=goscript
+
+# Pour la fusion
+*.gjs merge=goscript
+
+# Pour GitHub/GitLab
+*.gjs linguist-language=Goscript

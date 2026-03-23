@@ -1048,7 +1048,7 @@ Value evaluate_expr(ASTNode* node, Environment* env) {
             break;
         }
 
-        // Dans evaluate_expr, ajouter:
+        
 
 case NODE_ARRAY: {
     Value arr_val;

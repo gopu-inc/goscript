@@ -1,6 +1,132 @@
-# Goscript language
+# ============================================
+# Goscript Language Configuration
+# ============================================
+
+# Goscript language files
 *.gjs linguist-language=Goscript
-*.gjs linguist-vendored=false
+*.gos linguist-language=Goscript
+*.gscript linguist-language=Goscript
+
+# Marquer comme détectable et non-vendored
 *.gjs linguist-detectable=true
+*.gjs linguist-vendored=false
+*.gjs linguist-generated=false
+*.gjs linguist-documentation=false
+
+# Couleur pour GitHub (violet)
+*.gjs linguist-color=#7c3aed
+
+# Configuration pour le diff
 *.gjs diff=goscript
 *.gjs merge=goscript
+
+# ============================================
+# Grammaires et configurations du langage
+# ============================================
+
+# Marquer les fichiers de grammaire comme du code de configuration
+grammars/*.json linguist-language=JSON
+grammars/*.tmLanguage.json linguist-language=JSON
+.github/linguist.yml linguist-language=YAML
+language-configuration.json linguist-language=JSON
+package.json linguist-language=JSON
+
+# ============================================
+# Fichiers C/C++ du compilateur/interpréteur
+# ============================================
+
+# Tout le code C est marqué comme vendored (ne compte pas dans les stats)
+src/*.c linguist-vendored
+src/*.h linguist-vendored
+src/*/*.c linguist-vendored
+src/*/*.h linguist-vendored
+*.c linguist-vendored
+*.h linguist-vendored
+
+# Fichiers Flex/Bison
+src/*/*.l linguist-vendored
+src/*/*.y linguist-vendored
+*.l linguist-vendored
+*.y linguist-vendored
+
+# ============================================
+# Scripts et outils
+# ============================================
+
+# Scripts shell
+*/*/*.sh linguist-vendored
+*/*.sh linguist-vendored
+*.sh linguist-vendored
+
+# Scripts Python
+*.py linguist-vendored
+
+# ============================================
+# Fichiers de configuration Vim
+# ============================================
+
+# Vim configurations
+*/*/*.vim linguist-vendored
+*/*.vim linguist-vendored
+*.vim linguist-vendored
+*/*vimrc linguist-vendored
+*.vimrc linguist-vendored
+
+# Snippets
+*/*/*.snippets linguist-vendored
+*/*.snippets linguist-vendored
+*.snippets linguist-vendored
+
+# ============================================
+# Makefiles et builds
+# ============================================
+
+*Make* linguist-vendored
+Makefile linguist-vendored
+*.mk linguist-vendored
+
+# ============================================
+# Documentation
+# ============================================
+
+# Documentation (ne compte pas comme code)
+*.md linguist-documentation
+*.txt linguist-documentation
+docs/* linguist-documentation
+
+# ============================================
+# Exemples et tests
+# ============================================
+
+# Les exemples sont du code Goscript mais marqués comme tests
+exemples/*.gjs linguist-language=Goscript
+exemples/*.gjs linguist-detectable=true
+tests/*.gjs linguist-language=Goscript
+tests/*.gjs linguist-detectable=true
+test_*.gjs linguist-language=Goscript
+*_test.gjs linguist-language=Goscript
+
+# ============================================
+# Fichiers générés
+# ============================================
+
+# Ne pas compter les fichiers générés
+*.o linguist-generated
+*.a linguist-generated
+*.so linguist-generated
+*.exe linguist-generated
+*.out linguist-generated
+
+# ============================================
+# Binaires et librairies
+# ============================================
+
+# Binaires
+gd linguist-vendored
+goscript linguist-vendored
+*.bin linguist-vendored
+
+# Librairies
+*.dylib linguist-vendored
+*.so linguist-vendored
+

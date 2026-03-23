@@ -1,0 +1,335 @@
+# ============================================
+# Goscript Snippets for UltiSnips
+# Language: Goscript
+# Maintainer: GOPU inc team
+# Version: 2.0
+# ============================================
+
+# Main function
+snippet main "Main function" b
+fn main() {
+	${1:lt result = 0}
+	${0}
+	ret 0
+}
+endsnippet
+
+# Function definition
+snippet fn "Function definition" b
+fn ${1:name}(${2:params})${3: -> ${4:type}} {
+	${0}
+}
+endsnippet
+
+# Public function
+snippet pfn "Public function" b
+pub fn ${1:name}(${2:params})${3: -> ${4:type}} {
+	${0}
+}
+endsnippet
+
+# Lambda
+snippet lambda "Lambda expression" b
+lambda ${1:params} {
+	${0}
+}
+endsnippet
+
+# Variable declaration
+snippet lt "Let variable" b
+lt ${1:name}${2: : ${3:type}} = ${4:value}
+endsnippet
+
+# Constant
+snippet cn "Constant" b
+cn ${1:NAME} = ${2:value}
+endsnippet
+
+# Mutable variable
+snippet muts "Mutable variable" b
+muts ${1:name}${2: : ${3:type}} = ${4:value}
+endsnippet
+
+# Return statement
+snippet ret "Return statement" b
+ret ${1:value}
+endsnippet
+
+# If statement
+snippet if "If statement" b
+if ${1:condition} {
+	${0}
+}
+endsnippet
+
+# If-else statement
+snippet ife "If-else statement" b
+if ${1:condition} {
+	${2}
+} else {
+	${0}
+}
+endsnippet
+
+# For-in loop
+snippet for "For-in loop" b
+for ${1:item} in ${2:collection} {
+	${0}
+}
+endsnippet
+
+# While loop
+snippet while "While loop" b
+while ${1:condition} {
+	${0}
+}
+endsnippet
+
+# Loop infinite
+snippet loop "Infinite loop" b
+loop {
+	${0}
+}
+endsnippet
+
+# Break
+snippet break "Break statement" b
+break
+endsnippet
+
+# Continue
+snippet continue "Continue statement" b
+continue
+endsnippet
+
+# Match statement
+snippet match "Match statement" b
+match ${1:value} {
+	${2:pattern} => ${3:result}
+	${0}
+}
+endsnippet
+
+# Match case with wildcard
+snippet match_ "Match with wildcard" b
+match ${1:value} {
+	${2:pattern} => ${3:result}
+	_ => ${0}
+}
+endsnippet
+
+# Struct definition
+snippet struct "Struct definition" b
+struct ${1:Name} {
+	${2:field}: ${3:type},
+	${0}
+}
+endsnippet
+
+# Struct with extends
+snippet struct_extends "Struct with extends" b
+struct ${1:Name} extends ${2:Parent} {
+	${3:field}: ${4:type},
+	${0}
+}
+endsnippet
+
+# Struct initialization
+snippet new "New struct instance" b
+new ${1:Name} {
+	${2:field}: ${3:value},
+	${0}
+}
+endsnippet
+
+# Enum definition
+snippet enm "Enum definition" b
+enm ${1:Name} {
+	${2:Variant1},
+	${3:Variant2},
+	${0}
+}
+endsnippet
+
+# Impl definition
+snippet impl "Implementation" b
+impl ${1:StructName} {
+	${0}
+}
+endsnippet
+
+# Method definition
+snippet impl_fn "Method in impl" b
+fn ${1:name}(${2:self})${3: -> ${4:type}} {
+	${0}
+}
+endsnippet
+
+# Import statement
+snippet imp "Import module" b
+import ${1:module}${2: as ${3:alias}}
+endsnippet
+
+# Import from path
+snippet impf "Import from path" b
+import ${1:name} from "${2:path}"
+endsnippet
+
+# Import with constraints
+snippet impc "Import with constraints" b
+import ${1:module} {
+	only: [${2:func1}, ${3:func2}]
+}
+endsnippet
+
+# Export statement
+snippet exp "Export" b
+export ${1:name}
+endsnippet
+
+# Packet declaration
+snippet packet "Packet declaration" b
+packet ${1:name} {
+	${0}
+}
+endsnippet
+
+# Array literal
+snippet arr "Array literal" b
+[${1:1, 2, 3}]
+endsnippet
+
+# Dict literal
+snippet dict "Dict literal" b
+dict {
+	${1:"key"}: ${2:value},
+	${0}
+}
+endsnippet
+
+# Array type
+snippet arr_type "Array type" b
+[${1:int}]
+endsnippet
+
+# Dict type
+snippet dict_type "Dict type" b
+dict<${1:string}, ${2:int}>
+endsnippet
+
+# Optional type
+snippet opt "Optional type" b
+${1:string}?
+endsnippet
+
+# NNL (non-local jump)
+snippet nnl "NNL context" b
+nnl ${1:label} {
+	${0}
+}
+endsnippet
+
+# JMP (jump)
+snippet jmp "JMP statement" b
+jmp ${1:label}${2: ${3:value}}
+endsnippet
+
+# Unsafe block
+snippet unsafe "Unsafe block" b
+unsafe {
+	${0}
+}
+endsnippet
+
+# Type definition
+snippet type "Type alias" b
+type ${1:Name} = ${2:type}
+endsnippet
+
+# Pattern matching
+snippet pattern "Pattern matching" b
+match ${1:value} {
+	${2:pattern} => ${3:result}
+	${0}
+}
+endsnippet
+
+# Field access
+snippet . "Field access" w
+.${1:field}
+endsnippet
+
+# Method call
+snippet .m "Method call" w
+.${1:method}(${2})
+endsnippet
+
+# Print
+snippet print "Print" b
+print(${1:value})
+endsnippet
+
+# Println
+snippet println "Println" b
+println(${1:value})
+endsnippet
+
+# Debug print
+snippet dbg "Debug print" b
+println("DEBUG: " + ${1:value})
+endsnippet
+
+# TODO comment
+snippet todo "TODO comment" b
+// TODO: ${0}
+endsnippet
+
+# FIXME comment
+snippet fixme "FIXME comment" b
+// FIXME: ${0}
+endsnippet
+
+# Comment block
+snippet /* "Block comment" b
+/*
+ * ${0}
+ */
+endsnippet
+
+# Header comment
+snippet header "File header comment" b
+// ============================================
+// ${1:filename}
+// Author: ${2:GOPU inc team}
+// Created: ${3:$(date +%Y-%m-%d)}
+// ============================================
+${0}
+endsnippet
+
+# Test skeleton
+snippet test "Test function" b
+fn test_${1:name}() {
+	lt expected = ${2:value}
+	lt actual = ${3:function}(${4:params})
+	
+	if actual != expected {
+		println("Test failed: expected " + expected + ", got " + actual)
+	} else {
+		println("Test passed: " + actual)
+	}
+}
+endsnippet
+
+# Benchmark skeleton
+snippet bench "Benchmark" b
+fn bench_${1:name}() {
+	lt start = time.now()
+	
+	${2:loop 1000 {
+		${3:function}()
+	}}
+	
+	lt elapsed = time.now() - start
+	println("Benchmark ${1}: " + elapsed + "ms")
+}
+endsnippet

@@ -1,4 +1,4 @@
-import switch from ./switch
+import switch from switch
 
 fn main() {
     println("=== Switch Module Test ===\n")

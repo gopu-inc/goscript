@@ -43,11 +43,11 @@ pub fn min(a, b) {
 }
 
 // Colors
-pub cn COLOR_RESET = "\033[0m"
-pub cn COLOR_RED = "\033[31m"
-pub cn COLOR_GREEN = "\033[32m"
-pub cn COLOR_YELLOW = "\033[33m"
-pub cn COLOR_CYAN = "\033[36m"
+pub cn COLOR_RESET = "033[0m"
+pub cn COLOR_RED = "033[31m"
+pub cn COLOR_GREEN = "033[32m"
+pub cn COLOR_YELLOW = "033[33m"
+pub cn COLOR_CYAN = "033[36m"
 
 pub fn colorize(text: string, color: string): string {
     ret color + text + COLOR_RESET
@@ -63,4 +63,3 @@ pub fn type_of(obj) {
     ret "unknown"
 }
 
-info("Built-in loaded v" + VERSION)

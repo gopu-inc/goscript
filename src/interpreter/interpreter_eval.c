@@ -880,96 +880,102 @@ Value evaluate_expr(ASTNode* node, Environment* env) {
     }
     
     // Assignation simple
-    if (node->binary.op == OP_ASSIGN) {
-        // Cas 1: Assignation à un identifiant
-        if (node->binary.left->type == NODE_IDENTIFIER) {
-            char* var_name = node->binary.left->identifier.name;
-            Value right_val = evaluate_expr(node->binary.right, env);
-            env_set(env, var_name, right_val);
-            result = right_val;
-        }
-        // Cas 2: Assignation à un élément de tableau/dictionnaire
-        else if (node->binary.left->type == NODE_ARRAY_ACCESS) {
-            ASTNode* array_access = node->binary.left;
-            Value container = evaluate_expr(array_access->array_access.array, env);
-            Value idx = evaluate_expr(array_access->array_access.index, env);
-            Value right_val = evaluate_expr(node->binary.right, env);
-            
-            // Cas 2a: Tableau
-            if (container.type == 8 && idx.type == 0) {
-                int index = idx.int_val;
-                if (index >= 0 && index < container.array_val.count) {
-                    ASTNode* element = container.array_val.elements->nodes[index];
-                    if (element->type == NODE_NUMBER) {
-                        element->number.value = right_val.int_val;
-                    } else if (element->type == NODE_STRING) {
-                        free(element->string_val.value);
-                        element->string_val.value = right_val.string_val ? strdup(right_val.string_val) : strdup("");
-                    } else if (element->type == NODE_FLOAT) {
-                        element->float_val.value = right_val.float_val;
-                    } else if (element->type == NODE_BOOL) {
-                        element->bool_val.value = right_val.bool_val;
-                    }
-                    result = right_val;
-                } else {
-                    fprintf(stderr, "Error: Index %d out of bounds (size %d)\n", index, container.array_val.count);
-                    result.type = 0;
-                    result.int_val = 0;
-                }
-            }
-            // Cas 2b: Dictionnaire
-            else if (container.type == 10) {
-                int found = 0;
-                for (int i = 0; i < container.dict_val.count; i++) {
-                    Value* k = container.dict_val.entries[i].key;
-                    int match = 0;
-                    if (k->type == idx.type) {
-                        if (k->type == 0) match = (k->int_val == idx.int_val);
-                        else if (k->type == 1) match = (k->float_val == idx.float_val);
-                        else if (k->type == 2) match = (strcmp(k->string_val, idx.string_val) == 0);
-                        else if (k->type == 3) match = (k->bool_val == idx.bool_val);
-                    }
-                    if (match) {
-                        *(container.dict_val.entries[i].value) = right_val;
-                        found = 1;
-                        break;
-                    }
-                }
-                if (!found) {
-                    // Ajouter nouvelle entrée
-                    if (container.dict_val.count >= container.dict_val.capacity) {
-                        container.dict_val.capacity = container.dict_val.capacity == 0 ? 8 : container.dict_val.capacity * 2;
-                        container.dict_val.entries = realloc(container.dict_val.entries,
-                            container.dict_val.capacity * sizeof(*container.dict_val.entries));
-                    }
-                    container.dict_val.entries[container.dict_val.count].key = malloc(sizeof(Value));
-                    container.dict_val.entries[container.dict_val.count].value = malloc(sizeof(Value));
-                    *(container.dict_val.entries[container.dict_val.count].key) = idx;
-                    *(container.dict_val.entries[container.dict_val.count].value) = right_val;
-                    container.dict_val.count++;
+if (node->binary.op == OP_ASSIGN) {
+    // Cas 1: Assignation à un identifiant
+    if (node->binary.left->type == NODE_IDENTIFIER) {
+        char* var_name = node->binary.left->identifier.name;
+        Value right_val = evaluate_expr(node->binary.right, env);
+        env_set(env, var_name, right_val);
+        result = right_val;
+    }
+    // Cas 2: Assignation à un élément de tableau/dictionnaire
+    else if (node->binary.left->type == NODE_ARRAY_ACCESS) {
+        ASTNode* array_access = node->binary.left;
+        Value container = evaluate_expr(array_access->array_access.array, env);
+        Value idx = evaluate_expr(array_access->array_access.index, env);
+        Value right_val = evaluate_expr(node->binary.right, env);
+        
+        // Cas 2a: Tableau
+        if (container.type == 8 && idx.type == 0) {
+            int index = idx.int_val;
+            if (index >= 0 && index < container.array_val.count) {
+                ASTNode* element = container.array_val.elements->nodes[index];
+                if (element->type == NODE_NUMBER) {
+                    element->number.value = right_val.int_val;
+                } else if (element->type == NODE_STRING) {
+                    free(element->string_val.value);
+                    element->string_val.value = right_val.string_val ? strdup(right_val.string_val) : strdup("");
+                } else if (element->type == NODE_FLOAT) {
+                    element->float_val.value = right_val.float_val;
+                } else if (element->type == NODE_BOOL) {
+                    element->bool_val.value = right_val.bool_val;
                 }
                 result = right_val;
+            } else {
+                fprintf(stderr, "Error: Index %d out of bounds (size %d)\n", index, container.array_val.count);
+                result.type = 0;
+                result.int_val = 0;
             }
         }
-        // Cas 3: Assignation à un membre de structure
-        else if (node->binary.left->type == NODE_MEMBER_ACCESS) {
-            Value obj = evaluate_expr(node->binary.left->member.object, env);
-            Value right_val = evaluate_expr(node->binary.right, env);
-            char* member_name = node->binary.left->member.member;
+        // Cas 2b: Dictionnaire
+        else if (container.type == 10) {
+            int found = 0;
+            for (int i = 0; i < container.dict_val.count; i++) {
+                Value* k = container.dict_val.entries[i].key;
+                int match = 0;
+                if (k->type == idx.type) {
+                    if (k->type == 0) match = (k->int_val == idx.int_val);
+                    else if (k->type == 1) match = (k->float_val == idx.float_val);
+                    else if (k->type == 2) match = (strcmp(k->string_val, idx.string_val) == 0);
+                    else if (k->type == 3) match = (k->bool_val == idx.bool_val);
+                }
+                if (match) {
+                    *(container.dict_val.entries[i].value) = right_val;
+                    found = 1;
+                    break;
+                }
+            }
+            if (!found) {
+                // Ajouter nouvelle entrée
+                if (container.dict_val.count >= container.dict_val.capacity) {
+                    container.dict_val.capacity = container.dict_val.capacity == 0 ? 8 : container.dict_val.capacity * 2;
+                    container.dict_val.entries = realloc(container.dict_val.entries,
+                        container.dict_val.capacity * sizeof(*container.dict_val.entries));
+                }
+                container.dict_val.entries[container.dict_val.count].key = malloc(sizeof(Value));
+                container.dict_val.entries[container.dict_val.count].value = malloc(sizeof(Value));
+                *(container.dict_val.entries[container.dict_val.count].key) = idx;
+                *(container.dict_val.entries[container.dict_val.count].value) = right_val;
+                container.dict_val.count++;
+            }
             
-            if (obj.type == 6) {
-                for (int i = 0; i < obj.struct_val.field_count; i++) {
-                    if (obj.struct_val.fields[i].name && 
-                        strcmp(obj.struct_val.fields[i].name, member_name) == 0) {
-                        *(obj.struct_val.fields[i].value) = right_val;
-                        result = right_val;
-                        break;
-                    }
+            // SAUVEGARDE : Réinjecter le dictionnaire modifié dans l'environnement
+            if (array_access->array_access.array->type == NODE_IDENTIFIER) {
+                env_set(env, array_access->array_access.array->identifier.name, container);
+            }
+            
+            result = right_val;
+        }
+    }
+    // Cas 3: Assignation à un membre de structure
+    else if (node->binary.left->type == NODE_MEMBER_ACCESS) {
+        Value obj = evaluate_expr(node->binary.left->member.object, env);
+        Value right_val = evaluate_expr(node->binary.right, env);
+        char* member_name = node->binary.left->member.member;
+        
+        if (obj.type == 6) {
+            for (int i = 0; i < obj.struct_val.field_count; i++) {
+                if (obj.struct_val.fields[i].name && 
+                    strcmp(obj.struct_val.fields[i].name, member_name) == 0) {
+                    *(obj.struct_val.fields[i].value) = right_val;
+                    result = right_val;
+                    break;
                 }
             }
         }
-        break;
     }
+    break;
+}
     
     // Opérations binaires standard
     Value left = evaluate_expr(node->binary.left, env);

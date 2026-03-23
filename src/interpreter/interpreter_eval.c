@@ -883,122 +883,132 @@ Value evaluate_expr(ASTNode* node, Environment* env) {
     }
     
     // Assignation simple
-    if (node->binary.op == OP_ASSIGN) {
-        // Cas 1: Assignation à un identifiant
-        if (node->binary.left->type == NODE_IDENTIFIER) {
-            char* var_name = node->binary.left->identifier.name;
-            Value right_val = evaluate_expr(node->binary.right, env);
-            env_set(env, var_name, right_val);
-            result = right_val;
-        }
-        // Cas 2: Assignation à un élément de tableau/dictionnaire
-        else if (node->binary.left->type == NODE_ARRAY_ACCESS) {
-            ASTNode* array_access = node->binary.left;
-            
-            // Évaluer le container (tableau ou dictionnaire)
-            Value container = evaluate_expr(array_access->array_access.array, env);
-            Value idx = evaluate_expr(array_access->array_access.index, env);
-            Value right_val = evaluate_expr(node->binary.right, env);
-            
-            // Cas 2a: Tableau
-            if (container.type == 8 && idx.type == 0) {
-                int index = idx.int_val;
-                if (index >= 0 && index < container.array_val.count) {
-                    ASTNode* element = container.array_val.elements->nodes[index];
-                    if (element->type == NODE_NUMBER) {
-                        element->number.value = right_val.int_val;
-                    } else if (element->type == NODE_STRING) {
-                        free(element->string_val.value);
-                        element->string_val.value = right_val.string_val ? strdup(right_val.string_val) : strdup("");
-                    } else if (element->type == NODE_FLOAT) {
-                        element->float_val.value = right_val.float_val;
-                    } else if (element->type == NODE_BOOL) {
-                        element->bool_val.value = right_val.bool_val;
-                    }
-                    result = right_val;
-                } else {
-                    fprintf(stderr, "Error: Index %d out of bounds (size %d)\n", index, container.array_val.count);
-                    result.type = 0;
-                    result.int_val = 0;
+    
+if (node->binary.op == OP_ASSIGN) {
+    // Cas 1: Assignation à un identifiant
+    if (node->binary.left->type == NODE_IDENTIFIER) {
+        char* var_name = node->binary.left->identifier.name;
+        Value right_val = evaluate_expr(node->binary.right, env);
+        env_set(env, var_name, right_val);
+        result = right_val;
+    }
+    // Cas 2: Assignation à un élément de tableau/dictionnaire (a[2] = 99 ou dict["key"] = value)
+    else if (node->binary.left->type == NODE_ARRAY_ACCESS) {
+        ASTNode* array_access = node->binary.left;
+        
+        // Évaluer le container
+        Value container = evaluate_expr(array_access->array_access.array, env);
+        Value idx = evaluate_expr(array_access->array_access.index, env);
+        Value right_val = evaluate_expr(node->binary.right, env);
+        
+        // Cas 2a: Tableau
+        if (container.type == 8 && idx.type == 0) {
+            int index = idx.int_val;
+            if (index >= 0 && index < container.array_val.count) {
+                ASTNode* element = container.array_val.elements->nodes[index];
+                if (element->type == NODE_NUMBER) {
+                    element->number.value = right_val.int_val;
+                } else if (element->type == NODE_STRING) {
+                    free(element->string_val.value);
+                    element->string_val.value = right_val.string_val ? strdup(right_val.string_val) : strdup("");
+                } else if (element->type == NODE_FLOAT) {
+                    element->float_val.value = right_val.float_val;
+                } else if (element->type == NODE_BOOL) {
+                    element->bool_val.value = right_val.bool_val;
                 }
-            }
-            // Cas 2b: Dictionnaire
-            else if (container.type == 10) {
-                int found = 0;
-                
-                // Chercher la clé existante
-                for (int i = 0; i < container.dict_val.count; i++) {
-                    Value* k = container.dict_val.entries[i].key;
-                    int match = 0;
-                    if (k->type == idx.type) {
-                        if (k->type == 0) match = (k->int_val == idx.int_val);
-                        else if (k->type == 1) match = (k->float_val == idx.float_val);
-                        else if (k->type == 2) match = (strcmp(k->string_val, idx.string_val) == 0);
-                        else if (k->type == 3) match = (k->bool_val == idx.bool_val);
-                    }
-                    if (match) {
-                        // Modifier la valeur existante
-                        *(container.dict_val.entries[i].value) = right_val;
-                        found = 1;
-                        break;
-                    }
-                }
-                
-                // Si la clé n'existe pas, l'ajouter
-                if (!found) {
-                    if (container.dict_val.count >= container.dict_val.capacity) {
-                        container.dict_val.capacity = container.dict_val.capacity == 0 ? 8 : container.dict_val.capacity * 2;
-                        container.dict_val.entries = realloc(container.dict_val.entries,
-                            container.dict_val.capacity * sizeof(*container.dict_val.entries));
-                    }
-                    container.dict_val.entries[container.dict_val.count].key = malloc(sizeof(Value));
-                    container.dict_val.entries[container.dict_val.count].value = malloc(sizeof(Value));
-                    
-                    // Copie profonde de la clé
-                    if (idx.type == 2) {
-                        container.dict_val.entries[container.dict_val.count].key->type = 2;
-                        container.dict_val.entries[container.dict_val.count].key->string_val = strdup(idx.string_val);
-                    } else {
-                        *(container.dict_val.entries[container.dict_val.count].key) = idx;
-                    }
-                    
-                    // Copie profonde de la valeur
-                    if (right_val.type == 2) {
-                        container.dict_val.entries[container.dict_val.count].value->type = 2;
-                        container.dict_val.entries[container.dict_val.count].value->string_val = strdup(right_val.string_val);
-                    } else {
-                        *(container.dict_val.entries[container.dict_val.count].value) = right_val;
-                    }
-                    
-                    container.dict_val.count++;
-                }
-                
-                // SAUVEGARDE: Réinjecter le dictionnaire modifié dans l'environnement
-                if (array_access->array_access.array->type == NODE_IDENTIFIER) {
-                    env_set(env, array_access->array_access.array->identifier.name, container);
-                }
-                else if (array_access->array_access.array->type == NODE_MEMBER_ACCESS) {
-                    ASTNode* member_access = array_access->array_access.array;
-                    Value obj = evaluate_expr(member_access->member.object, env);
-                    char* member_name = member_access->member.member;
-                    
-                    if (obj.type == 6) {
-                        for (int i = 0; i < obj.struct_val.field_count; i++) {
-                            if (obj.struct_val.fields[i].name && 
-                                strcmp(obj.struct_val.fields[i].name, member_name) == 0) {
-                                *(obj.struct_val.fields[i].value) = container;
-                                if (member_access->member.object->type == NODE_IDENTIFIER) {
-                                    env_set(env, member_access->member.object->identifier.name, obj);
-                                }
-                                break;
-                            }
-                        }
-                    }
-                }
-                
                 result = right_val;
             }
         }
+        // Cas 2b: Dictionnaire
+        else if (container.type == 10) {
+            int found = 0;
+            
+            printf("DEBUG: Modifying dictionary, looking for key\n");
+            
+            // Chercher la clé existante
+            for (int i = 0; i < container.dict_val.count; i++) {
+                Value* k = container.dict_val.entries[i].key;
+                
+                // Utiliser la fonction de comparaison
+                if (values_equal(*k, idx)) {
+                    // Modifier la valeur existante
+                    printf("DEBUG: Found key, updating value\n");
+                    if (right_val.type == 2) {
+                        if (container.dict_val.entries[i].value->string_val) 
+                            free(container.dict_val.entries[i].value->string_val);
+                        container.dict_val.entries[i].value->type = 2;
+                        container.dict_val.entries[i].value->string_val = strdup(right_val.string_val);
+                    } else {
+                        *(container.dict_val.entries[i].value) = right_val;
+                    }
+                    found = 1;
+                    break;
+                }
+            }
+            
+            // Si la clé n'existe pas, l'ajouter
+            if (!found) {
+                printf("DEBUG: Key not found, adding new entry\n");
+                
+                // Agrandir le tableau si nécessaire
+                if (container.dict_val.count >= container.dict_val.capacity) {
+                    container.dict_val.capacity = container.dict_val.capacity == 0 ? 8 : container.dict_val.capacity * 2;
+                    container.dict_val.entries = realloc(container.dict_val.entries,
+                        container.dict_val.capacity * sizeof(*container.dict_val.entries));
+                    printf("DEBUG: Reallocated to capacity %d\n", container.dict_val.capacity);
+                }
+                
+                // Ajouter la nouvelle clé
+                container.dict_val.entries[container.dict_val.count].key = malloc(sizeof(Value));
+                if (idx.type == 2) {
+                    container.dict_val.entries[container.dict_val.count].key->type = 2;
+                    container.dict_val.entries[container.dict_val.count].key->string_val = strdup(idx.string_val);
+                } else {
+                    *(container.dict_val.entries[container.dict_val.count].key) = idx;
+                }
+                
+                // Ajouter la nouvelle valeur
+                container.dict_val.entries[container.dict_val.count].value = malloc(sizeof(Value));
+                if (right_val.type == 2) {
+                    container.dict_val.entries[container.dict_val.count].value->type = 2;
+                    container.dict_val.entries[container.dict_val.count].value->string_val = strdup(right_val.string_val);
+                } else {
+                    *(container.dict_val.entries[container.dict_val.count].value) = right_val;
+                }
+                
+                container.dict_val.count++;
+                printf("DEBUG: Added entry, count = %d\n", container.dict_val.count);
+            }
+            
+            // CRUCIAL: Sauvegarder le dictionnaire modifié dans l'environnement
+            if (array_access->array_access.array->type == NODE_IDENTIFIER) {
+                printf("DEBUG: Saving dictionary back to variable '%s'\n", 
+                       array_access->array_access.array->identifier.name);
+                env_set(env, array_access->array_access.array->identifier.name, container);
+            }
+            else if (array_access->array_access.array->type == NODE_MEMBER_ACCESS) {
+                // Gestion des dictionnaires imbriqués dans des structures
+                ASTNode* member_access = array_access->array_access.array;
+                Value obj = evaluate_expr(member_access->member.object, env);
+                char* member_name = member_access->member.member;
+                
+                if (obj.type == 6) {
+                    for (int i = 0; i < obj.struct_val.field_count; i++) {
+                        if (obj.struct_val.fields[i].name && 
+                            strcmp(obj.struct_val.fields[i].name, member_name) == 0) {
+                            *(obj.struct_val.fields[i].value) = container;
+                            if (member_access->member.object->type == NODE_IDENTIFIER) {
+                                env_set(env, member_access->member.object->identifier.name, obj);
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            result = right_val;
+        }
+    }
         // Cas 3: Assignation à un membre de structure
         else if (node->binary.left->type == NODE_MEMBER_ACCESS) {
             ASTNode* member_access = node->binary.left;

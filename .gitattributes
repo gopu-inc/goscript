@@ -1,55 +1,10 @@
+*.gjs linguist-language=Goscript
+*.gos linguist-language=Goscript
 
-# ============================================
-# BINARY DATA TYPES
-# ============================================
+*.gjs linguist-detectable=true
+*.gos linguist-detectable=true
 
-*.aif binary
-*.aifc binary
-*.aiff binary
-*.au binary
-*.bmp binary
-*.exe binary
-*.gif binary
-*.ico binary
-*.jpg binary
-*.pdf binary
-*.png binary
-*.psd binary
-*.tar binary
-*.wav binary
-*.zip binary
-*.o binary
-*.so binary
-*.a binary
-*.dylib binary
-gd binary
 
-# ============================================
-# TEXT FILES - Line endings
-# ============================================
-
-# Default: LF for all text files
-* text=auto eol=lf
-
-# CRLF for Windows files
-*.bat text eol=crlf
-*.cmd text eol=crlf
-*.ps1 text eol=crlf
-
-# ============================================
-# GOSCRIPT - MAIN LANGUAGE
-# ============================================
-
-# Goscript source files
-*.gjs text linguist-language=Goscript linguist-detectable=true linguist-color=#7c3aed
-*.gos text linguist-language=Goscript linguist-detectable=true linguist-color=#7c3aed
-
-# Goscript module files
-gjs.mod text linguist-language=Goscript
-
-# ============================================
-# LANGUAGE-AWARE DIFF HEADERS
-# ============================================
 
 *.c diff=cpp
 *.h diff=cpp
@@ -98,73 +53,6 @@ Makefile linguist-vendored
 *.vimrc linguist-vendored
 *.snippets linguist-vendored
 
-# ============================================
-# JSON FILES - Force as JSON, not JavaScript
-# ============================================
 
-*.json text linguist-language=JSON linguist-detectable=false
-syntaxes/*.json linguist-language=JSON linguist-detectable=false
-grammars/*.json linguist-language=JSON linguist-detectable=false
-package.json linguist-language=JSON linguist-detectable=false
-language-configuration.json linguist-language=JSON linguist-detectable=false
 
-# ============================================
-# YAML FILES
-# ============================================
 
-*.yaml text linguist-language=YAML
-*.yml text linguist-language=YAML
-.github/*.yml linguist-language=YAML linguist-detectable=false
-
-# ============================================
-# DOCUMENTATION - Excluded from stats
-# ============================================
-
-*.md text linguist-documentation
-*.txt text linguist-documentation
-docs/* linguist-documentation
-Doc/* linguist-documentation
-README.md linguist-documentation
-
-# ============================================
-# GENERATED FILES - Excluded from diffs and stats
-# ============================================
-
-# Attribute to mark generated files
-[attr]generated linguist-generated=true diff=generated
-
-# Generated Goscript files
-*_generated.gjs generated
-*_pb.gjs generated
-*_test.gjs generated
-
-# Build artifacts
-build/ generated
-dist/ generated
-__pycache__/ generated
-
-# ============================================
-# EXAMPLES AND TESTS - Count as Goscript
-# ============================================
-
-exemples/*.gjs text linguist-language=Goscript linguist-detectable=true
-examples/*.gjs text linguist-language=Goscript linguist-detectable=true
-tests/*.gjs text linguist-language=Goscript linguist-detectable=true
-test_*.gjs text linguist-language=Goscript linguist-detectable=true
-*_test.gjs text linguist-language=Goscript linguist-detectable=true
-
-# ============================================
-# LIBRARY FILES - Count as Goscript
-# ============================================
-
-lib/*.gjs text linguist-language=Goscript linguist-detectable=true
-modules/*.gjs text linguist-language=Goscript linguist-detectable=true
-src/*.gjs text linguist-language=Goscript linguist-detectable=true
-
-# ============================================
-# IGNORE FILES
-# ============================================
-
-.goscrignore linguist-language=ignore
-.gitignore linguist-language=ignore
-.gitattributes linguist-language=ignore

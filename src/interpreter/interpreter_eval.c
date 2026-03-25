@@ -711,7 +711,17 @@ void register_native_c_functions(Environment* env) {
     
     void* tolower_ptr = dlsym(libc_handle, "tolower");
     if (tolower_ptr) register_c_function(env, "tolower_c", tolower_ptr, "int", 1, "int");
-    
+        Value input_func;
+    input_func.type = 5;  // C function type
+    input_func.cfunc_val.func_ptr = (void*)call_input;
+    input_func.cfunc_val.ret_type = &ffi_type_pointer;
+    input_func.cfunc_val.arg_count = 1;
+    input_func.cfunc_val.arg_types = malloc(sizeof(ffi_type*));
+    input_func.cfunc_val.arg_types[0] = &ffi_type_pointer;
+    ffi_prep_cif(&input_func.cfunc_val.cif, FFI_DEFAULT_ABI, 1, &ffi_type_pointer, 
+                  (ffi_type*[]){&ffi_type_pointer});
+    env_set(env, "input", input_func);
+
     // ============================================
     // SOCKET FUNCTIONS (sys/socket.h)
     // ============================================

@@ -232,40 +232,6 @@ void print_value(Value val, int newline) {
     if (newline) printf("\n");
 }
 
-
-
-Value call_input(Value* args, int arg_count) {
-    Value result = {0};
-    char* prompt = "";
-    char buffer[1024];
-    
-    // Vérifier si un prompt est fourni
-    if (arg_count > 0 && args[0].type == 2) {
-        prompt = args[0].string_val;
-    }
-    
-    // Afficher le prompt
-    printf("%s", prompt);
-    fflush(stdout);
-    
-    // Lire l'entrée utilisateur
-    if (fgets(buffer, sizeof(buffer), stdin) != NULL) {
-        // Enlever le caractère newline à la fin
-        size_t len = strlen(buffer);
-        if (len > 0 && buffer[len-1] == '\n') {
-            buffer[len-1] = '\0';
-        }
-        
-        result.type = 2;
-        result.string_val = strdup(buffer);
-    } else {
-        // En cas d'erreur, retourner une chaîne vide
-        result.type = 2;
-        result.string_val = strdup("");
-    }
-    
-    return result;
-}
 void register_native_c_functions(Environment* env) {
     init_libc();
     

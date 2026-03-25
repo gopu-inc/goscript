@@ -92,8 +92,6 @@ typedef struct ModuleRegistry {
     int capacity;
 } ModuleRegistry;
 
-// Input function
-Value call_input(Value* args, int arg_count);
 ModuleRegistry* init_module_registry(void);
 void register_module(ModuleRegistry* reg, LoadedModule* mod);
 LoadedModule* find_module(ModuleRegistry* reg, char* path);

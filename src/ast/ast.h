@@ -484,6 +484,16 @@ void add_array_item(ASTNodeList* list, ASTNode* item);
 ASTNodeList* create_field_init_list(void);
 void add_field_init(ASTNodeList* list, ASTNode* init);
 
+
+// Ajouter ces déclarations
+ASTNode* create_unsafe_node(ASTNodeList* body);
+ASTNode* create_lambda_node(ASTNodeList* params, ASTNodeList* body);
+ASTNode* create_array_access_node(ASTNode* array, ASTNode* index);
+
+
+
+
+
 /* ==================== Nœuds principaux ==================== */
 ASTNode* create_program_node(ASTNodeList* statements);
 

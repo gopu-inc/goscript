@@ -277,18 +277,27 @@ param:
     }
     ;
 
-type:
-    TOKEN_IDENTIFIER {
+type: TOKEN_IDENTIFIER
+    {
         $$ = create_type_node($1);
     }
-    | TOKEN_IDENTIFIER TOKEN_OPTIONAL {
+    | TOKEN_IDENTIFIER TOKEN_DOUBLE_COLON TOKEN_IDENTIFIER
+    {
+        // On combine Module + :: + Type dans une chaîne pour le nœud type
+        char* combined = malloc(strlen($1) + strlen($3) + 3);
+        sprintf(combined, "%s::%s", $1, $3);
+        $$ = create_type_node(combined);
+        free(combined);
+    }
+    | TOKEN_IDENTIFIER TOKEN_OPTIONAL
+    {
         $$ = create_optional_type_node($1);
     }
-    | TOKEN_LBRACKET TOKEN_RBRACKET type {
+    | TOKEN_LBRACKET TOKEN_RBRACKET type
+    {
         $$ = create_array_type_node($3);
     }
     ;
-
 
 /* Dictionnaire */
 dict_expr:

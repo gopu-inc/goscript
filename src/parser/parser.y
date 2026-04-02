@@ -667,40 +667,47 @@ array_access:
     ;
 
 primary_expr:
-    TOKEN_NUMBER {
-        $$ = create_number_node($1);
-    }
-    | TOKEN_FLOAT {
-        $$ = create_float_node($1);
-    }
-    | TOKEN_STRING {
-        $$ = create_string_node($1);
-    }
-    | TOKEN_TRUE {
-        $$ = create_bool_node(1);
-    }
-    | TOKEN_FALSE {
-        $$ = create_bool_node(0);
-    }
-    | TOKEN_NIL {
-        $$ = create_nil_node();
-    }
-    | TOKEN_IDENTIFIER {
-        $$ = create_identifier_node($1);
-    }
-    | TOKEN_LPAREN expression TOKEN_RPAREN {
-        $$ = $2;
-    }
-    | call_expr
-    | dict_access
-    | dict_expr
-    | array_expr
-    | struct_expr
-    | member_access
-    | lambda_expr
-    | array_access
-    ;
+      TOKEN_NUMBER      { $$ = create_number_node($1); }
+    | TOKEN_FLOAT       { $$ = create_float_node($1); }
+    | TOKEN_STRING      { $$ = create_string_node($1); }
+    | TOKEN_TRUE        { $$ = create_bool_node(1); }
+    | TOKEN_FALSE       { $$ = create_bool_node(0); }
+    | TOKEN_NIL         { $$ = create_nil_node(); }
+    | TOKEN_IDENTIFIER  { $$ = create_identifier_node($1); }
+    | TOKEN_LPAREN expression TOKEN_RPAREN { $$ = $2; }
+    | dict_expr         { $$ = $1; }
+    | array_expr        { $$ = $1; }
+    | struct_expr       { $$ = $1; }
+    | lambda_expr       { $$ = $1; }
 
+    /* --- Accès et appels récursifs --- */
+
+    /* Accès membre : self.base ou obj.field */
+    | primary_expr TOKEN_DOT TOKEN_IDENTIFIER {
+        $$ = create_member_access($1, $3);
+    }
+
+    /* Accès statique ou accès Module : Class::BaseObject */
+    | primary_expr TOKEN_DOUBLE_COLON TOKEN_IDENTIFIER {
+        $$ = create_static_access($1, $3);
+    }
+
+    /* Accès tableau ou dictionnaire : arr[0] ou dict["key"] */
+    | primary_expr TOKEN_LBRACKET expression TOKEN_RBRACKET {
+        // On utilise array_access par défaut, l'interpréteur gérera si c'est un dict
+        $$ = create_array_access_node($1, $3);
+    }
+
+    /* Appel de fonction : print("hello") */
+    | primary_expr TOKEN_LPAREN argument_list TOKEN_RPAREN {
+        $$ = create_call_node($1, $3);
+    }
+
+    /* Appel de méthode : admin::say_hello() ou self.base::inspect() */
+    | primary_expr TOKEN_DOUBLE_COLON TOKEN_IDENTIFIER TOKEN_LPAREN argument_list TOKEN_RPAREN {
+        $$ = create_method_call_node($1, $3, $5);
+    }
+    ;
 member_access:
     primary_expr TOKEN_DOT TOKEN_IDENTIFIER {
         $$ = create_member_access($1, $3);

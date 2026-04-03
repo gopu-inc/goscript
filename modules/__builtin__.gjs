@@ -1,62 +1,78 @@
 module __builtin__
 
 // =========================================================
-// 1. CHAÎNES
-// =========================================================
-
-pub fn len(s) {
-    ret strlen_c(s)
-}
-
-pub fn str_compare(s1, s2) {
-    ret strcmp_c(s1, s2) == 0
-}
-
-// =========================================================
-// 2. MATHÉMATIQUES
+// 1. MATHÉMATIQUES
 // =========================================================
 
 pub cn PI = 3.14159265359
 pub cn E  = 2.71828182846
 
 pub fn abs(n) {
-    if n < 0 { ret -n }
+    if n < 0 { 
+        ret -n 
+    }
     ret n
 }
 
 pub fn max(a, b) {
-    if a > b { ret a }
+    if a > b { 
+        ret a 
+    }
     ret b
 }
 
-pub fn now() {
-    ret time_c(0)
-}
-
-// =========================================================
-// 3. FICHIERS (Retrait de 'pub' devant struct pour le parser)
-// =========================================================
-
-struct File {
-    path: string,
-    handle: int,
-    is_open: bool
-}
-
-impl File {
-    pub fn open(path, mode) {
-        lt fd = fopen_c(path, mode)
-        ret new File {
-            path: path,
-            handle: fd,
-            is_open: fd != 0
-        }
+pub fn min(a, b) {
+    if a < b { 
+        ret a 
     }
+    ret b
+}
 
-    pub fn write(self, content) {
-        if self.is_open {
-            ret fputs_c(content, self.handle)
-        }
-        ret -1
+pub fn clamp(val, min_val, max_val) {
+    if val < min_val { ret min_val }
+    if val > max_val { ret max_val }
+    ret val
+}
+
+pub fn pow(base, exp) {
+    lt result = 1
+    lt i = 0
+    while i < exp {
+        result = result * base
+        i = i + 1
+    }
+    ret result
+}
+
+// =========================================================
+// 2. CHAÎNES ET LOGIQUE
+// =========================================================
+
+// L'opérateur == de Goscript compare déjà les chaînes en natif !
+pub fn str_compare(s1, s2) {
+    ret s1 == s2
+}
+
+// =========================================================
+// 3. UTILITAIRES DE COLLECTIONS
+// =========================================================
+
+pub fn each(collection, callback) {
+    for item in collection {
+        callback(item)
+    }
+}
+
+// =========================================================
+// 4. DÉBOGAGE
+// =========================================================
+
+pub fn assert(condition, message) {
+    if !condition {
+        print("[ERREUR ASSERTION] ")
+        println(message)
+    } else {
+        print("[OK] ")
+        println(message)
     }
 }

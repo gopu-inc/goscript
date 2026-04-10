@@ -1,1 +1,4 @@
-fn main() { ret 0 }
+fn main() {
+   retr = __floater(10)
+   println(retr)
+}

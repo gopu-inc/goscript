@@ -16,6 +16,10 @@ void yyerror(const char* msg);
 %%
 
  /* Mots-clés */
+/* Mots-clés async/await */
+"async"                 { return TOKEN_ASYNC; }
+"await"                 { return TOKEN_AWAIT; }
+"spawn"                 { return TOKEN_SPAWN; }
 "fn"                    { return TOKEN_FN; }
 "lt"                    { return TOKEN_LET; }
 "cn"                    { return TOKEN_CONST; }

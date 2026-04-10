@@ -93,10 +93,36 @@ ASTNode* program_root;
 %type <node> break_statement
 %type <node> nnl_statement jmp_statement
 %type <node> lambda_expr array_access
+%type <node> async_expr await_expr spawn_expr
+%type <node> async_function_decl
 %start program
 
 %%
+/* Fonction asynchrone */
+async_function_decl:
+    TOKEN_ASYNC TOKEN_FN TOKEN_IDENTIFIER TOKEN_LPAREN param_list TOKEN_RPAREN return_type TOKEN_LBRACE statement_list TOKEN_RBRACE {
+        ASTNode* node = create_function_node($3, $5, $7, $9);
+        node->function.is_async = 1;
+        $$ = node;
+    }
+    ;
 
+/* Expression await */
+await_expr:
+    TOKEN_AWAIT primary_expr {
+        $$ = create_await_node($2);
+    }
+    | TOKEN_AWAIT TOKEN_LBRACE statement_list TOKEN_RBRACE {
+        $$ = create_await_block_node($3);
+    }
+    ;
+
+/* Expression spawn (exécution parallèle) */
+spawn_expr:
+    TOKEN_SPAWN primary_expr {
+        $$ = create_spawn_node($2);
+    }
+    ;
 program:
     statement_list {
         program_root = create_program_node($1);
@@ -690,6 +716,8 @@ primary_expr:
     | member_access
     | lambda_expr
     | array_access
+    | await_expr
+    | spawn_expr
     ;
 
 member_access:

@@ -10,6 +10,12 @@ struct Environment;
 
 /* Types de nœuds AST */
 typedef enum {
+    NODE_ASYNC_FUNCTION,
+    NODE_AWAIT,
+    NODE_AWAIT_BLOCK,
+    NODE_SPAWN,
+    NODE_PROMISE,
+    NODE_FUTURE,
     NODE_PROGRAM,
     NODE_DICT,
     NODE_DICT_ACCESS,
@@ -235,9 +241,21 @@ struct {
             struct ASTNode* return_type;
             ASTNodeList* body;
             int is_main;
+            int is_async;
             int is_public;
         } function;
-        
+        struct {
+    struct ASTNode* expr;
+} await;
+
+struct {
+    ASTNodeList* body;
+} await_block;
+
+struct {
+    struct ASTNode* expr;
+} spawn;
+
         /* Variables */
         struct {
             char* name;
@@ -598,6 +616,14 @@ ASTNode* create_pattern_number(int value);
 ASTNode* create_pattern_string(char* value);
 ASTNode* create_pattern_ident(char* value);
 ASTNode* create_pattern_wildcard(void);
+
+
+
+/* Async/Await */
+ASTNode* create_async_function_node(char* name, ASTNodeList* params, ASTNode* return_type, ASTNodeList* body);
+ASTNode* create_await_node(ASTNode* expr);
+ASTNode* create_await_block_node(ASTNodeList* body);
+ASTNode* create_spawn_node(ASTNode* expr);
 
 /* ==================== Fonctions utilitaires ==================== */
 void free_ast(ASTNode* node);

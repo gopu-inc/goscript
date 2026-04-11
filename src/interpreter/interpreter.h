@@ -127,6 +127,13 @@ Promise* run_async_command(char* command);
 int poll_promise(Promise* p);
 Value await_promise(Promise* p, Environment* env);
 void run_event_loop(AsyncContext* ctx);
+
+// Fonctions pour les appels système asynchrones
+Value async_curl(char* url, Environment* env);
+Value async_wget(char* url, char* output, Environment* env);
+Value async_tar(char* flags, char* archive, Environment* env);
+Value async_git(char* command, Environment* env);
+
 // MODULE
 ModuleRegistry* init_module_registry(void);
 void register_module(ModuleRegistry* reg, LoadedModule* mod);

@@ -510,7 +510,35 @@ ASTNode* create_range_node(ASTNode* start, ASTNode* end, int inclusive) {
     node->range.inclusive = inclusive;
     return node;
 }
+// ==================== Async/Await Nodes ====================
 
+ASTNode* create_await_node(ASTNode* expr) {
+    ASTNode* node = malloc(sizeof(ASTNode));
+    node->type = NODE_AWAIT;
+    node->await.expr = expr;
+    return node;
+}
+
+ASTNode* create_await_block_node(ASTNodeList* body) {
+    ASTNode* node = malloc(sizeof(ASTNode));
+    node->type = NODE_AWAIT_BLOCK;
+    node->await_block.body = body;
+    return node;
+}
+
+ASTNode* create_spawn_node(ASTNode* expr) {
+    ASTNode* node = malloc(sizeof(ASTNode));
+    node->type = NODE_SPAWN;
+    node->spawn.expr = expr;
+    return node;
+}
+
+ASTNode* create_async_function_node(char* name, ASTNodeList* params, ASTNode* return_type, ASTNodeList* body) {
+    ASTNode* node = create_function_node(name, params, return_type, body);
+    node->type = NODE_ASYNC_FUNCTION;
+    node->function.is_async = 1;
+    return node;
+}
 ASTNode* create_type_node(char* name) {
     ASTNode* node = malloc(sizeof(ASTNode));
     node->type = NODE_TYPE_DEF;

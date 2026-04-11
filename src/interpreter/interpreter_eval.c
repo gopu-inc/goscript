@@ -28,7 +28,119 @@ typedef struct NnlContext {
 
 // Pile de contextes
 static NnlContext* nnl_stack = NULL;
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
+#include <fcntl.h>
 
+// Créer une promesse pour une commande shell
+Promise* create_promise(char* command) {
+    Promise* p = malloc(sizeof(Promise));
+    p->state = 0;  // pending
+    p->command = strdup(command);
+    p->pid = -1;
+    p->pipe_fd = -1;
+    p->next = NULL;
+    memset(&p->result, 0, sizeof(Value));
+    return p;
+}
+
+// Exécuter une commande en arrière-plan
+Promise* run_async_command(char* command) {
+    Promise* p = create_promise(command);
+    
+    int pipefd[2];
+    if (pipe(pipefd) == -1) {
+        p->state = 2;  // rejected
+        return p;
+    }
+    
+    pid_t pid = fork();
+    
+    if (pid == 0) {
+        // Processus enfant
+        close(pipefd[0]);
+        dup2(pipefd[1], STDOUT_FILENO);
+        dup2(pipefd[1], STDERR_FILENO);
+        close(pipefd[1]);
+        
+        execl("/bin/sh", "sh", "-c", command, NULL);
+        exit(1);
+    } else if (pid > 0) {
+        // Processus parent
+        close(pipefd[1]);
+        p->pid = pid;
+        p->pipe_fd = pipefd[0];
+        
+        // Mettre le pipe en mode non-bloquant
+        int flags = fcntl(pipefd[0], F_GETFL, 0);
+        fcntl(pipefd[0], F_SETFL, flags | O_NONBLOCK);
+    } else {
+        p->state = 2;  // rejected
+    }
+    
+    return p;
+}
+
+// Vérifier si une promesse est résolue
+int poll_promise(Promise* p) {
+    if (p->state != 0) return 1;
+    
+    int status;
+    pid_t result = waitpid(p->pid, &status, WNOHANG);
+    
+    if (result == p->pid) {
+        // Lire la sortie
+        char buffer[4096];
+        ssize_t n = read(p->pipe_fd, buffer, sizeof(buffer) - 1);
+        
+        if (n > 0) {
+            buffer[n] = '\0';
+            p->result.type = 2;  // string
+            p->result.string_val = strdup(buffer);
+        } else {
+            p->result.type = 0;  // int
+            p->result.int_val = WEXITSTATUS(status);
+        }
+        
+        close(p->pipe_fd);
+        p->state = 1;  // resolved
+        return 1;
+    }
+    
+    return 0;
+}
+
+// Attendre une promesse
+Value await_promise(Promise* p, Environment* env) {
+    // Boucle d'attente non-bloquante
+    while (p->state == 0) {
+        poll_promise(p);
+        usleep(10000);  // 10ms
+    }
+    
+    return p->result;
+}
+
+// Boucle d'événements
+void run_event_loop(AsyncContext* ctx) {
+    int pending = 1;
+    
+    while (pending) {
+        pending = 0;
+        
+        for (Promise* p = ctx->pending_promises; p; p = p->next) {
+            if (p->state == 0) {
+                poll_promise(p);
+                pending = 1;
+            }
+        }
+        
+        if (pending) {
+            usleep(10000);  // 10ms
+        }
+    }
+}
 
 // ==================== FONCTIONS UTILITAIRES ====================
 
@@ -1405,6 +1517,81 @@ case NODE_ARRAY: {
     arr_val.array_val.elements = node->array.elements;
     arr_val.array_val.count = node->array.elements ? node->array.elements->count : 0;
     return arr_val;
+}
+// Dans evaluate_expr(), ajouter :
+
+case NODE_AWAIT: {
+    Value val = evaluate_expr(node->await.expr, env);
+    
+    if (val.type == VALUE_TYPE_PROMISE) {
+        Promise* p = (Promise*)val.int_val;
+        result = await_promise(p, env);
+        free(p->command);
+        free(p);
+    } else if (val.type == 2 && val.string_val) {
+        // Si c'est une commande string, l'exécuter
+        Promise* p = run_async_command(val.string_val);
+        result = await_promise(p, env);
+        free(p->command);
+        free(p);
+    } else {
+        result = val;
+    }
+    break;
+}
+
+case NODE_AWAIT_BLOCK: {
+    // Exécuter un bloc de manière asynchrone
+    Promise* p = create_promise(NULL);
+    p->state = 1;  // resolved immediately
+    
+    // Exécuter le bloc dans un thread séparé (simplifié)
+    for (int i = 0; i < node->await_block.body->count; i++) {
+        evaluate_statement(node->await_block.body->nodes[i], env, NULL);
+    }
+    
+    result.type = VALUE_TYPE_PROMISE;
+    result.int_val = (int)p;
+    break;
+}
+
+case NODE_SPAWN: {
+    // Lancer une tâche en parallèle
+    Value task = evaluate_expr(node->spawn.expr, env);
+    
+    Promise* p = create_promise(NULL);
+    
+    if (task.type == 4) {  // function
+        // Exécuter la fonction dans un processus séparé
+        pid_t pid = fork();
+        
+        if (pid == 0) {
+            // Enfant
+            Environment* child_env = create_env(env);
+            Value result = {0};
+            
+            // Exécuter la fonction
+            for (int i = 0; i < task.func_val.node->function.body->count; i++) {
+                ASTNode* stmt = task.func_val.node->function.body->nodes[i];
+                if (stmt->type == NODE_RETURN) {
+                    result = evaluate_expr(stmt->return_stmt.value, child_env);
+                    break;
+                } else {
+                    evaluate_statement(stmt, child_env, NULL);
+                }
+            }
+            
+            // Envoyer le résultat au parent (via pipe)
+            exit(result.int_val);
+        } else {
+            p->pid = pid;
+            p->state = 0;
+        }
+    }
+    
+    result.type = VALUE_TYPE_PROMISE;
+    result.int_val = (int)p;
+    break;
 }
 
 case NODE_ARRAY_ACCESS: {

@@ -16,7 +16,6 @@ void yyerror(const char* msg);
 %%
 
  /* Mots-clés */
-/* Mots-clés async/await */
 "async"                 { return TOKEN_ASYNC; }
 "await"                 { return TOKEN_AWAIT; }
 "spawn"                 { return TOKEN_SPAWN; }
@@ -30,10 +29,10 @@ void yyerror(const char* msg);
 "while"                 { return TOKEN_WHILE; }
 "loop"                  { return TOKEN_LOOP; }
 "break"                 { return TOKEN_BREAK; }
+"continue"              { return TOKEN_CONTINUE; }
 "lambda"                { return TOKEN_LAMBDA; }
 "nnl"                   { return TOKEN_NNL; }
 "jmp"                   { return TOKEN_JMP; }
-"continue"              { return TOKEN_CONTINUE; }
 "import"                { return TOKEN_IMPORT; }
 "export"                { return TOKEN_EXPORT; }
 "packet"                { return TOKEN_PACKET; }
@@ -60,7 +59,7 @@ void yyerror(const char* msg);
 "timeout"               { return TOKEN_TIMEOUT; }
 "muts"                  { return TOKEN_MUTS; }
 "unsafe"                { return TOKEN_UNSAFE; }
-"_"                     { return TOKEN_UNDERSCORE; } // Pour le cas par défaut du match
+"_"                     { return TOKEN_UNDERSCORE; }
 
  /* Identifiants */
 [a-zA-Z_][a-zA-Z0-9_]*  { 

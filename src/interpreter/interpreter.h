@@ -92,6 +92,42 @@ typedef struct ModuleRegistry {
     int capacity;
 } ModuleRegistry;
 
+// Types de valeurs pour les promesses
+#define VALUE_TYPE_PROMISE 11
+#define VALUE_TYPE_FUTURE 12
+
+// Structure pour une promesse
+typedef struct Promise {
+    int state;           // 0: pending, 1: resolved, 2: rejected
+    Value result;
+    struct Promise* next;
+    char* command;       // Commande shell exécutée
+    int pid;             // PID du processus
+    int pipe_fd;         // Pipe pour lire la sortie
+} Promise;
+
+// Structure pour le contexte d'exécution async
+typedef struct AsyncContext {
+    struct Promise* pending_promises;
+    int promise_count;
+    struct Environment* env;
+    struct AsyncContext* next;
+} AsyncContext;
+
+// Structure pour Future
+typedef struct Future {
+    Promise* promise;
+    int is_ready;
+    Value* callback;
+} Future;
+
+// Fonctions async
+Promise* create_promise(char* command);
+Promise* run_async_command(char* command);
+int poll_promise(Promise* p);
+Value await_promise(Promise* p, Environment* env);
+void run_event_loop(AsyncContext* ctx);
+// MODULE
 ModuleRegistry* init_module_registry(void);
 void register_module(ModuleRegistry* reg, LoadedModule* mod);
 LoadedModule* find_module(ModuleRegistry* reg, char* path);

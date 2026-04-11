@@ -264,7 +264,6 @@ packet_decl:
     }
     ;
 
-// async_function_decl à la règle function_decl
 function_decl:
     TOKEN_FN TOKEN_IDENTIFIER TOKEN_LPAREN param_list TOKEN_RPAREN return_type TOKEN_LBRACE statement_list TOKEN_RBRACE {
         $$ = create_function_node($2, $4, $6, $8);
@@ -278,7 +277,13 @@ function_decl:
         node->function.is_async = 1;
         $$ = node;
     }
-    // Fonction fléchée
+    | TOKEN_PUB TOKEN_ASYNC TOKEN_FN TOKEN_IDENTIFIER TOKEN_LPAREN param_list TOKEN_RPAREN return_type TOKEN_LBRACE statement_list TOKEN_RBRACE {
+        ASTNode* node = create_function_node($4, $6, $8, $10);
+        node->type = NODE_ASYNC_FUNCTION;
+        node->function.is_async = 1;
+        node->function.is_public = 1;
+        $$ = node;
+    }
     | TOKEN_FN TOKEN_IDENTIFIER TOKEN_LPAREN param_list TOKEN_RPAREN return_type TOKEN_ARROW expression {
         ASTNodeList* body = create_node_list();
         ASTNode* return_stmt = create_return_node($8);

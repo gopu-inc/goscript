@@ -171,6 +171,44 @@ static NnlContext* find_nnl_context(char* label) {
     return NULL;
 }
 
+// Dans interpreter_eval.c
+
+Value async_curl(char* url, Environment* env) {
+    char command[1024];
+    snprintf(command, sizeof(command), "curl -s '%s'", url);
+    Promise* p = run_async_command(command);
+    
+    Value result;
+    result.type = VALUE_TYPE_PROMISE;
+    result.int_val = (int)p;
+    return result;
+}
+
+Value async_wget(char* url, char* output, Environment* env) {
+    char command[1024];
+    if (output) {
+        snprintf(command, sizeof(command), "wget -q -O '%s' '%s'", output, url);
+    } else {
+        snprintf(command, sizeof(command), "wget -q '%s'", url);
+    }
+    Promise* p = run_async_command(command);
+    
+    Value result;
+    result.type = VALUE_TYPE_PROMISE;
+    result.int_val = (int)p;
+    return result;
+}
+
+Value async_tar(char* flags, char* archive, Environment* env) {
+    char command[1024];
+    snprintf(command, sizeof(command), "tar %s '%s'", flags, archive);
+    Promise* p = run_async_command(command);
+    
+    Value result;
+    result.type = VALUE_TYPE_PROMISE;
+    result.int_val = (int)p;
+    return result;
+}
 
 // Enregistrer une implémentation
 void register_impl(char* struct_name, ASTNode* impl_node) {

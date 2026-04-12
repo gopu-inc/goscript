@@ -57,6 +57,36 @@ ASTNodeList* create_arg_list() {
 void add_arg(ASTNodeList* list, ASTNode* arg) {
     add_to_node_list(list, arg);
 }
+ASTNode* create_try_node(ASTNodeList* try_body, ASTNode* catch_block, ASTNode* finally_block) {
+    ASTNode* node = malloc(sizeof(ASTNode));
+    node->type = NODE_TRY;
+    node->try_stmt.try_body = try_body;
+    node->try_stmt.catch_block = catch_block;
+    node->try_stmt.finally_block = finally_block;
+    return node;
+}
+
+ASTNode* create_catch_node(char* error_var, ASTNodeList* body) {
+    ASTNode* node = malloc(sizeof(ASTNode));
+    node->type = NODE_CATCH;
+    node->catch_block.error_var = strdup(error_var);
+    node->catch_block.body = body;
+    return node;
+}
+
+ASTNode* create_finally_node(ASTNodeList* body) {
+    ASTNode* node = malloc(sizeof(ASTNode));
+    node->type = NODE_FINALLY;
+    node->finally_block.body = body;
+    return node;
+}
+
+ASTNode* create_throw_node(ASTNode* value) {
+    ASTNode* node = malloc(sizeof(ASTNode));
+    node->type = NODE_THROW;
+    node->throw_stmt.value = value;
+    return node;
+}
 
 ASTNodeList* create_param_list() {
     return create_node_list();

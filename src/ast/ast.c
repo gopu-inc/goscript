@@ -115,6 +115,44 @@ ASTNodeList* create_array_items() {
     return create_node_list();
 }
 
+ASTNode* parse_f_string(char* template) {
+    ASTNode* node = malloc(sizeof(ASTNode));
+    node->type = NODE_F_STRING;
+    node->f_string.template = strdup(template);
+    node->f_string.expressions = create_node_list();
+    
+    char* ptr = template;
+    while (*ptr) {
+        if (*ptr == '{' && ptr > template && *(ptr-1) != '\\') {
+            char* start = ptr + 1;
+            char* end = strchr(start, '}');
+            if (end) {
+                // Extraire l'expression
+                int len = end - start;
+                char* expr_str = malloc(len + 1);
+                strncpy(expr_str, start, len);
+                expr_str[len] = '\0';
+                
+                // Parser l'expression (simplifié - en vrai il faut appeler le parser)
+                // Pour l'instant, on crée un identifiant simple
+                ASTNode* expr = create_identifier_node(expr_str);
+                add_to_node_list(node->f_string.expressions, expr);
+                free(expr_str);
+                
+                ptr = end + 1;
+                continue;
+            }
+        }
+        ptr++;
+    }
+    
+    return node;
+}
+
+ASTNode* create_f_string_node(char* template) {
+    return parse_f_string(template);
+}
+
 void add_array_item(ASTNodeList* list, ASTNode* item) {
     add_to_node_list(list, item);
 }

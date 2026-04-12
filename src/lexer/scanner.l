@@ -59,6 +59,14 @@ void yyerror(const char* msg);
 "timeout"               { return TOKEN_TIMEOUT; }
 "muts"                  { return TOKEN_MUTS; }
 "unsafe"                { return TOKEN_UNSAFE; }
+/* Mots-clés pour try/catch */
+"try"                   { return TOKEN_TRY; }
+"catch"                 { return TOKEN_CATCH; }
+"finally"               { return TOKEN_FINALLY; }
+"throw"                 { return TOKEN_THROW; }
+"except"                { return TOKEN_EXCEPT; }
+"raise"                 { return TOKEN_RAISE; }
+
 "_"                     { return TOKEN_UNDERSCORE; }
 
  /* Types primitifs (mots-clés spéciaux) */

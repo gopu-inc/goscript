@@ -1694,8 +1694,6 @@ case NODE_ARRAY: {
     arr_val.array_val.count = node->array.elements ? node->array.elements->count : 0;
     return arr_val;
 }
-// Dans evaluate_expr(), ajouter :
-
 case NODE_AWAIT: {
     Value val = evaluate_expr(node->await.expr, env);
     
@@ -1705,11 +1703,28 @@ case NODE_AWAIT: {
         free(p->command);
         free(p);
     } else if (val.type == 2 && val.string_val) {
-        // Si c'est une commande string, l'exécuter
-        Promise* p = run_async_command(val.string_val);
+        // Échapper les guillemets simples
+        char* escaped = malloc(strlen(val.string_val) * 2 + 1);
+        char* src = val.string_val;
+        char* dst = escaped;
+        while (*src) {
+            if (*src == '\'') {
+                *dst++ = '\'';
+                *dst++ = '\\';
+                *dst++ = '\'';
+                *dst++ = '\'';
+            } else {
+                *dst++ = *src;
+            }
+            src++;
+        }
+        *dst = '\0';
+        
+        Promise* p = run_async_command(escaped);
         result = await_promise(p, env);
         free(p->command);
         free(p);
+        free(escaped);
     } else {
         result = val;
     }

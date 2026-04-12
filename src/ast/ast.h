@@ -11,6 +11,8 @@ struct Environment;
 /* Types de nœuds AST */
 typedef enum {
     NODE_ASYNC_FUNCTION,
+    NODE_F_STRING,
+    NODE_F_STRING_EXPR,
     NODE_AWAIT,
     NODE_AWAIT_BLOCK,
     NODE_SPAWN,
@@ -144,6 +146,11 @@ struct {
     struct ASTNode* dict;
     struct ASTNode* key;
 } dict_access;
+
+struct {
+    char* template;           // La chaîne template
+    ASTNodeList* expressions; // Les expressions à interpoler
+} f_string;
 
 /* Type dictionnaire */
 struct {

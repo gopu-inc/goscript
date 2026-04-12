@@ -1498,36 +1498,37 @@ case NODE_DICT_ACCESS: {
     }
     break;
 }
-case NODE_F_STRING: {
+        case NODE_F_STRING: {
     char* template = node->f_string.template;
     char* result_str = malloc(strlen(template) * 4 + 4096);
     char* ptr = template;
     char* out = result_str;
+    
+    // Fonction helper pour trimmer
+    #define TRIM(s) do { \
+        while (*s == ' ') s++; \
+        char* _end = s + strlen(s) - 1; \
+        while (_end > s && *_end == ' ') *_end-- = '\0'; \
+    } while(0)
     
     while (*ptr) {
         if (*ptr == '{' && (ptr == template || *(ptr-1) != '\\')) {
             char* start = ptr + 1;
             char* end = strchr(start, '}');
             if (end) {
-                // Extraire l'expression
                 int len = end - start;
                 char* expr_str = malloc(len + 1);
                 strncpy(expr_str, start, len);
                 expr_str[len] = '\0';
                 
-                // Trim les espaces au début et à la fin
+                // Trim
                 char* trimmed = expr_str;
-                while (*trimmed == ' ') trimmed++;
-                char* end_trim = trimmed + strlen(trimmed) - 1;
-                while (end_trim > trimmed && *end_trim == ' ') {
-                    *end_trim = '\0';
-                    end_trim--;
-                }
+                TRIM(trimmed);
                 
                 char val_str[1024] = "";
                 int evaluated = 0;
                 
-                // 1. Chercher comme variable simple (sans opérateurs)
+                // 1. Variable simple
                 Value* val = env_get(env, trimmed);
                 if (val) {
                     if (val->type == 0) {
@@ -1545,132 +1546,73 @@ case NODE_F_STRING: {
                     }
                 }
                 
-                // 2. Si pas évalué, chercher les opérateurs
+                // 2. Chercher tous les opérateurs
                 if (!evaluated) {
-                    // Fonction helper pour trimmer une chaîne
-                    char* trim_spaces(char* s) {
-                        while (*s == ' ') s++;
-                        char* end = s + strlen(s) - 1;
-                        while (end > s && *end == ' ') end--;
-                        *(end + 1) = '\0';
-                        return s;
-                    }
+                    char* op = NULL;
+                    char op_char = 0;
                     
-                    // Addition
-                    char* plus = strstr(trimmed, "+");
-                    if (plus) {
-                        char left_str[256], right_str[256];
-                        int left_len = plus - trimmed;
-                        strncpy(left_str, trimmed, left_len);
-                        left_str[left_len] = '\0';
-                        strcpy(right_str, plus + 1);
+                    // Priorité: +, -, *, /
+                    if ((op = strstr(trimmed, "*"))) op_char = '*';
+                    else if ((op = strstr(trimmed, "/"))) op_char = '/';
+                    else if ((op = strstr(trimmed, "+"))) op_char = '+';
+                    else if ((op = strstr(trimmed, "-"))) op_char = '-';
+                    
+                    if (op) {
+                        *op = '\0';
+                        char* left = trimmed;
+                        char* right = op + 1;
                         
-                        char* left = trim_spaces(left_str);
-                        char* right = trim_spaces(right_str);
+                        TRIM(left);
+                        TRIM(right);
                         
-                        // Essayer comme nombres
                         Value* v1 = env_get(env, left);
                         Value* v2 = env_get(env, right);
                         
-                        // Si ce sont des variables numériques
-                        if (v1 && v2 && v1->type == 0 && v2->type == 0) {
-                            sprintf(val_str, "%d", v1->int_val + v2->int_val);
-                            evaluated = 1;
-                        }
-                        // Si ce sont des chaînes
-                        else if (v1 && v2 && v1->type == 2 && v2->type == 2) {
-                            sprintf(val_str, "%s%s", v1->string_val, v2->string_val);
-                            evaluated = 1;
-                        }
-                        // Essayer comme nombres littéraux
-                        else {
-                            char* endptr;
-                            long n1 = strtol(left, &endptr, 10);
-                            long n2 = strtol(right, &endptr, 10);
-                            if ((n1 != 0 || left[0] == '0') && (n2 != 0 || right[0] == '0')) {
-                                sprintf(val_str, "%ld", n1 + n2);
+                        if (v1 && v2) {
+                            if (v1->type == 0 && v2->type == 0) {
+                                int l = v1->int_val;
+                                int r = v2->int_val;
+                                
+                                switch (op_char) {
+                                    case '+': sprintf(val_str, "%d", l + r); break;
+                                    case '-': sprintf(val_str, "%d", l - r); break;
+                                    case '*': sprintf(val_str, "%d", l * r); break;
+                                    case '/': 
+                                        if (r != 0) sprintf(val_str, "%d", l / r);
+                                        else sprintf(val_str, "ERR");
+                                        break;
+                                }
+                                evaluated = 1;
+                            } else if (v1->type == 2 && v2->type == 2 && op_char == '+') {
+                                sprintf(val_str, "%s%s", v1->string_val, v2->string_val);
                                 evaluated = 1;
                             }
                         }
-                    }
-                }
-                
-                // Multiplication
-                if (!evaluated) {
-                    char* mul = strstr(trimmed, "*");
-                    if (mul) {
-                        char left_str[256], right_str[256];
-                        int left_len = mul - trimmed;
-                        strncpy(left_str, trimmed, left_len);
-                        left_str[left_len] = '\0';
-                        strcpy(right_str, mul + 1);
                         
-                        char* left = left_str;
-                        char* right = right_str;
-                        while (*left == ' ') left++;
-                        while (*right == ' ') right++;
-                        
-                        Value* v1 = env_get(env, left);
-                        Value* v2 = env_get(env, right);
-                        
-                        if (v1 && v2 && v1->type == 0 && v2->type == 0) {
-                            sprintf(val_str, "%d", v1->int_val * v2->int_val);
-                            evaluated = 1;
+                        // Si pas de variables, essayer comme nombres
+                        if (!evaluated) {
+                            int l = atoi(left);
+                            int r = atoi(right);
+                            
+                            // Vérifier que c'est vraiment des nombres
+                            if ((l != 0 || left[0] == '0') && (r != 0 || right[0] == '0')) {
+                                switch (op_char) {
+                                    case '+': sprintf(val_str, "%d", l + r); break;
+                                    case '-': sprintf(val_str, "%d", l - r); break;
+                                    case '*': sprintf(val_str, "%d", l * r); break;
+                                    case '/': 
+                                        if (r != 0) sprintf(val_str, "%d", l / r);
+                                        else sprintf(val_str, "ERR");
+                                        break;
+                                }
+                                evaluated = 1;
+                            }
                         }
+                        
+                        *op = op_char; // Restaurer
                     }
                 }
                 
-                // Soustraction
-                if (!evaluated) {
-                    char* sub = strstr(trimmed, "-");
-                    if (sub) {
-                        char left_str[256], right_str[256];
-                        int left_len = sub - trimmed;
-                        strncpy(left_str, trimmed, left_len);
-                        left_str[left_len] = '\0';
-                        strcpy(right_str, sub + 1);
-                        
-                        char* left = left_str;
-                        char* right = right_str;
-                        while (*left == ' ') left++;
-                        while (*right == ' ') right++;
-                        
-                        Value* v1 = env_get(env, left);
-                        Value* v2 = env_get(env, right);
-                        
-                        if (v1 && v2 && v1->type == 0 && v2->type == 0) {
-                            sprintf(val_str, "%d", v1->int_val - v2->int_val);
-                            evaluated = 1;
-                        }
-                    }
-                }
-                
-                // Division
-                if (!evaluated) {
-                    char* div = strstr(trimmed, "/");
-                    if (div) {
-                        char left_str[256], right_str[256];
-                        int left_len = div - trimmed;
-                        strncpy(left_str, trimmed, left_len);
-                        left_str[left_len] = '\0';
-                        strcpy(right_str, div + 1);
-                        
-                        char* left = left_str;
-                        char* right = right_str;
-                        while (*left == ' ') left++;
-                        while (*right == ' ') right++;
-                        
-                        Value* v1 = env_get(env, left);
-                        Value* v2 = env_get(env, right);
-                        
-                        if (v1 && v2 && v1->type == 0 && v2->type == 0 && v2->int_val != 0) {
-                            sprintf(val_str, "%d", v1->int_val / v2->int_val);
-                            evaluated = 1;
-                        }
-                    }
-                }
-                
-                // Si toujours pas évalué
                 if (!evaluated) {
                     snprintf(val_str, sizeof(val_str), "{%s}", trimmed);
                 }

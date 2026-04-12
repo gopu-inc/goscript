@@ -1498,6 +1498,57 @@ case NODE_DICT_ACCESS: {
     }
     break;
 }
+case NODE_F_STRING: {
+    char* template = node->f_string.template;
+    char* result_str = malloc(strlen(template) * 2 + 1024);
+    char* ptr = template;
+    char* out = result_str;
+    int expr_idx = 0;
+    
+    while (*ptr) {
+        if (*ptr == '{' && ptr > template && *(ptr-1) != '\\') {
+            // Expression à interpoler
+            char* start = ptr + 1;
+            char* end = strchr(start, '}');
+            if (end && expr_idx < node->f_string.expressions->count) {
+                // Évaluer l'expression
+                ASTNode* expr = node->f_string.expressions->nodes[expr_idx++];
+                Value val = evaluate_expr(expr, env);
+                
+                // Convertir en string
+                char val_str[1024];
+                if (val.type == 0) {
+                    sprintf(val_str, "%d", val.int_val);
+                } else if (val.type == 1) {
+                    sprintf(val_str, "%f", val.float_val);
+                } else if (val.type == 2) {
+                    sprintf(val_str, "%s", val.string_val);
+                } else if (val.type == 3) {
+                    sprintf(val_str, "%s", val.bool_val ? "true" : "false");
+                } else {
+                    sprintf(val_str, "[object]");
+                }
+                
+                // Ajouter au résultat
+                strcpy(out, val_str);
+                out += strlen(val_str);
+                
+                ptr = end + 1;
+                continue;
+            }
+        } else if (*ptr == '\\' && *(ptr+1) == '{') {
+            // Échappement
+            ptr++;
+        }
+        
+        *out++ = *ptr++;
+    }
+    *out = '\0';
+    
+    result.type = 2;
+    result.string_val = result_str;
+    break;
+}
         // ==================== OPÉRATIONS UNAIRES ====================
         case NODE_UNARY_OP: {
             Value operand = evaluate_expr(node->unary.operand, env);

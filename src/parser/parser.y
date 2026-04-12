@@ -9,7 +9,7 @@ extern char* yytext;
 
 void yyerror(const char* msg);
 int yylex(void);
-
+ASTNode* parse_f_string(char* template)
 ASTNode* program_root;
 %}
 
@@ -101,31 +101,7 @@ ASTNode* program_root;
 %start program
 
 %%
-/* Fonction asynchrone */
-async_function_decl:
-    TOKEN_ASYNC TOKEN_FN TOKEN_IDENTIFIER TOKEN_LPAREN param_list TOKEN_RPAREN return_type TOKEN_LBRACE statement_list TOKEN_RBRACE {
-        ASTNode* node = create_function_node($3, $5, $7, $9);
-        node->function.is_async = 1;
-        $$ = node;
-    }
-    ;
 
-/* Expression await */
-await_expr:
-    TOKEN_AWAIT primary_expr {
-        $$ = create_await_node($2);
-    }
-    | TOKEN_AWAIT TOKEN_LBRACE statement_list TOKEN_RBRACE {
-        $$ = create_await_block_node($3);
-    }
-    ;
-
-/* Expression spawn (exécution parallèle) */
-spawn_expr:
-    TOKEN_SPAWN primary_expr {
-        $$ = create_spawn_node($2);
-    }
-    ;
 program:
     statement_list {
         program_root = create_program_node($1);
@@ -738,9 +714,9 @@ primary_expr:
 
 f_string:
     TOKEN_F_STRING {
-        // Parse le template pour extraire les expressions {...}
-        $$ = parse_f_string($1);
+        $$ = parse_f_string($<string>1);
     }
+    ;
 
 member_access:
     primary_expr TOKEN_DOT TOKEN_IDENTIFIER {
@@ -777,6 +753,37 @@ argument_list:
 array_expr:
     TOKEN_LBRACKET array_items TOKEN_RBRACKET {
         $$ = create_array_node($2);
+    }
+    ;
+/* Fonction asynchrone */
+async_function_decl:
+    TOKEN_ASYNC TOKEN_FN TOKEN_IDENTIFIER TOKEN_LPAREN param_list TOKEN_RPAREN return_type TOKEN_LBRACE statement_list TOKEN_RBRACE {
+        ASTNode* node = create_function_node($3, $5, $7, $9);
+        node->function.is_async = 1;
+        $$ = node;
+    }
+    ;
+
+/* Expression await */
+await_expr:
+    TOKEN_AWAIT primary_expr {
+        $$ = create_await_node($2);
+    }
+    | TOKEN_AWAIT TOKEN_LBRACE statement_list TOKEN_RBRACE {
+        $$ = create_await_block_node($3);
+    }
+    ;
+
+/* Expression spawn (exécution parallèle) */
+spawn_expr:
+    TOKEN_SPAWN primary_expr {
+        $$ = create_spawn_node($2);
+    }
+    ;
+async_expr:
+    TOKEN_ASYNC primary_expr {
+        // Pour l'instant, on traite comme une expression normale
+        $$ = $2;
     }
     ;
 

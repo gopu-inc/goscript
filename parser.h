@@ -145,7 +145,8 @@ extern int yydebug;
     TOKEN_IDENTIFIER = 346,        /* TOKEN_IDENTIFIER  */
     TOKEN_NUMBER = 347,            /* TOKEN_NUMBER  */
     TOKEN_FLOAT = 348,             /* TOKEN_FLOAT  */
-    TOKEN_STRING = 349             /* TOKEN_STRING  */
+    TOKEN_STRING = 349,            /* TOKEN_STRING  */
+    TOKEN_F_STRING = 350           /* TOKEN_F_STRING  */
   };
   typedef enum yytokentype yytoken_kind_t;
 #endif
@@ -162,7 +163,7 @@ union YYSTYPE
     struct ASTNode* node;
     struct ASTNodeList* node_list;
 
-#line 166 "parser.h"
+#line 167 "parser.h"
 
 };
 typedef union YYSTYPE YYSTYPE;

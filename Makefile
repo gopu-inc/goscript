@@ -1,26 +1,45 @@
 CC = gcc
-CFLAGS = -Wall -g -O2 -I./src -I./src/ast
-LDFLAGS = -lm -ldl -lffi -lreadline
+CFLAGS = -Wall -g -O0 -march=i586 -I./src -I./src/ast -I./src/interpreter
+LDFLAGS = -lm -ldl -lffi
 
-OBJS = scanner.o parser.o ast.o main.o interpreter_env.o interpreter_import.o interpreter_ffi.o interpreter_eval.o
+# Sources
+SCANNER_C = scanner.c
+PARSER_C = parser.c
+PARSER_H = parser.h
 
-all: gd
+SOURCES = $(SCANNER_C) $(PARSER_C) \
+          src/ast/ast.c \
+          src/main.c \
+          src/interpreter/interpreter_env.c \
+          src/interpreter/interpreter_import.c \
+          src/interpreter/interpreter_ffi.c \
+          src/interpreter/interpreter_eval.c
 
-gd: $(OBJS)
-	$(CC) $(OBJS) $(LDFLAGS) -o gd
+OBJECTS = scanner.o parser.o ast.o main.o \
+          interpreter_env.o interpreter_import.o \
+          interpreter_ffi.o interpreter_eval.o
 
-scanner.o: scanner.c parser.h
-	$(CC) $(CFLAGS) -c scanner.c -o scanner.o
+TARGET = gd
 
-parser.o: parser.c
-	$(CC) $(CFLAGS) -c parser.c -o parser.o
+all: $(SCANNER_C) $(PARSER_C) $(TARGET)
 
-ast.o: src/ast/ast.c parser.h
+# Scanner
+$(SCANNER_C): src/lexer/scanner.l
+	flex -o $(SCANNER_C) src/lexer/scanner.l
+
+# Parser
+$(PARSER_C) $(PARSER_H): src/parser/parser.y
+	bison -d -o $(PARSER_C) src/parser/parser.y
+
+# AST
+ast.o: src/ast/ast.c src/ast/ast.h
 	$(CC) $(CFLAGS) -c src/ast/ast.c -o ast.o
 
-main.o: src/main.c parser.h
+# Main
+main.o: src/main.c
 	$(CC) $(CFLAGS) -c src/main.c -o main.o
 
+# Interpreter
 interpreter_env.o: src/interpreter/interpreter_env.c src/interpreter/interpreter.h
 	$(CC) $(CFLAGS) -c src/interpreter/interpreter_env.c -o interpreter_env.o
 
@@ -33,9 +52,25 @@ interpreter_ffi.o: src/interpreter/interpreter_ffi.c src/interpreter/interpreter
 interpreter_eval.o: src/interpreter/interpreter_eval.c src/interpreter/interpreter.h
 	$(CC) $(CFLAGS) -c src/interpreter/interpreter_eval.c -o interpreter_eval.o
 
-clean:
-	rm -f scanner.c parser.c parser.h
-	rm -f *.o
-	rm -f gd
+# Scanner et Parser objects
+scanner.o: $(SCANNER_C) $(PARSER_H)
+	$(CC) $(CFLAGS) -c $(SCANNER_C) -o scanner.o
 
-.PHONY: all clean
+parser.o: $(PARSER_C) $(PARSER_H)
+	$(CC) $(CFLAGS) -c $(PARSER_C) -o parser.o
+
+# Link
+$(TARGET): $(OBJECTS)
+	$(CC) $(CFLAGS) $(OBJECTS) -o $(TARGET) $(LDFLAGS)
+
+clean:
+	rm -f $(SCANNER_C) $(PARSER_C) $(PARSER_H)
+	rm -f $(OBJECTS)
+	rm -f $(TARGET)
+
+install:
+	cp $(TARGET) /usr/local/bin/
+	mkdir -p /usr/local/lib/goscript
+	cp -r lib/* /usr/local/lib/goscript/ 2>/dev/null || true
+
+.PHONY: all clean install

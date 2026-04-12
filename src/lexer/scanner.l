@@ -360,9 +360,7 @@ f\'(\\.|[^'\\])*\'     {
 /*              FONCTIONS                       */
 /* ============================================ */
 
-int yywrap(void) {
-    return 1;
-}
+
 
 void cleanup_scanner(void) {
     /* Rien à faire pour l'instant */

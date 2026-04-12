@@ -1515,7 +1515,7 @@ case NODE_F_STRING: {
                 strncpy(expr_str, start, len);
                 expr_str[len] = '\0';
                 
-                // Trim les espaces
+                // Trim les espaces au début et à la fin
                 char* trimmed = expr_str;
                 while (*trimmed == ' ') trimmed++;
                 char* end_trim = trimmed + strlen(trimmed) - 1;
@@ -1527,7 +1527,7 @@ case NODE_F_STRING: {
                 char val_str[1024] = "";
                 int evaluated = 0;
                 
-                // 1. Chercher comme variable simple
+                // 1. Chercher comme variable simple (sans opérateurs)
                 Value* val = env_get(env, trimmed);
                 if (val) {
                     if (val->type == 0) {
@@ -1545,112 +1545,132 @@ case NODE_F_STRING: {
                     }
                 }
                 
-                // 2. Si pas une variable simple, essayer comme expression mathématique
+                // 2. Si pas évalué, chercher les opérateurs
                 if (!evaluated) {
+                    // Fonction helper pour trimmer une chaîne
+                    char* trim_spaces(char* s) {
+                        while (*s == ' ') s++;
+                        char* end = s + strlen(s) - 1;
+                        while (end > s && *end == ' ') end--;
+                        *(end + 1) = '\0';
+                        return s;
+                    }
+                    
                     // Addition
                     char* plus = strstr(trimmed, "+");
                     if (plus) {
-                        *plus = '\0';
-                        char* left_str = trimmed;
-                        char* right_str = plus + 1;
+                        char left_str[256], right_str[256];
+                        int left_len = plus - trimmed;
+                        strncpy(left_str, trimmed, left_len);
+                        left_str[left_len] = '\0';
+                        strcpy(right_str, plus + 1);
                         
-                        // Trim
-                        while (*left_str == ' ') left_str++;
-                        while (*right_str == ' ') right_str++;
+                        char* left = trim_spaces(left_str);
+                        char* right = trim_spaces(right_str);
                         
-                        // Essayer de parser comme nombres
-                        char* endptr;
-                        long left_num = strtol(left_str, &endptr, 10);
-                        long right_num = strtol(right_str, &endptr, 10);
+                        // Essayer comme nombres
+                        Value* v1 = env_get(env, left);
+                        Value* v2 = env_get(env, right);
                         
-                        // Si ce sont des nombres
-                        if (left_num != 0 || left_str[0] == '0') {
-                            sprintf(val_str, "%ld", left_num + right_num);
+                        // Si ce sont des variables numériques
+                        if (v1 && v2 && v1->type == 0 && v2->type == 0) {
+                            sprintf(val_str, "%d", v1->int_val + v2->int_val);
                             evaluated = 1;
-                        } else {
-                            // Sinon, chercher comme variables
-                            Value* v1 = env_get(env, left_str);
-                            Value* v2 = env_get(env, right_str);
-                            
-                            if (v1 && v2 && v1->type == 0 && v2->type == 0) {
-                                sprintf(val_str, "%d", v1->int_val + v2->int_val);
-                                evaluated = 1;
-                            } else if (v1 && v2 && v1->type == 2 && v2->type == 2) {
-                                sprintf(val_str, "%s%s", v1->string_val, v2->string_val);
+                        }
+                        // Si ce sont des chaînes
+                        else if (v1 && v2 && v1->type == 2 && v2->type == 2) {
+                            sprintf(val_str, "%s%s", v1->string_val, v2->string_val);
+                            evaluated = 1;
+                        }
+                        // Essayer comme nombres littéraux
+                        else {
+                            char* endptr;
+                            long n1 = strtol(left, &endptr, 10);
+                            long n2 = strtol(right, &endptr, 10);
+                            if ((n1 != 0 || left[0] == '0') && (n2 != 0 || right[0] == '0')) {
+                                sprintf(val_str, "%ld", n1 + n2);
                                 evaluated = 1;
                             }
                         }
-                        *plus = '+'; // Restaurer
                     }
                 }
                 
-                // 3. Soustraction
-                if (!evaluated) {
-                    char* minus = strstr(trimmed, "-");
-                    if (minus && minus != trimmed) {
-                        *minus = '\0';
-                        char* left_str = trimmed;
-                        char* right_str = minus + 1;
-                        
-                        while (*left_str == ' ') left_str++;
-                        while (*right_str == ' ') right_str++;
-                        
-                        Value* v1 = env_get(env, left_str);
-                        Value* v2 = env_get(env, right_str);
-                        
-                        if (v1 && v2 && v1->type == 0 && v2->type == 0) {
-                            sprintf(val_str, "%d", v1->int_val - v2->int_val);
-                            evaluated = 1;
-                        }
-                        *minus = '-';
-                    }
-                }
-                
-                // 4. Multiplication
+                // Multiplication
                 if (!evaluated) {
                     char* mul = strstr(trimmed, "*");
                     if (mul) {
-                        *mul = '\0';
-                        char* left_str = trimmed;
-                        char* right_str = mul + 1;
+                        char left_str[256], right_str[256];
+                        int left_len = mul - trimmed;
+                        strncpy(left_str, trimmed, left_len);
+                        left_str[left_len] = '\0';
+                        strcpy(right_str, mul + 1);
                         
-                        while (*left_str == ' ') left_str++;
-                        while (*right_str == ' ') right_str++;
+                        char* left = left_str;
+                        char* right = right_str;
+                        while (*left == ' ') left++;
+                        while (*right == ' ') right++;
                         
-                        Value* v1 = env_get(env, left_str);
-                        Value* v2 = env_get(env, right_str);
+                        Value* v1 = env_get(env, left);
+                        Value* v2 = env_get(env, right);
                         
                         if (v1 && v2 && v1->type == 0 && v2->type == 0) {
                             sprintf(val_str, "%d", v1->int_val * v2->int_val);
                             evaluated = 1;
                         }
-                        *mul = '*';
                     }
                 }
                 
-                // 5. Division
+                // Soustraction
+                if (!evaluated) {
+                    char* sub = strstr(trimmed, "-");
+                    if (sub) {
+                        char left_str[256], right_str[256];
+                        int left_len = sub - trimmed;
+                        strncpy(left_str, trimmed, left_len);
+                        left_str[left_len] = '\0';
+                        strcpy(right_str, sub + 1);
+                        
+                        char* left = left_str;
+                        char* right = right_str;
+                        while (*left == ' ') left++;
+                        while (*right == ' ') right++;
+                        
+                        Value* v1 = env_get(env, left);
+                        Value* v2 = env_get(env, right);
+                        
+                        if (v1 && v2 && v1->type == 0 && v2->type == 0) {
+                            sprintf(val_str, "%d", v1->int_val - v2->int_val);
+                            evaluated = 1;
+                        }
+                    }
+                }
+                
+                // Division
                 if (!evaluated) {
                     char* div = strstr(trimmed, "/");
                     if (div) {
-                        *div = '\0';
-                        char* left_str = trimmed;
-                        char* right_str = div + 1;
+                        char left_str[256], right_str[256];
+                        int left_len = div - trimmed;
+                        strncpy(left_str, trimmed, left_len);
+                        left_str[left_len] = '\0';
+                        strcpy(right_str, div + 1);
                         
-                        while (*left_str == ' ') left_str++;
-                        while (*right_str == ' ') right_str++;
+                        char* left = left_str;
+                        char* right = right_str;
+                        while (*left == ' ') left++;
+                        while (*right == ' ') right++;
                         
-                        Value* v1 = env_get(env, left_str);
-                        Value* v2 = env_get(env, right_str);
+                        Value* v1 = env_get(env, left);
+                        Value* v2 = env_get(env, right);
                         
                         if (v1 && v2 && v1->type == 0 && v2->type == 0 && v2->int_val != 0) {
                             sprintf(val_str, "%d", v1->int_val / v2->int_val);
                             evaluated = 1;
                         }
-                        *div = '/';
                     }
                 }
                 
-                // Si rien n'a fonctionné, garder l'expression telle quelle
+                // Si toujours pas évalué
                 if (!evaluated) {
                     snprintf(val_str, sizeof(val_str), "{%s}", trimmed);
                 }
@@ -1663,7 +1683,6 @@ case NODE_F_STRING: {
                 continue;
             }
         } else if (*ptr == '\\' && *(ptr+1) == '{') {
-            // Échappement de {
             ptr++;
         }
         

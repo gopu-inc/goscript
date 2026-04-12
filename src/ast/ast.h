@@ -11,6 +11,10 @@ struct Environment;
 /* Types de nœuds AST */
 typedef enum {
     NODE_ASYNC_FUNCTION,
+    NODE_TRY,
+    NODE_CATCH,
+    NODE_FINALLY,
+    NODE_THROW,
     NODE_F_STRING,
     NODE_F_STRING_EXPR,
     NODE_AWAIT,
@@ -151,6 +155,25 @@ struct {
     char* template;           // La chaîne template
     ASTNodeList* expressions; // Les expressions à interpoler
 } f_string;
+
+struct {
+    ASTNodeList* try_body;
+    struct ASTNode* catch_block;
+    struct ASTNode* finally_block;
+} try_stmt;
+
+struct {
+    char* error_var;
+    ASTNodeList* body;
+} catch_block;
+
+struct {
+    ASTNodeList* body;
+} finally_block;
+
+struct {
+    struct ASTNode* value;
+} throw_stmt;
 
 /* Type dictionnaire */
 struct {

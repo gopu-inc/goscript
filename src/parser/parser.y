@@ -9,7 +9,7 @@ extern char* yytext;
 
 void yyerror(const char* msg);
 int yylex(void);
-ASTNode* parse_f_string(char* template)
+ASTNode* parse_f_string(char* template);
 ASTNode* program_root;
 %}
 

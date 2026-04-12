@@ -77,9 +77,6 @@ void yyerror(const char* msg);
 "void"                  { yylval.string = strdup(yytext); return TOKEN_IDENTIFIER; }
 
 
-"Union"                 { return TOKEN_UNION; }
-"Optional"              { return TOKEN_OPTIONAL_TYPE; }
-"Any"                   { return TOKEN_ANY; }
  /* Identifiants */
 [a-zA-Z_][a-zA-Z0-9_]*  { 
     yylval.string = strdup(yytext); 

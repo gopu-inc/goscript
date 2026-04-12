@@ -636,4 +636,7 @@ ASTNode* create_spawn_node(ASTNode* expr);
 void free_ast(ASTNode* node);
 void print_ast(ASTNode* node, int depth);
 
+ASTNode* create_f_string_node(char* template);
+
+
 #endif /* AST_H */

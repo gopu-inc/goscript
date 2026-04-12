@@ -142,11 +142,17 @@ extern int yydebug;
     TOKEN_RBRACE = 343,            /* TOKEN_RBRACE  */
     TOKEN_LBRACKET = 344,          /* TOKEN_LBRACKET  */
     TOKEN_RBRACKET = 345,          /* TOKEN_RBRACKET  */
-    TOKEN_IDENTIFIER = 346,        /* TOKEN_IDENTIFIER  */
-    TOKEN_NUMBER = 347,            /* TOKEN_NUMBER  */
-    TOKEN_FLOAT = 348,             /* TOKEN_FLOAT  */
-    TOKEN_STRING = 349,            /* TOKEN_STRING  */
-    TOKEN_F_STRING = 350           /* TOKEN_F_STRING  */
+    TOKEN_TRY = 346,               /* TOKEN_TRY  */
+    TOKEN_CATCH = 347,             /* TOKEN_CATCH  */
+    TOKEN_FINALLY = 348,           /* TOKEN_FINALLY  */
+    TOKEN_THROW = 349,             /* TOKEN_THROW  */
+    TOKEN_EXCEPT = 350,            /* TOKEN_EXCEPT  */
+    TOKEN_RAISE = 351,             /* TOKEN_RAISE  */
+    TOKEN_IDENTIFIER = 352,        /* TOKEN_IDENTIFIER  */
+    TOKEN_NUMBER = 353,            /* TOKEN_NUMBER  */
+    TOKEN_FLOAT = 354,             /* TOKEN_FLOAT  */
+    TOKEN_STRING = 355,            /* TOKEN_STRING  */
+    TOKEN_F_STRING = 356           /* TOKEN_F_STRING  */
   };
   typedef enum yytokentype yytoken_kind_t;
 #endif
@@ -163,7 +169,7 @@ union YYSTYPE
     struct ASTNode* node;
     struct ASTNodeList* node_list;
 
-#line 167 "parser.h"
+#line 173 "parser.h"
 
 };
 typedef union YYSTYPE YYSTYPE;

@@ -1,8 +1,6 @@
-// Test qui fonctionne avec le parser actuel
-
-fn add(x, y) {
-    ret x + y
+async fn passs() {
+   ret await "echo 'hello'"
 }
 fn main() {
-    add(2, 3)
+   println(passs)
 }

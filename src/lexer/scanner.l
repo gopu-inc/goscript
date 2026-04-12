@@ -1,3 +1,4 @@
+
 %{
 #include <stdio.h>
 #include <stdlib.h>
@@ -59,7 +60,7 @@ void yyerror(const char* msg);
 "timeout"               { return TOKEN_TIMEOUT; }
 "muts"                  { return TOKEN_MUTS; }
 "unsafe"                { return TOKEN_UNSAFE; }
-/* Mots-clés pour try/catch */
+"_"                     { return TOKEN_UNDERSCORE; }
 "try"                   { return TOKEN_TRY; }
 "catch"                 { return TOKEN_CATCH; }
 "finally"               { return TOKEN_FINALLY; }
@@ -67,15 +68,12 @@ void yyerror(const char* msg);
 "except"                { return TOKEN_EXCEPT; }
 "raise"                 { return TOKEN_RAISE; }
 
-"_"                     { return TOKEN_UNDERSCORE; }
-
- /* Types primitifs (mots-clés spéciaux) */
+ /* Types primitifs */
 "int"                   { yylval.string = strdup(yytext); return TOKEN_IDENTIFIER; }
 "float"                 { yylval.string = strdup(yytext); return TOKEN_IDENTIFIER; }
 "string"                { yylval.string = strdup(yytext); return TOKEN_IDENTIFIER; }
 "bool"                  { yylval.string = strdup(yytext); return TOKEN_IDENTIFIER; }
 "void"                  { yylval.string = strdup(yytext); return TOKEN_IDENTIFIER; }
-
 
  /* Identifiants */
 [a-zA-Z_][a-zA-Z0-9_]*  { 
@@ -94,87 +92,6 @@ void yyerror(const char* msg);
     return TOKEN_FLOAT;
 }
 
-0x[0-9a-fA-F]+          {
-    yylval.number = strtol(yytext, NULL, 16);
-    return TOKEN_NUMBER;
-}
-
-0[0-7]+                 {
-    yylval.number = strtol(yytext, NULL, 8);
-    return TOKEN_NUMBER;
-}
-
-0b[01]+                 {
-    yylval.number = strtol(yytext + 2, NULL, 2);
-    return TOKEN_NUMBER;
-}
-
- /* f-strings avec guillemets doubles */
-f\"(\\.|[^"\\])*\"     {
-    int len = strlen(yytext);
-    char* raw = malloc(len - 2);
-    int i, j = 0;
-    for (i = 2; i < len - 1; i++) {
-        if (yytext[i] == '\\' && i+1 < len-1) {
-            i++;
-            switch (yytext[i]) {
-                case 'n': raw[j++] = '\n'; break;
-                case 't': raw[j++] = '\t'; break;
-                case 'r': raw[j++] = '\r'; break;
-                case '\\': raw[j++] = '\\'; break;
-                case '"': raw[j++] = '"'; break;
-                case '\'': raw[j++] = '\''; break;
-                case '{': raw[j++] = '{'; break;
-                case '}': raw[j++] = '}'; break;
-                case 'a': raw[j++] = '\a'; break;
-                case 'b': raw[j++] = '\b'; break;
-                case 'f': raw[j++] = '\f'; break;
-                case 'v': raw[j++] = '\v'; break;
-                case '0': raw[j++] = '\0'; break;
-                default: raw[j++] = yytext[i]; break;
-            }
-        } else {
-            raw[j++] = yytext[i];
-        }
-    }
-    raw[j] = '\0';
-    yylval.string = raw;
-    return TOKEN_F_STRING;
-}
-
- /* f-strings avec apostrophes simples */
-f\'(\\.|[^'\\])*\'     {
-    int len = strlen(yytext);
-    char* raw = malloc(len - 2);
-    int i, j = 0;
-    for (i = 2; i < len - 1; i++) {
-        if (yytext[i] == '\\' && i+1 < len-1) {
-            i++;
-            switch (yytext[i]) {
-                case 'n': raw[j++] = '\n'; break;
-                case 't': raw[j++] = '\t'; break;
-                case 'r': raw[j++] = '\r'; break;
-                case '\\': raw[j++] = '\\'; break;
-                case '\'': raw[j++] = '\''; break;
-                case '"': raw[j++] = '"'; break;
-                case '{': raw[j++] = '{'; break;
-                case '}': raw[j++] = '}'; break;
-                case 'a': raw[j++] = '\a'; break;
-                case 'b': raw[j++] = '\b'; break;
-                case 'f': raw[j++] = '\f'; break;
-                case 'v': raw[j++] = '\v'; break;
-                case '0': raw[j++] = '\0'; break;
-                default: raw[j++] = yytext[i]; break;
-            }
-        } else {
-            raw[j++] = yytext[i];
-        }
-    }
-    raw[j] = '\0';
-    yylval.string = raw;
-    return TOKEN_F_STRING;
-}
-
  /* Chaînes avec guillemets doubles */
 \"(\\.|[^"\\])*\"       {
     int len = strlen(yytext);
@@ -190,11 +107,6 @@ f\'(\\.|[^'\\])*\'     {
                 case '\\': str[j++] = '\\'; break;
                 case '"': str[j++] = '"'; break;
                 case '\'': str[j++] = '\''; break;
-                case 'a': str[j++] = '\a'; break;
-                case 'b': str[j++] = '\b'; break;
-                case 'f': str[j++] = '\f'; break;
-                case 'v': str[j++] = '\v'; break;
-                case '0': str[j++] = '\0'; break;
                 default: str[j++] = yytext[i]; break;
             }
         } else {
@@ -213,63 +125,6 @@ f\'(\\.|[^'\\])*\'     {
     int i, j = 0;
     for (i = 1; i < len - 1; i++) {
         if (yytext[i] == '\\' && i+1 < len-1) {
-            i++;
-            switch (yytext[i]) {
-                case 'n': str[j++] = '\n'; break;
-                case 't': str[j++] = '\t'; break;
-                case 'r': str[j++] = '\r'; break;
-                case '\\': str[j++] = '\\'; break;
-                case '\'': str[j++] = '\''; break;
-                case '"': str[j++] = '"'; break;
-                case 'a': str[j++] = '\a'; break;
-                case 'b': str[j++] = '\b'; break;
-                case 'f': str[j++] = '\f'; break;
-                case 'v': str[j++] = '\v'; break;
-                case '0': str[j++] = '\0'; break;
-                default: str[j++] = yytext[i]; break;
-            }
-        } else {
-            str[j++] = yytext[i];
-        }
-    }
-    str[j] = '\0';
-    yylval.string = str;
-    return TOKEN_STRING;
-}
-
- /* Chaînes multi-lignes (guillemets triples) */
-\"\"\"([^\"\\]|\\.)*\"\"\"     {
-    int len = strlen(yytext);
-    char* str = malloc(len - 5);
-    int i, j = 0;
-    for (i = 3; i < len - 3; i++) {
-        if (yytext[i] == '\\' && i+1 < len-3) {
-            i++;
-            switch (yytext[i]) {
-                case 'n': str[j++] = '\n'; break;
-                case 't': str[j++] = '\t'; break;
-                case 'r': str[j++] = '\r'; break;
-                case '\\': str[j++] = '\\'; break;
-                case '"': str[j++] = '"'; break;
-                case '\'': str[j++] = '\''; break;
-                default: str[j++] = yytext[i]; break;
-            }
-        } else {
-            str[j++] = yytext[i];
-        }
-    }
-    str[j] = '\0';
-    yylval.string = str;
-    return TOKEN_STRING;
-}
-
- /* Chaînes multi-lignes (apostrophes triples) */
-\'\'\'([^'\\]|\\.)*\'\'\'     {
-    int len = strlen(yytext);
-    char* str = malloc(len - 5);
-    int i, j = 0;
-    for (i = 3; i < len - 3; i++) {
-        if (yytext[i] == '\\' && i+1 < len-3) {
             i++;
             switch (yytext[i]) {
                 case 'n': str[j++] = '\n'; break;
@@ -310,11 +165,6 @@ f\'(\\.|[^'\\])*\'     {
 "&&"                    { return TOKEN_AND; }
 "||"                    { return TOKEN_OR; }
 "!"                     { return TOKEN_NOT; }
-"&"                     { return TOKEN_AMP; }
-"|"                     { return TOKEN_PIPE; }
-"^"                     { return TOKEN_XOR; }
-"<<"                    { return TOKEN_LSHIFT; }
-">>"                    { return TOKEN_RSHIFT; }
 "::"                    { return TOKEN_DOUBLE_COLON; }
 "."                     { return TOKEN_DOT; }
 ":"                     { return TOKEN_COLON; }
@@ -322,11 +172,6 @@ f\'(\\.|[^'\\])*\'     {
 ","                     { return TOKEN_COMMA; }
 "->"                    { return TOKEN_ARROW; }
 "=>"                    { return TOKEN_FAT_ARROW; }
-"|>"                    { return TOKEN_PIPE_FORWARD; }
-"?"                     { return TOKEN_OPTIONAL; }
-"??"                    { return TOKEN_COALESCE; }
-".."                    { return TOKEN_RANGE; }
-"..="                   { return TOKEN_RANGE_INC; }
 
  /* Délimiteurs */
 "("                     { return TOKEN_LPAREN; }
@@ -340,7 +185,7 @@ f\'(\\.|[^'\\])*\'     {
 "//".*                  { /* Ignorer */ }
 "/*"([^*]|\*+[^*/])*\*+"/" { /* Ignorer */ }
 
- /* Espaces - inclut \r pour Windows */
+ /* Espaces */
 [ \t\r\n]+              { /* Ignorer */ }
 
  /* Caractère invalide */
@@ -351,8 +196,3 @@ f\'(\\.|[^'\\])*\'     {
 }
 
 %%
-
-/* Fonction pour nettoyer la mémoire si nécessaire */
-void cleanup_scanner(void) {
-    /* Rien à faire pour l'instant */
-}

@@ -338,10 +338,6 @@ ASTNode* create_match_node(ASTNode* value, ASTNodeList* cases) {
 }
 
 
-// ast.c
-ASTNode* create_f_string_node(char* template) {
-    return parse_f_string(template);
-}
 
 ASTNode* create_match_case_node(ASTNode* pattern, ASTNode* value) {
     ASTNode* node = malloc(sizeof(ASTNode));

@@ -56,6 +56,8 @@ ASTNode* program_root;
 %token TOKEN_LPAREN TOKEN_RPAREN TOKEN_LBRACE TOKEN_RBRACE
 %token TOKEN_LBRACKET TOKEN_RBRACKET
 
+%token TOKEN_TRY TOKEN_CATCH TOKEN_FINALLY TOKEN_THROW TOKEN_EXCEPT TOKEN_RAISE
+
 /* Types */
 %token <string> TOKEN_IDENTIFIER
 %token <number> TOKEN_NUMBER
@@ -76,6 +78,7 @@ ASTNode* program_root;
          TOKEN_MULTIPLY_ASSIGN TOKEN_DIVIDE_ASSIGN TOKEN_MODULO_ASSIGN
 
 /* Non-terminals */
+%type <node> try_statement catch_block finally_block throw_statement
 %type <node> module_decl dict_access
 %type <node> continue_statement
 %type <node> import_constraints import_options
@@ -137,6 +140,8 @@ statement:
     | nnl_statement
     | jmp_statement
     | module_decl
+    | try_statement
+    | throw_statement
     | packet_decl
     | function_decl
     | struct_decl
@@ -162,6 +167,38 @@ nnl_statement:
     }
     ;
 
+try_statement:
+    TOKEN_TRY TOKEN_LBRACE statement_list TOKEN_RBRACE catch_block {
+        $$ = create_try_node($3, $5, NULL);
+    }
+    | TOKEN_TRY TOKEN_LBRACE statement_list TOKEN_RBRACE catch_block finally_block {
+        $$ = create_try_node($3, $5, $6);
+    }
+    ;
+
+catch_block:
+    TOKEN_CATCH TOKEN_LPAREN TOKEN_IDENTIFIER TOKEN_RPAREN TOKEN_LBRACE statement_list TOKEN_RBRACE {
+        $$ = create_catch_node($3, $6);
+    }
+    | TOKEN_EXCEPT TOKEN_LPAREN TOKEN_IDENTIFIER TOKEN_RPAREN TOKEN_LBRACE statement_list TOKEN_RBRACE {
+        $$ = create_catch_node($3, $6);
+    }
+    ;
+
+finally_block:
+    TOKEN_FINALLY TOKEN_LBRACE statement_list TOKEN_RBRACE {
+        $$ = create_finally_node($3);
+    }
+    ;
+
+throw_statement:
+    TOKEN_THROW expression {
+        $$ = create_throw_node($2);
+    }
+    | TOKEN_RAISE expression {
+        $$ = create_throw_node($2);
+    }
+    ;
 jmp_statement:
     TOKEN_JMP TOKEN_IDENTIFIER {
         $$ = create_jmp_node($2, NULL);

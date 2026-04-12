@@ -1498,46 +1498,74 @@ case NODE_DICT_ACCESS: {
     }
     break;
 }
+// Dans evaluate_expr, case NODE_F_STRING:
 case NODE_F_STRING: {
     char* template = node->f_string.template;
     char* result_str = malloc(strlen(template) * 2 + 1024);
     char* ptr = template;
     char* out = result_str;
-    int expr_idx = 0;
     
     while (*ptr) {
-        if (*ptr == '{' && ptr > template && *(ptr-1) != '\\') {
-            // Expression à interpoler
+        if (*ptr == '{' && (ptr == template || *(ptr-1) != '\\')) {
             char* start = ptr + 1;
             char* end = strchr(start, '}');
-            if (end && expr_idx < node->f_string.expressions->count) {
-                // Évaluer l'expression
-                ASTNode* expr = node->f_string.expressions->nodes[expr_idx++];
-                Value val = evaluate_expr(expr, env);
+            if (end) {
+                // Extraire l'expression
+                int len = end - start;
+                char* expr_str = malloc(len + 1);
+                strncpy(expr_str, start, len);
+                expr_str[len] = '\0';
+                
+                // Chercher la variable dans l'environnement
+                Value* val = env_get(env, expr_str);
                 
                 // Convertir en string
-                char val_str[1024];
-                if (val.type == 0) {
-                    sprintf(val_str, "%d", val.int_val);
-                } else if (val.type == 1) {
-                    sprintf(val_str, "%f", val.float_val);
-                } else if (val.type == 2) {
-                    sprintf(val_str, "%s", val.string_val);
-                } else if (val.type == 3) {
-                    sprintf(val_str, "%s", val.bool_val ? "true" : "false");
+                char val_str[1024] = "";
+                if (val) {
+                    if (val->type == 0) {
+                        sprintf(val_str, "%d", val->int_val);
+                    } else if (val->type == 1) {
+                        sprintf(val_str, "%f", val->float_val);
+                    } else if (val->type == 2) {
+                        sprintf(val_str, "%s", val->string_val);
+                    } else if (val->type == 3) {
+                        sprintf(val_str, "%s", val->bool_val ? "true" : "false");
+                    }
                 } else {
-                    sprintf(val_str, "[object]");
+                    // Essayer d'évaluer comme expression mathématique simple
+                    // x + y
+                    char* plus = strstr(expr_str, "+");
+                    if (plus) {
+                        char left[256], right[256];
+                        *plus = '\0';
+                        strcpy(left, expr_str);
+                        strcpy(right, plus + 1);
+                        
+                        // Trim
+                        while (*left == ' ') left++;
+                        while (*right == ' ') right++;
+                        
+                        Value* v1 = env_get(env, left);
+                        Value* v2 = env_get(env, right);
+                        
+                        if (v1 && v2 && v1->type == 0 && v2->type == 0) {
+                            sprintf(val_str, "%d", v1->int_val + v2->int_val);
+                        } else {
+                            sprintf(val_str, "?");
+                        }
+                    } else {
+                        sprintf(val_str, "{%s}", expr_str);
+                    }
                 }
                 
-                // Ajouter au résultat
                 strcpy(out, val_str);
                 out += strlen(val_str);
                 
+                free(expr_str);
                 ptr = end + 1;
                 continue;
             }
         } else if (*ptr == '\\' && *(ptr+1) == '{') {
-            // Échappement
             ptr++;
         }
         

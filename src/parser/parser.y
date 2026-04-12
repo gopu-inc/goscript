@@ -61,6 +61,8 @@ ASTNode* program_root;
 %token <number> TOKEN_NUMBER
 %token <float_val> TOKEN_FLOAT
 %token <string> TOKEN_STRING
+%token TOKEN_F_STRING
+
 
 /* Précédence des opérateurs (du plus faible au plus fort) */
 %left TOKEN_OR
@@ -95,6 +97,7 @@ ASTNode* program_root;
 %type <node> lambda_expr array_access
 %type <node> async_expr await_expr spawn_expr
 %type <node> async_function_decl
+%type <node> f_string
 %start program
 
 %%
@@ -730,7 +733,14 @@ primary_expr:
     | array_access
     | await_expr
     | spawn_expr
+    | f_string
     ;
+
+f_string:
+    TOKEN_F_STRING {
+        // Parse le template pour extraire les expressions {...}
+        $$ = parse_f_string($1);
+    }
 
 member_access:
     primary_expr TOKEN_DOT TOKEN_IDENTIFIER {

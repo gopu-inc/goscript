@@ -1,4 +1,3 @@
-
 %{
 #include <stdio.h>
 #include <stdlib.h>
@@ -16,7 +15,10 @@ void yyerror(const char* msg);
 
 %%
 
- /* Mots-clés */
+ /* ============================================ */
+ /*              MOTS-CLÉS                       */
+ /* ============================================ */
+
 "async"                 { return TOKEN_ASYNC; }
 "await"                 { return TOKEN_AWAIT; }
 "spawn"                 { return TOKEN_SPAWN; }
@@ -61,6 +63,8 @@ void yyerror(const char* msg);
 "muts"                  { return TOKEN_MUTS; }
 "unsafe"                { return TOKEN_UNSAFE; }
 "_"                     { return TOKEN_UNDERSCORE; }
+
+ /* Try/Catch/Throw */
 "try"                   { return TOKEN_TRY; }
 "catch"                 { return TOKEN_CATCH; }
 "finally"               { return TOKEN_FINALLY; }
@@ -68,20 +72,26 @@ void yyerror(const char* msg);
 "except"                { return TOKEN_EXCEPT; }
 "raise"                 { return TOKEN_RAISE; }
 
- /* Types primitifs */
+ /* Types primitifs (traités comme identifiants) */
 "int"                   { yylval.string = strdup(yytext); return TOKEN_IDENTIFIER; }
 "float"                 { yylval.string = strdup(yytext); return TOKEN_IDENTIFIER; }
 "string"                { yylval.string = strdup(yytext); return TOKEN_IDENTIFIER; }
 "bool"                  { yylval.string = strdup(yytext); return TOKEN_IDENTIFIER; }
 "void"                  { yylval.string = strdup(yytext); return TOKEN_IDENTIFIER; }
 
- /* Identifiants */
+ /* ============================================ */
+ /*              IDENTIFIANTS                    */
+ /* ============================================ */
+
 [a-zA-Z_][a-zA-Z0-9_]*  { 
     yylval.string = strdup(yytext); 
     return TOKEN_IDENTIFIER; 
 }
 
- /* Nombres */
+ /* ============================================ */
+ /*              NOMBRES                         */
+ /* ============================================ */
+
 [0-9]+                  {
     yylval.number = atoi(yytext);
     return TOKEN_NUMBER;
@@ -92,7 +102,83 @@ void yyerror(const char* msg);
     return TOKEN_FLOAT;
 }
 
- /* Chaînes avec guillemets doubles */
+0x[0-9a-fA-F]+          {
+    yylval.number = strtol(yytext, NULL, 16);
+    return TOKEN_NUMBER;
+}
+
+0[0-7]+                 {
+    yylval.number = strtol(yytext, NULL, 8);
+    return TOKEN_NUMBER;
+}
+
+0b[01]+                 {
+    yylval.number = strtol(yytext + 2, NULL, 2);
+    return TOKEN_NUMBER;
+}
+
+ /* ============================================ */
+ /*              F-STRINGS                       */
+ /* ============================================ */
+
+f\"(\\.|[^"\\])*\"     {
+    int len = strlen(yytext);
+    char* raw = malloc(len - 2);
+    int i, j = 0;
+    for (i = 2; i < len - 1; i++) {
+        if (yytext[i] == '\\' && i+1 < len-1) {
+            i++;
+            switch (yytext[i]) {
+                case 'n': raw[j++] = '\n'; break;
+                case 't': raw[j++] = '\t'; break;
+                case 'r': raw[j++] = '\r'; break;
+                case '\\': raw[j++] = '\\'; break;
+                case '"': raw[j++] = '"'; break;
+                case '\'': raw[j++] = '\''; break;
+                case '{': raw[j++] = '{'; break;
+                case '}': raw[j++] = '}'; break;
+                default: raw[j++] = yytext[i]; break;
+            }
+        } else {
+            raw[j++] = yytext[i];
+        }
+    }
+    raw[j] = '\0';
+    yylval.string = raw;
+    return TOKEN_F_STRING;
+}
+
+f\'(\\.|[^'\\])*\'     {
+    int len = strlen(yytext);
+    char* raw = malloc(len - 2);
+    int i, j = 0;
+    for (i = 2; i < len - 1; i++) {
+        if (yytext[i] == '\\' && i+1 < len-1) {
+            i++;
+            switch (yytext[i]) {
+                case 'n': raw[j++] = '\n'; break;
+                case 't': raw[j++] = '\t'; break;
+                case 'r': raw[j++] = '\r'; break;
+                case '\\': raw[j++] = '\\'; break;
+                case '\'': raw[j++] = '\''; break;
+                case '"': raw[j++] = '"'; break;
+                case '{': raw[j++] = '{'; break;
+                case '}': raw[j++] = '}'; break;
+                default: raw[j++] = yytext[i]; break;
+            }
+        } else {
+            raw[j++] = yytext[i];
+        }
+    }
+    raw[j] = '\0';
+    yylval.string = raw;
+    return TOKEN_F_STRING;
+}
+
+ /* ============================================ */
+ /*              CHAÎNES                        */
+ /* ============================================ */
+
 \"(\\.|[^"\\])*\"       {
     int len = strlen(yytext);
     char* str = malloc(len - 1);
@@ -118,7 +204,6 @@ void yyerror(const char* msg);
     return TOKEN_STRING;
 }
 
- /* Chaînes avec apostrophes simples */
 \'(\\.|[^'\\])*\'       {
     int len = strlen(yytext);
     char* str = malloc(len - 1);
@@ -144,7 +229,59 @@ void yyerror(const char* msg);
     return TOKEN_STRING;
 }
 
- /* Opérateurs */
+ /* Chaînes multi-lignes */
+\"\"\"([^\"\\]|\\.)*\"\"\"     {
+    int len = strlen(yytext);
+    char* str = malloc(len - 5);
+    int i, j = 0;
+    for (i = 3; i < len - 3; i++) {
+        if (yytext[i] == '\\' && i+1 < len-3) {
+            i++;
+            switch (yytext[i]) {
+                case 'n': str[j++] = '\n'; break;
+                case 't': str[j++] = '\t'; break;
+                case 'r': str[j++] = '\r'; break;
+                case '\\': str[j++] = '\\'; break;
+                case '"': str[j++] = '"'; break;
+                default: str[j++] = yytext[i]; break;
+            }
+        } else {
+            str[j++] = yytext[i];
+        }
+    }
+    str[j] = '\0';
+    yylval.string = str;
+    return TOKEN_STRING;
+}
+
+\'\'\'([^'\\]|\\.)*\'\'\'     {
+    int len = strlen(yytext);
+    char* str = malloc(len - 5);
+    int i, j = 0;
+    for (i = 3; i < len - 3; i++) {
+        if (yytext[i] == '\\' && i+1 < len-3) {
+            i++;
+            switch (yytext[i]) {
+                case 'n': str[j++] = '\n'; break;
+                case 't': str[j++] = '\t'; break;
+                case 'r': str[j++] = '\r'; break;
+                case '\\': str[j++] = '\\'; break;
+                case '\'': str[j++] = '\''; break;
+                default: str[j++] = yytext[i]; break;
+            }
+        } else {
+            str[j++] = yytext[i];
+        }
+    }
+    str[j] = '\0';
+    yylval.string = str;
+    return TOKEN_STRING;
+}
+
+ /* ============================================ */
+ /*              OPÉRATEURS                      */
+ /* ============================================ */
+
 "+"                     { return TOKEN_PLUS; }
 "-"                     { return TOKEN_MINUS; }
 "*"                     { return TOKEN_MULTIPLY; }
@@ -165,6 +302,11 @@ void yyerror(const char* msg);
 "&&"                    { return TOKEN_AND; }
 "||"                    { return TOKEN_OR; }
 "!"                     { return TOKEN_NOT; }
+"&"                     { return TOKEN_AMP; }
+"|"                     { return TOKEN_PIPE; }
+"^"                     { return TOKEN_XOR; }
+"<<"                    { return TOKEN_LSHIFT; }
+">>"                    { return TOKEN_RSHIFT; }
 "::"                    { return TOKEN_DOUBLE_COLON; }
 "."                     { return TOKEN_DOT; }
 ":"                     { return TOKEN_COLON; }
@@ -172,8 +314,16 @@ void yyerror(const char* msg);
 ","                     { return TOKEN_COMMA; }
 "->"                    { return TOKEN_ARROW; }
 "=>"                    { return TOKEN_FAT_ARROW; }
+"|>"                    { return TOKEN_PIPE_FORWARD; }
+"?"                     { return TOKEN_OPTIONAL; }
+"??"                    { return TOKEN_COALESCE; }
+".."                    { return TOKEN_RANGE; }
+"..="                   { return TOKEN_RANGE_INC; }
 
- /* Délimiteurs */
+ /* ============================================ */
+ /*              DÉLIMITEURS                     */
+ /* ============================================ */
+
 "("                     { return TOKEN_LPAREN; }
 ")"                     { return TOKEN_RPAREN; }
 "{"                     { return TOKEN_LBRACE; }
@@ -181,14 +331,23 @@ void yyerror(const char* msg);
 "["                     { return TOKEN_LBRACKET; }
 "]"                     { return TOKEN_RBRACKET; }
 
- /* Commentaires */
+ /* ============================================ */
+ /*              COMMENTAIRES                    */
+ /* ============================================ */
+
 "//".*                  { /* Ignorer */ }
 "/*"([^*]|\*+[^*/])*\*+"/" { /* Ignorer */ }
 
- /* Espaces */
+ /* ============================================ */
+ /*              ESPACES                         */
+ /* ============================================ */
+
 [ \t\r\n]+              { /* Ignorer */ }
 
- /* Caractère invalide */
+ /* ============================================ */
+ /*              CARACTÈRE INVALIDE              */
+ /* ============================================ */
+
 .                       { 
     fprintf(stderr, "Error at line %d: Invalid character '%c' (ASCII %d)\n", 
             yylineno, yytext[0], yytext[0]);
@@ -196,3 +355,15 @@ void yyerror(const char* msg);
 }
 
 %%
+
+/* ============================================ */
+/*              FONCTIONS                       */
+/* ============================================ */
+
+int yywrap(void) {
+    return 1;
+}
+
+void cleanup_scanner(void) {
+    /* Rien à faire pour l'instant */
+}

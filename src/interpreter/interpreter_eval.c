@@ -33,6 +33,14 @@ static NnlContext* nnl_stack = NULL;
 #include <unistd.h>
 #include <fcntl.h>
 
+typedef struct {
+    Value error;
+    int is_thrown;
+    jmp_buf env;
+} ExceptionContext;
+
+static ExceptionContext* current_exception = NULL;
+
 // Créer une promesse pour une commande shell
 Promise* create_promise(char* command) {
     Promise* p = malloc(sizeof(Promise));
@@ -2110,6 +2118,70 @@ case NODE_NNL: {
         
         // Si c'est un return, propager
         return 1;
+    }
+    return 0;
+}
+// Structure pour les exceptions
+case NODE_TRY: {
+    ExceptionContext ctx;
+    ctx.is_thrown = 0;
+    ctx.error.type = 0;
+    ctx.error.int_val = 0;
+    
+    ExceptionContext* old_ctx = current_exception;
+    current_exception = &ctx;
+    
+    if (setjmp(ctx.env) == 0) {
+        // Exécuter le bloc try
+        for (int i = 0; i < node->try_stmt.try_body->count; i++) {
+            int ret = evaluate_statement(node->try_stmt.try_body->nodes[i], env, current_file);
+            if (ret == 1) {
+                current_exception = old_ctx;
+                return 1;
+            }
+        }
+    } else {
+        // Exception attrapée
+        if (node->try_stmt.catch_block) {
+            ASTNode* catch_node = node->try_stmt.catch_block;
+            env_set(env, catch_node->catch_block.error_var, ctx.error);
+            for (int i = 0; i < catch_node->catch_block.body->count; i++) {
+                evaluate_statement(catch_node->catch_block.body->nodes[i], env, current_file);
+            }
+        }
+    }
+    
+    // Finally block
+    if (node->try_stmt.finally_block) {
+        for (int i = 0; i < node->try_stmt.finally_block->finally_block.body->count; i++) {
+            evaluate_statement(node->try_stmt.finally_block->finally_block.body->nodes[i], env, current_file);
+        }
+    }
+    
+    current_exception = old_ctx;
+    
+    // Si l'exception n'a pas été attrapée, la propager
+    if (ctx.is_thrown && !node->try_stmt.catch_block) {
+        if (current_exception) {
+            current_exception->is_thrown = 1;
+            current_exception->error = ctx.error;
+            longjmp(current_exception->env, 1);
+        }
+    }
+    
+    return 0;
+}
+
+case NODE_THROW: {
+    Value error = evaluate_expr(node->throw_stmt.value, env);
+    if (current_exception) {
+        current_exception->is_thrown = 1;
+        current_exception->error = error;
+        longjmp(current_exception->env, 1);
+    } else {
+        fprintf(stderr, "Uncaught exception: ");
+        print_value(error, 1);
+        exit(1);
     }
     return 0;
 }

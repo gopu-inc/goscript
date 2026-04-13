@@ -21,7 +21,6 @@
 # COMPILER SOURCE - Vendored (excluded from stats)
 # ============================================
 
-*.c linguist-vendored
 *.h linguist-vendored
 *.l linguist-vendored
 *.y linguist-vendored

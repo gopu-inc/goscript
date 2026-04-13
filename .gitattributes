@@ -29,7 +29,9 @@
 *.so linguist-generated
 *.a linguist-generated
 *.dylib linguist-generated
-*.shell linguist-vendored
+*.sh linguist-vendored
+genv/genv linguist-vendored
+*/*.sh linguist-vendored
 
 # Parser generated files
 parser.c linguist-generated

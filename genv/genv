@@ -1,0 +1,744 @@
+#!/bin/bash
+# genv - Goscript Virtual Environment Manager v2.0
+
+export GENV_VERSION="2.0.0"
+export GOSCRIPT_HOME="${GOSCRIPT_HOME:-$HOME/.goscript}"
+export GENV_DIR="${GENV_DIR:-$HOME/.genv}"
+export GENV_ENVS_DIR="$GENV_DIR/envs"
+
+# Couleurs pour le prompt
+GENV_PROMPT_COLOR="${GENV_PROMPT_COLOR:-36}"  # Cyan par défaut
+
+# Fonction d'aide
+show_help() {
+    cat << EOF
+[0;36mgenv $GENV_VERSION[0m - Goscript Virtual Environment Manager
+
+[0;32mUsage:[0m
+    genv <command> [options]
+
+[0;32mCommands:[0m
+    [1;33mcreate[0m <name> [--path <dir>]     Create a new virtual environment
+    [1;33mactivate[0m <name>                 Activate a virtual environment
+    [1;33mdeactivate[0m                      Deactivate the current environment
+    [1;33mlist[0m                            List all virtual environments
+    [1;33mremove[0m <name>                   Remove a virtual environment
+    [1;33mclone[0m <source> <target>         Clone an existing environment
+    [1;33mexport[0m <name> [--file <file>]   Export environment to file
+    [1;33mimport[0m <file> [--name <name>]   Import environment from file
+    [1;33minfo[0m [name]                     Show environment information
+    [1;33mpackages[0m <name>                  List installed packages
+    [1;33minstall[0m <package>               Install package in current env
+    [1;33muninstall[0m <package>             Uninstall package from current env
+    [1;33mrun[0m <name> <script>             Run script in environment
+    [1;33mshell[0m <name>                    Start shell in environment
+    [1;33mwhich[0m [name]                    Show environment path
+    [1;33mversion[0m                         Show genv version
+
+[0;32mEnvironment Variables:[0m
+    GOSCRIPT_HOME    Goscript installation directory (default: ~/.goscript)
+    GENV_DIR         genv directory (default: ~/.genv)
+    GENV_ENV         Current active environment name
+
+EOF
+}
+
+# Initialiser les répertoires
+init_genv() {
+    mkdir -p "$GENV_ENVS_DIR"
+    mkdir -p "$GENV_DIR/bin"
+    mkdir -p "$GENV_DIR/cache"
+    mkdir -p "$GENV_DIR/tmp"
+    mkdir -p "$GENV_DIR/log"
+}
+
+# Créer la structure complète d'un environnement
+create_env_structure() {
+    local env_path="$1"
+    
+    # Structure complète comme un système Unix
+    mkdir -p "$env_path"/{bin,sbin,xbin,lib,lib64,include,share,etc,var,proc,sys,dev,tmp,run,log}
+    mkdir -p "$env_path/lib/goscript"
+    mkdir -p "$env_path/lib/std"
+    mkdir -p "$env_path/share/man"
+    mkdir -p "$env_path/share/doc"
+    mkdir -p "$env_path/etc/genv"
+    mkdir -p "$env_path/var/cache"
+    mkdir -p "$env_path/var/log"
+    mkdir -p "$env_path/var/run"
+    mkdir -p "$env_path/proc/self"
+    mkdir -p "$env_path/sys/class"
+    mkdir -p "$env_path/dev/shm"
+    mkdir -p "$env_path/tmp/genv"
+    mkdir -p "$env_path/src/packages"
+    
+    # Fichiers spéciaux pour simuler /proc
+    echo "$$" > "$env_path/proc/self/pid"
+    echo "$env_path" > "$env_path/proc/self/cwd"
+    echo "genv:$GENV_VERSION" > "$env_path/proc/version"
+    
+    # Fichier environment
+    cat > "$env_path/etc/genv/environment" << EOF
+# genv environment configuration
+GENV_ENV_NAME="$name"
+GENV_ENV_PATH="$env_path"
+GENV_VERSION="$GENV_VERSION"
+GOSCRIPT_HOME="$GOSCRIPT_HOME"
+PATH="$env_path/bin:$env_path/xbin:$env_path/sbin:$PATH"
+LD_LIBRARY_PATH="$env_path/lib:$env_path/lib64:$LD_LIBRARY_PATH"
+GOSCRIPT_PATH="$env_path/lib/goscript:$env_path/src:$GOSCRIPT_PATH"
+MANPATH="$env_path/share/man:$MANPATH"
+PKG_CONFIG_PATH="$env_path/lib/pkgconfig:$PKG_CONFIG_PATH"
+EOF
+}
+
+# Créer un nouvel environnement
+create_env() {
+    local name="$1"
+    local custom_path=""
+    
+    shift
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --path)
+                custom_path="$2"
+                shift 2
+                ;;
+            *)
+                shift
+                ;;
+        esac
+    done
+    
+    if [[ -z "$name" ]]; then
+        echo -e "\033[0;31mError: Environment name required\033[0m"
+        return 1
+    fi
+    
+    # Valider le nom (lettres, chiffres, underscore, tiret)
+    if [[ ! "$name" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+        echo -e "\033[0;31mError: Invalid environment name. Use only letters, numbers, underscore and dash\033[0m"
+        return 1
+    fi
+    
+    local env_path
+    if [[ -n "$custom_path" ]]; then
+        env_path="$custom_path"
+    else
+        env_path="$GENV_ENVS_DIR/$name"
+    fi
+    
+    if [[ -d "$env_path" ]]; then
+        echo -e "\033[0;31mError: Environment '$name' already exists at $env_path\033[0m"
+        return 1
+    fi
+    
+    echo -e "\033[0;36mCreating virtual environment '$name'...\033[0m"
+    
+    # Créer la structure complète
+    create_env_structure "$env_path"
+    
+    # Créer le fichier de configuration TOML
+    cat > "$env_path/genv.toml" << EOF
+# genv configuration for $name
+[environment]
+name = "$name"
+created = "$(date -Iseconds)"
+version = "$GENV_VERSION"
+path = "$env_path"
+
+[paths]
+bin = "bin"
+sbin = "sbin"
+xbin = "xbin"
+lib = "lib"
+src = "src"
+etc = "etc"
+var = "var"
+
+[settings]
+auto_activate = false
+inherit_global = true
+isolated = true
+prompt_color = "$GENV_PROMPT_COLOR"
+
+[packages]
+installed = []
+sources = []
+
+[services]
+enabled = []
+running = []
+EOF
+    
+    # Créer le script d'activation (compatible bash/zsh/fish)
+    cat > "$env_path/bin/activate" << 'EOF'
+#!/bin/bash
+# Activation script for genv environment
+
+# Détecter le shell
+GENV_SHELL="$(basename "$SHELL")"
+
+_deactivate() {
+    # Restaurer les variables d'environnement
+    if [[ -n "$_OLD_GENV_PATH" ]]; then
+        export PATH="$_OLD_GENV_PATH"
+        unset _OLD_GENV_PATH
+    fi
+    
+    if [[ -n "$_OLD_GENV_LD_LIBRARY_PATH" ]]; then
+        export LD_LIBRARY_PATH="$_OLD_GENV_LD_LIBRARY_PATH"
+        unset _OLD_GENV_LD_LIBRARY_PATH
+    fi
+    
+    if [[ -n "$_OLD_GENV_MANPATH" ]]; then
+        export MANPATH="$_OLD_GENV_MANPATH"
+        unset _OLD_GENV_MANPATH
+    fi
+    
+    if [[ -n "$_OLD_GENV_PS1" ]]; then
+        export PS1="$_OLD_GENV_PS1"
+        unset _OLD_GENV_PS1
+    fi
+    
+    if [[ -n "$GENV_ENV" ]]; then
+        unset GENV_ENV
+    fi
+    
+    if [[ -n "$GENV_ENV_PATH" ]]; then
+        unset GENV_ENV_PATH
+    fi
+    
+    if [[ -n "$GENV_ENV_NAME" ]]; then
+        unset GENV_ENV_NAME
+    fi
+    
+    # Supprimer cette fonction
+    unset -f _deactivate
+    
+    echo -e "\033[0;32mgenv:\033[0m Deactivated environment"
+}
+
+# Sauvegarder l'état actuel
+_OLD_GENV_PATH="$PATH"
+_OLD_GENV_LD_LIBRARY_PATH="$LD_LIBRARY_PATH"
+_OLD_GENV_MANPATH="$MANPATH"
+_OLD_GENV_PS1="$PS1"
+
+# Définir le nouvel environnement
+export GENV_ENV="__ENV_NAME__"
+export GENV_ENV_PATH="__ENV_PATH__"
+export GENV_ENV_NAME="__ENV_NAME__"
+export PATH="__ENV_PATH__/bin:__ENV_PATH__/xbin:__ENV_PATH__/sbin:$PATH"
+export LD_LIBRARY_PATH="__ENV_PATH__/lib:__ENV_PATH__/lib64:${LD_LIBRARY_PATH:-}"
+export MANPATH="__ENV_PATH__/share/man:${MANPATH:-}"
+export GOSCRIPT_PATH="__ENV_PATH__/lib/goscript:__ENV_PATH__/src:${GOSCRIPT_PATH:-}"
+export GENV_ACTIVE="1"
+
+# Modifier le prompt selon le shell
+if [[ -z "$GENV_DISABLE_PROMPT" ]]; then
+    case "$GENV_SHELL" in
+        zsh)
+            # Pour ZSH
+            if [[ -n "$ZSH_VERSION" ]]; then
+                autoload -U colors && colors
+                PS1="(%{$fg[cyan]%}__ENV_NAME__%{$reset_color%}) $PS1"
+            else
+                PS1="(\033[0;36m__ENV_NAME__\033[0m) $PS1"
+            fi
+            ;;
+        fish)
+            # Pour Fish (à sourcer différemment)
+            echo "For fish shell, use: source __ENV_PATH__/bin/activate.fish"
+            ;;
+        *)
+            # Bash et autres
+            PS1="(\033[0;36m__ENV_NAME__\033[0m) $PS1"
+            ;;
+    esac
+fi
+
+# Alias pour deactivate
+alias deactivate='_deactivate'
+
+# Fonction pour exécuter une commande dans l'environnement
+genv-run() {
+    (
+        source "__ENV_PATH__/bin/activate" --quiet
+        "$@"
+    )
+}
+
+# Afficher le message d'activation
+if [[ "$1" != "--quiet" ]]; then
+    echo -e "\033[0;32mgenv:\033[0m Activated environment '\033[1;36m__ENV_NAME__\033[0m'"
+    echo -e "  Path: \033[0;34m__ENV_PATH__\033[0m"
+    echo -e "  Shell: $GENV_SHELL"
+    echo -e "  Run '\033[1;33mdeactivate\033[0m' to exit"
+fi
+EOF
+    
+    # Remplacer les placeholders
+    sed -i "s|__ENV_NAME__|$name|g" "$env_path/bin/activate"
+    sed -i "s|__ENV_PATH__|$env_path|g" "$env_path/bin/activate"
+    chmod +x "$env_path/bin/activate"
+    
+    # Créer la version Fish
+    cat > "$env_path/bin/activate.fish" << 'EOF'
+# Activation script for genv environment (Fish shell)
+
+function _deactivate
+    if set -q _OLD_GENV_PATH
+        set -gx PATH $_OLD_GENV_PATH
+        set -e _OLD_GENV_PATH
+    end
+    
+    if set -q _OLD_GENV_PROMPT
+        functions -e fish_prompt
+        functions -c $_OLD_GENV_PROMPT fish_prompt
+        set -e _OLD_GENV_PROMPT
+    end
+    
+    set -e GENV_ENV
+    set -e GENV_ENV_PATH
+    set -e GENV_ENV_NAME
+    
+    functions -e _deactivate
+    functions -e deactivate
+    
+    echo "genv: Deactivated environment"
+end
+
+# Sauvegarder l'état
+set -g _OLD_GENV_PATH $PATH
+
+# Définir l'environnement
+set -gx GENV_ENV "__ENV_NAME__"
+set -gx GENV_ENV_PATH "__ENV_PATH__"
+set -gx GENV_ENV_NAME "__ENV_NAME__"
+set -gx PATH "__ENV_PATH__/bin" "__ENV_PATH__/xbin" "__ENV_PATH__/sbin" $PATH
+
+# Modifier le prompt
+functions -c fish_prompt _OLD_GENV_PROMPT
+function fish_prompt
+    echo -n "("
+    set_color cyan
+    echo -n "__ENV_NAME__"
+    set_color normal
+    echo -n ") "
+    _OLD_GENV_PROMPT
+end
+
+# Alias
+alias deactivate='_deactivate'
+
+echo "genv: Activated environment '__ENV_NAME__'"
+echo "  Path: __ENV_PATH__"
+echo "  Run 'deactivate' to exit"
+EOF
+    
+    sed -i "s|__ENV_NAME__|$name|g" "$env_path/bin/activate.fish"
+    sed -i "s|__ENV_PATH__|$env_path|g" "$env_path/bin/activate.fish"
+    chmod +x "$env_path/bin/activate.fish"
+    
+    # Créer le wrapper gd
+    cat > "$env_path/bin/gd" << 'EOF'
+#!/bin/bash
+# Gd wrapper for genv environment
+
+ENV_PATH="__ENV_PATH__"
+
+# Chercher le vrai exécutable gd
+if [[ -f "$HOME/goscript/gd" ]]; then
+    exec "$HOME/goscript/gd" "$@"
+elif [[ -f "/usr/local/bin/gd" ]]; then
+    exec "/usr/local/bin/gd" "$@"
+elif [[ -f "$ENV_PATH/xbin/gd" ]]; then
+    exec "$ENV_PATH/xbin/gd" "$@"
+elif command -v gd &> /dev/null; then
+    exec gd "$@"
+else
+    echo "Error: Goscript (gd) not found"
+    echo "Please install gd or set GOSCRIPT_HOME"
+    exit 1
+fi
+EOF
+    
+    sed -i "s|__ENV_PATH__|$env_path|g" "$env_path/bin/gd"
+    chmod +x "$env_path/bin/gd"
+    
+    # Créer le lien goscript -> gd
+    ln -sf "$env_path/bin/gd" "$env_path/bin/goscript"
+    
+    # Créer le fichier de lock
+    cat > "$env_path/genv.lock" << EOF
+# genv lock file
+# Generated: $(date -Iseconds)
+version = 1
+environment = "$name"
+path = "$env_path"
+pid = $$
+shell = "$SHELL"
+EOF
+    
+    # Créer le fichier .genvrc pour configuration locale
+    cat > "$env_path/.genvrc" << EOF
+# genv local configuration
+# Source this file for additional settings
+
+# Alias locaux
+alias g='gd'
+alias goscript='gd'
+alias genv-which='echo \$GENV_ENV_PATH'
+
+# Variables locales
+export GENV_PROJECT_ROOT="\$GENV_ENV_PATH"
+export GENV_SRC="\$GENV_ENV_PATH/src"
+export GENV_LIB="\$GENV_ENV_PATH/lib"
+EOF
+    
+    echo -e "\033[0;32m✓ Environment '$name' created successfully\033[0m"
+    echo -e "  Location: \033[0;34m$env_path\033[0m"
+    echo -e ""
+    echo -e "  To activate:"
+    echo -e "    \033[1;33msource $env_path/bin/activate\033[0m"
+    echo -e "    # or"
+    echo -e "    \033[1;33m./genv activate $name\033[0m"
+}
+
+# Activer un environnement
+activate_env() {
+    local name="$1"
+    
+    if [[ -z "$name" ]]; then
+        echo -e "\033[0;31mError: Environment name required\033[0m"
+        return 1
+    fi
+    
+    local env_path="$GENV_ENVS_DIR/$name"
+    
+    # Chercher dans d'autres emplacements
+    if [[ ! -d "$env_path" ]]; then
+        env_path=$(find "$GENV_ENVS_DIR" -maxdepth 2 -name "$name" -type d 2>/dev/null | head -1)
+    fi
+    
+    if [[ -z "$env_path" || ! -f "$env_path/bin/activate" ]]; then
+        echo -e "\033[0;31mError: Environment '$name' not found\033[0m"
+        return 1
+    fi
+    
+    # Détecter le shell et sourcer le bon script
+    local shell_name="$(basename "$SHELL")"
+    
+    case "$shell_name" in
+        fish)
+            echo -e "\033[0;33mFor fish shell, run:\033[0m"
+            echo "  source $env_path/bin/activate.fish"
+            ;;
+        *)
+            # Pour bash/zsh, on peut sourcer directement
+            echo -e "\033[0;33mTo activate, run:\033[0m"
+            echo "  source $env_path/bin/activate"
+            ;;
+    esac
+    
+    # Si on est dans un script, on peut essayer d'activer
+    if [[ -n "$BASH_VERSION" ]] || [[ -n "$ZSH_VERSION" ]]; then
+        source "$env_path/bin/activate"
+    fi
+}
+
+# Désactiver l'environnement
+deactivate_env() {
+    if [[ -n "$GENV_ENV" ]] && declare -f _deactivate > /dev/null 2>&1; then
+        _deactivate
+    elif declare -f deactivate > /dev/null 2>&1; then
+        deactivate
+    else
+        echo -e "\033[1;33mNo active genv environment\033[0m"
+    fi
+}
+
+# Lister les environnements
+list_envs() {
+    echo -e "\033[0;36mVirtual Environments:\033[0m\n"
+    
+    if [[ ! -d "$GENV_ENVS_DIR" ]] || [[ -z "$(ls -A "$GENV_ENVS_DIR" 2>/dev/null)" ]]; then
+        echo -e "  \033[1;33mNo environments found\033[0m"
+        echo -e "  Create one with: \033[0;32mgenv create <name>\033[0m"
+        return
+    fi
+    
+    local current="$GENV_ENV"
+    
+    for env_dir in "$GENV_ENVS_DIR"/*; do
+        if [[ -d "$env_dir" ]]; then
+            local name=$(basename "$env_dir")
+            local active=""
+            
+            if [[ "$name" == "$current" ]]; then
+                active="\033[0;32m(active)\033[0m"
+            fi
+            
+            # Lire la date de création
+            local created=""
+            if [[ -f "$env_dir/genv.toml" ]]; then
+                created=$(grep "created" "$env_dir/genv.toml" 2>/dev/null | cut -d'"' -f2 | cut -d'T' -f1)
+            fi
+            
+            # Compter les packages
+            local pkg_count=0
+            if [[ -d "$env_dir/src/packages" ]]; then
+                pkg_count=$(ls -1 "$env_dir/src/packages" 2>/dev/null | wc -l)
+            fi
+            
+            printf "  \033[0;34m%-20s\033[0m %b\n" "$name" "$active"
+            printf "    Path: %s\n" "$env_dir"
+            [[ -n "$created" ]] && printf "    Created: %s\n" "$created"
+            printf "    Packages: %d\n" "$pkg_count"
+            echo ""
+        fi
+    done
+}
+
+# Supprimer un environnement
+remove_env() {
+    local name="$1"
+    
+    if [[ -z "$name" ]]; then
+        echo -e "\033[0;31mError: Environment name required\033[0m"
+        return 1
+    fi
+    
+    local env_path="$GENV_ENVS_DIR/$name"
+    
+    if [[ ! -d "$env_path" ]]; then
+        echo -e "\033[0;31mError: Environment '$name' not found\033[0m"
+        return 1
+    fi
+    
+    # Vérifier si l'environnement est actif
+    if [[ "$GENV_ENV" == "$name" ]]; then
+        echo -e "\033[1;33mWarning: Environment '$name' is currently active\033[0m"
+        read -p "Deactivate and remove? [y/N] " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            _deactivate 2>/dev/null || deactivate 2>/dev/null
+        else
+            return 1
+        fi
+    fi
+    
+    echo -e "\033[1;33mRemoving environment '$name'...\033[0m"
+    read -p "Are you sure? [y/N] " -n 1 -r
+    echo
+    
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        rm -rf "$env_path"
+        echo -e "\033[0;32m✓ Environment '$name' removed\033[0m"
+    else
+        echo -e "\033[1;33mOperation cancelled\033[0m"
+    fi
+}
+
+# Informations sur un environnement
+info_env() {
+    local name="${1:-$GENV_ENV}"
+    
+    if [[ -z "$name" ]]; then
+        echo -e "\033[0;31mError: No environment specified and none active\033[0m"
+        return 1
+    fi
+    
+    local env_path="$GENV_ENVS_DIR/$name"
+    
+    if [[ ! -d "$env_path" ]]; then
+        echo -e "\033[0;31mError: Environment '$name' not found\033[0m"
+        return 1
+    fi
+    
+    echo -e "\033[0;36mEnvironment: \033[0;34m$name\033[0m\n"
+    
+    echo -e "\033[0;32mPaths:\033[0m"
+    echo "  Root: $env_path"
+    echo "  Bin:  $env_path/bin"
+    echo "  Lib:  $env_path/lib"
+    echo "  Src:  $env_path/src"
+    echo ""
+    
+    if [[ -f "$env_path/genv.toml" ]]; then
+        echo -e "\033[0;32mConfiguration:\033[0m"
+        grep -E "^(name|created|version)" "$env_path/genv.toml" 2>/dev/null | while read line; do
+            echo "  $line"
+        done
+    fi
+    
+    echo ""
+    echo -e "\033[0;32mDisk usage:\033[0m"
+    du -sh "$env_path" 2>/dev/null | awk '{print "  " $1}'
+    
+    echo ""
+    echo -e "\033[0;32mPackages:\033[0m"
+    if [[ -d "$env_path/src/packages" ]]; then
+        local count=$(ls -1 "$env_path/src/packages" 2>/dev/null | wc -l)
+        echo "  Installed: $count"
+        if [[ $count -gt 0 ]]; then
+            ls -1 "$env_path/src/packages" 2>/dev/null | head -10 | while read pkg; do
+                echo "    - $pkg"
+            done
+            if [[ $count -gt 10 ]]; then
+                echo "    ... and $(($count - 10)) more"
+            fi
+        fi
+    fi
+    
+    # État
+    echo ""
+    if [[ "$GENV_ENV" == "$name" ]]; then
+        echo -e "\033[0;32mStatus: Active\033[0m"
+        echo "  PID: $$"
+        echo "  Shell: $(basename "$SHELL")"
+    else
+        echo -e "\033[0;32mStatus: \033[1;33mInactive\033[0m"
+    fi
+}
+
+# Exécuter un script dans un environnement
+run_script() {
+    local name="$1"
+    local script="$2"
+    
+    if [[ -z "$name" || -z "$script" ]]; then
+        echo -e "\033[0;31mError: Environment name and script required\033[0m"
+        return 1
+    fi
+    
+    local env_path="$GENV_ENVS_DIR/$name"
+    
+    if [[ ! -d "$env_path" ]]; then
+        echo -e "\033[0;31mError: Environment '$name' not found\033[0m"
+        return 1
+    fi
+    
+    if [[ ! -f "$script" ]]; then
+        echo -e "\033[0;31mError: Script '$script' not found\033[0m"
+        return 1
+    fi
+    
+    echo -e "\033[0;36mRunning '$script' in environment '$name'...\033[0m\n"
+    
+    (
+        export GENV_ENV="$name"
+        export GENV_ENV_PATH="$env_path"
+        export PATH="$env_path/bin:$env_path/xbin:$env_path/sbin:$PATH"
+        export GOSCRIPT_PATH="$env_path/lib/goscript:$env_path/src:$GOSCRIPT_PATH"
+        
+        if [[ -f "$HOME/goscript/gd" ]]; then
+            "$HOME/goscript/gd" "$script"
+        elif command -v gd &> /dev/null; then
+            gd "$script"
+        else
+            echo -e "\033[0;31mError: Goscript not found\033[0m"
+            exit 1
+        fi
+    )
+}
+
+# Démarrer un shell dans l'environnement
+shell_env() {
+    local name="$1"
+    
+    if [[ -z "$name" ]]; then
+        echo -e "\033[0;31mError: Environment name required\033[0m"
+        return 1
+    fi
+    
+    local env_path="$GENV_ENVS_DIR/$name"
+    
+    if [[ ! -d "$env_path" ]]; then
+        echo -e "\033[0;31mError: Environment '$name' not found\033[0m"
+        return 1
+    fi
+    
+    echo -e "\033[0;36mStarting shell in environment '$name'...\033[0m"
+    echo -e "  Type 'exit' to leave\n"
+    
+    (
+        export GENV_ENV="$name"
+        export GENV_ENV_PATH="$env_path"
+        export PATH="$env_path/bin:$env_path/xbin:$env_path/sbin:$PATH"
+        export PS1="(\033[0;36m$name\033[0m) \w \$ "
+        
+        ${SHELL:-/bin/bash}
+    )
+}
+
+# Afficher le chemin
+which_env() {
+    local name="${1:-$GENV_ENV}"
+    
+    if [[ -z "$name" ]]; then
+        echo -e "\033[0;31mError: No environment specified and none active\033[0m"
+        return 1
+    fi
+    
+    local env_path="$GENV_ENVS_DIR/$name"
+    
+    if [[ -d "$env_path" ]]; then
+        echo "$env_path"
+    else
+        echo -e "\033[0;31mError: Environment '$name' not found\033[0m"
+        return 1
+    fi
+}
+
+# Fonction principale
+main() {
+    local cmd="${1:-help}"
+    shift || true
+    
+    init_genv
+    
+    case "$cmd" in
+        create|new)
+            create_env "$@"
+            ;;
+        activate|on)
+            activate_env "$@"
+            ;;
+        deactivate|off)
+            deactivate_env
+            ;;
+        list|ls)
+            list_envs
+            ;;
+        remove|rm|delete)
+            remove_env "$@"
+            ;;
+        info|show)
+            info_env "$@"
+            ;;
+        run|exec)
+            run_script "$@"
+            ;;
+        shell|sh)
+            shell_env "$@"
+            ;;
+        which|path)
+            which_env "$@"
+            ;;
+        version|-v|--version)
+            echo "genv version $GENV_VERSION"
+            ;;
+        help|-h|--help)
+            show_help
+            ;;
+        *)
+            echo -e "\033[0;31mUnknown command: $cmd\033[0m"
+            echo -e "Run './genv help' for usage"
+            return 1
+            ;;
+    esac
+}
+
+main "$@"

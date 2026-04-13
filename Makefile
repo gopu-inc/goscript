@@ -1,6 +1,42 @@
 CC = gcc
-CFLAGS = -Wall -g -O0 -march=i586 -I./src -I./src/ast -I./src/interpreter
+CFLAGS = -Wall -g -O0 -I./src -I./src/ast -I./src/interpreter
 LDFLAGS = -lm -ldl -lffi
+
+# Détection automatique de l'architecture
+UNAME_S := $(shell uname -s)
+UNAME_M := $(shell uname -m)
+
+# Pas de -march par défaut, on laisse gcc choisir
+ifeq ($(UNAME_S),Linux)
+    ifeq ($(UNAME_M),x86_64)
+        MARCH = -march=x86-64
+    else ifeq ($(UNAME_M),i686)
+        MARCH = -march=i686
+    else ifeq ($(UNAME_M),i586)
+        MARCH = -march=i586
+    else ifeq ($(UNAME_M),aarch64)
+        MARCH = -march=armv8-a
+    else ifeq ($(UNAME_M),armv7l)
+        MARCH = -march=armv7-a
+    else ifeq ($(UNAME_M),armv8l)
+        MARCH = -march=armv8-a
+    else
+        MARCH =
+    endif
+else ifeq ($(UNAME_S),Darwin)
+    ifeq ($(UNAME_M),arm64)
+        MARCH = -arch arm64
+    else
+        MARCH = -arch x86_64
+    endif
+else
+    MARCH =
+endif
+
+# Ajouter MARCH aux CFLAGS s'il est défini
+ifneq ($(MARCH),)
+    CFLAGS += $(MARCH)
+endif
 
 # Sources
 SCANNER_C = scanner.c
@@ -23,11 +59,11 @@ TARGET = gd
 
 all: $(SCANNER_C) $(PARSER_C) $(TARGET)
 
-# Scanner
+# Scanner - avec suppression du warning de règle non matchée
 $(SCANNER_C): src/lexer/scanner.l
-	flex -o $(SCANNER_C) src/lexer/scanner.l
+	flex -o $(SCANNER_C) src/lexer/scanner.l 2>&1 | grep -v "warning, rule cannot be matched" || true
 
-# Parser
+# Parser - avec gestion des conflits (acceptable pour l'instant)
 $(PARSER_C) $(PARSER_H): src/parser/parser.y
 	bison -d -o $(PARSER_C) src/parser/parser.y
 
@@ -73,4 +109,11 @@ install:
 	mkdir -p /usr/local/lib/goscript
 	cp -r lib/* /usr/local/lib/goscript/ 2>/dev/null || true
 
-.PHONY: all clean install
+# Afficher l'architecture détectée
+debug:
+	@echo "OS: $(UNAME_S)"
+	@echo "Arch: $(UNAME_M)"
+	@echo "MARCH: $(MARCH)"
+	@echo "CFLAGS: $(CFLAGS)"
+
+.PHONY: all clean install debug

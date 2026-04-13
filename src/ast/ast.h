@@ -532,6 +532,11 @@ void add_array_item(ASTNodeList* list, ASTNode* item);
 ASTNodeList* create_field_init_list(void);
 void add_field_init(ASTNodeList* list, ASTNode* init);
 
+/* Try/Catch/Throw */
+ASTNode* create_try_node(ASTNodeList* try_body, ASTNode* catch_block, ASTNode* finally_block);
+ASTNode* create_catch_node(char* error_var, ASTNodeList* body);
+ASTNode* create_finally_node(ASTNodeList* body);
+ASTNode* create_throw_node(ASTNode* value);
 
 // Ajouter ces déclarations
 ASTNode* create_unsafe_node(ASTNodeList* body);

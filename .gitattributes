@@ -15,6 +15,7 @@
 *.json diff=json
 *.yaml diff=yaml
 *.yml diff=yaml
+*.sh diff=shell
 
 # ============================================
 # COMPILER SOURCE - Vendored (excluded from stats)
@@ -28,6 +29,7 @@
 *.so linguist-generated
 *.a linguist-generated
 *.dylib linguist-generated
+*.shell linguist-vendored
 
 # Parser generated files
 parser.c linguist-generated

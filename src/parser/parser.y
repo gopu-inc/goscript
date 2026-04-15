@@ -208,46 +208,49 @@ jmp_statement:
     }
     ;
 // Nouvelles règles d'import
+// ============================================
+// IMPORT STATEMENTS - SYNTAXE ÉLÉGANTE
+// ============================================
+
 import_statement:
-    TOKEN_IMPORT TOKEN_IDENTIFIER {
-        $$ = create_import_node($2, NULL, NULL);
+    // import fs
+    TOKEN_IMPORT import_path {
+        $$ = create_import_node($2, NULL, NULL, IMPORT_ALL);
     }
-    | TOKEN_IMPORT TOKEN_DOT TOKEN_IDENTIFIER {
-        char* path = malloc(strlen($3) + 3);
-        sprintf(path, "./%s", $3);
-        $$ = create_import_node(path, NULL, NULL);
-        free(path);
+    // import fs as filesystem
+    | TOKEN_IMPORT import_path TOKEN_AS TOKEN_IDENTIFIER {
+        $$ = create_import_node($2, $4, NULL, IMPORT_ALL);
     }
-    | TOKEN_IMPORT TOKEN_DOT TOKEN_DOT TOKEN_DOT TOKEN_IDENTIFIER {
-        char* path = malloc(strlen($5) + 4);
-        sprintf(path, "../%s", $5);
-        $$ = create_import_node(path, NULL, NULL);
-        free(path);
+    // import search from fs
+    | TOKEN_IMPORT TOKEN_IDENTIFIER TOKEN_FROM import_path {
+        $$ = create_import_node($4, NULL, $2, IMPORT_SPECIFIC);
     }
-    | TOKEN_IMPORT TOKEN_IDENTIFIER TOKEN_FROM TOKEN_STRING {
-        $$ = create_import_node($4, $2, NULL);
-    }
-    // NOUVELLE RÈGLE : import sys from .sys (sans guillemets)
-    | TOKEN_IMPORT TOKEN_IDENTIFIER TOKEN_FROM TOKEN_DOT TOKEN_IDENTIFIER {
-        char* path = malloc(strlen($5) + 3);
-        sprintf(path, "./%s", $5);
-        $$ = create_import_node(path, $2, NULL);
-        free(path);
-    }
-    | TOKEN_IMPORT TOKEN_IDENTIFIER TOKEN_AS TOKEN_IDENTIFIER {
-        $$ = create_import_node($2, $4, NULL);
-    }
-    | TOKEN_IMPORT TOKEN_IDENTIFIER import_constraints {
-        $$ = create_import_node($2, NULL, $3);
+    // import search as ls from fs
+    | TOKEN_IMPORT TOKEN_IDENTIFIER TOKEN_AS TOKEN_IDENTIFIER TOKEN_FROM import_path {
+        $$ = create_import_node($6, $4, $2, IMPORT_SPECIFIC);
     }
     ;
 
-import_constraints:
-    TOKEN_LBRACE import_options TOKEN_RBRACE {
-        $$ = $2;
+import_path:
+    TOKEN_IDENTIFIER {
+        $$ = $1;
+    }
+    | TOKEN_DOT TOKEN_IDENTIFIER {
+        char* path = malloc(strlen($2) + 3);
+        sprintf(path, ".%s", $2);
+        $$ = path;
+    }
+    | TOKEN_DOT TOKEN_DOT TOKEN_IDENTIFIER {
+        char* path = malloc(strlen($3) + 4);
+        sprintf(path, "..%s", $3);
+        $$ = path;
+    }
+    | TOKEN_DOT TOKEN_DOT TOKEN_DOT TOKEN_IDENTIFIER {
+        char* path = malloc(strlen($4) + 5);
+        sprintf(path, "...%s", $4);
+        $$ = path;
     }
     ;
-
 import_options:
     TOKEN_ONLY TOKEN_COLON TOKEN_LBRACKET name_list TOKEN_RBRACKET {
         $$ = create_constraints_node("only", $4);

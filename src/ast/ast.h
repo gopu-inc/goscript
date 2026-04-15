@@ -119,6 +119,10 @@ typedef enum {
 
 
 
+typedef enum {
+    IMPORT_ALL,        // import fs
+    IMPORT_SPECIFIC    // import search from fs
+} ImportType;
 
 
 /* Structure pour les listes de nœuds */

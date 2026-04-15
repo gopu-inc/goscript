@@ -1703,17 +1703,45 @@ case NODE_ARRAY: {
     return arr_val;
 }
 case NODE_AWAIT: {
+    // Évaluer l'expression à await
     Value val = evaluate_expr(node->await.expr, env);
     
+    // Vérifier si l'évaluation a échoué
+    if (val.type == 0 && val.int_val == 0 && val.string_val == NULL) {
+        // Vérifier si c'est vraiment une erreur ou juste la valeur 0
+        fprintf(stderr, "Runtime Error: await expression failed or returned null\n");
+        return (Value){.type = 0, .int_val = 0};
+    }
+    
+    // Cas 1: C'est déjà une promesse
     if (val.type == VALUE_TYPE_PROMISE) {
         Promise* p = (Promise*)val.int_val;
+        if (p == NULL) {
+            fprintf(stderr, "Runtime Error: Invalid promise\n");
+            return (Value){.type = 0, .int_val = 0};
+        }
         result = await_promise(p, env);
         free(p->command);
         free(p);
-    } else if (val.type == 2 && val.string_val) {
-        // Échapper les guillemets simples
-        char* escaped = malloc(strlen(val.string_val) * 2 + 1);
-        char* src = val.string_val;
+    }
+    // Cas 2: C'est une chaîne (commande shell)
+    else if (val.type == 2 && val.string_val != NULL) {
+        char* command = val.string_val;
+        
+        // Vérifier que la commande n'est pas vide
+        if (command == NULL || strlen(command) == 0) {
+            fprintf(stderr, "Runtime Error: Empty command in await\n");
+            return (Value){.type = 0, .int_val = 0};
+        }
+        
+        // Échapper les guillemets simples si nécessaire
+        char* escaped = malloc(strlen(command) * 2 + 1);
+        if (escaped == NULL) {
+            fprintf(stderr, "Runtime Error: Memory allocation failed\n");
+            return (Value){.type = 0, .int_val = 0};
+        }
+        
+        char* src = command;
         char* dst = escaped;
         while (*src) {
             if (*src == '\'') {
@@ -1728,14 +1756,26 @@ case NODE_AWAIT: {
         }
         *dst = '\0';
         
+        // Exécuter la commande
         Promise* p = run_async_command(escaped);
+        if (p == NULL) {
+            fprintf(stderr, "Runtime Error: Failed to create promise\n");
+            free(escaped);
+            return (Value){.type = 0, .int_val = 0};
+        }
+        
         result = await_promise(p, env);
-        free(p->command);
+        
+        // Nettoyer
+        if (p->command) free(p->command);
         free(p);
         free(escaped);
-    } else {
+    }
+    // Cas 3: Autre type (nombre, bool, etc.) - retourner tel quel
+    else {
         result = val;
     }
+    
     break;
 }
 

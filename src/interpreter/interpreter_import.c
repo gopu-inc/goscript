@@ -119,179 +119,160 @@ static void register_export(LoadedModule* mod, const char* symbol, const char* a
 }
 
 // ==================== RÉSOLUTION DE CHEMIN ====================
-// ============================================
-// RÉSOLUTION DE CHEMIN INTELLIGENTE
-// ============================================
-
 char* resolve_module_path(char* current_file, char* import_path) {
     char resolved[PATH_MAX];
     
-    // 1. Import relatif avec points
-    if (import_path[0] == '.') {
-        int levels = 0;
-        char* ptr = import_path;
-        while (*ptr == '.') {
-            levels++;
-            ptr++;
-        }
-        
-        char base[PATH_MAX];
-        if (current_file && current_file[0]) {
-            strcpy(base, current_file);
-            char* dir = dirname(base);
-            
-            // Remonter de 'levels' dossiers
-            for (int i = 0; i < levels; i++) {
-                char* parent = dirname(dir);
-                if (strcmp(parent, dir) == 0) break;
-                strcpy(dir, parent);
-            }
-            
-            if (*ptr) {
-                snprintf(resolved, PATH_MAX, "%s/%s", dir, ptr);
-            } else {
-                snprintf(resolved, PATH_MAX, "%s", dir);
-            }
-        }
-        
-        return resolve_directory_or_file(resolved);
-    }
-    
-    // 2. Import standard (chercher dans les chemins système)
+    // Chemins de recherche pour les modules
     const char* search_paths[] = {
-        "/usr/local/lib/goscript/modules",
-        "/usr/local/lib/goscript/lib",
-        "./lib",
-        "./modules",
-        ".",
+        "./modules",                      // modules/__builtin__.gjs
+        "./lib",                          // lib/__builtin__.gjs
+        "./lib/std",
+        "./src",                          // src/__builtin__.gjs
+        "/usr/local/lib/goscript/protocole",       // Chemin spécial pour le builtin
+        "/usr/local/lib/goscript",
+        "/usr/local/lib/goscript/std",
+        "/usr/lib/goscript",
+        "./",                             // ./__builtin__.gjs
         NULL
     };
     
-    for (int i = 0; search_paths[i]; i++) {
-        snprintf(resolved, PATH_MAX, "%s/%s", search_paths[i], import_path);
-        
-        // Essayer comme dossier
-        char* result = resolve_directory_or_file(resolved);
-        if (result) return result;
-    }
-    
-    return NULL;
-}
-
-// ============================================
-// DÉTECTE SI C'EST UN DOSSIER OU UN FICHIER
-// ============================================
-
-char* resolve_directory_or_file(char* path) {
-    char resolved[PATH_MAX];
-    
-    // 1. Essayer comme dossier avec __self__.gjs
-    snprintf(resolved, PATH_MAX, "%s/__self__.gjs", path);
-    if (access(resolved, F_OK) == 0) {
-        if (realpath(resolved, resolved)) {
-            return strdup(resolved);
-        }
-    }
-    
-    // 2. Essayer comme dossier avec index.gjs
-    snprintf(resolved, PATH_MAX, "%s/index.gjs", path);
-    if (access(resolved, F_OK) == 0) {
-        if (realpath(resolved, resolved)) {
-            return strdup(resolved);
-        }
-    }
-    
-    // 3. Essayer comme fichier .gjs
-    snprintf(resolved, PATH_MAX, "%s.gjs", path);
-    if (access(resolved, F_OK) == 0) {
-        if (realpath(resolved, resolved)) {
-            return strdup(resolved);
-        }
-    }
-    
-    // 4. Essayer comme dossier (charger tous les fichiers)
-    struct stat st;
-    if (stat(path, &st) == 0 && S_ISDIR(st.st_mode)) {
-        // C'est un dossier, on va charger tous les .gjs
-        return strdup(path);  // Marqueur spécial pour dossier
-    }
-    
-    return NULL;
-}
-
-// ============================================
-// CHARGER UN DOSSIER ENTIER
-// ============================================
-
-LoadedModule* load_directory(char* dir_path, char* module_name, Environment* env) {
-    LoadedModule* dir_module = create_module(dir_path, module_name, NULL);
-    dir_module->env = create_env(NULL);
-    
-    // Ouvrir le dossier
-    DIR* dir = opendir(dir_path);
-    if (!dir) {
-        dir_module->status = MODULE_STATUS_ERROR;
-        return dir_module;
-    }
-    
-    struct dirent* entry;
-    while ((entry = readdir(dir)) != NULL) {
-        // Ignorer . et ..
-        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
-            continue;
-        }
-        
-        // Construire le chemin complet
-        char full_path[PATH_MAX];
-        snprintf(full_path, PATH_MAX, "%s/%s", dir_path, entry->d_name);
-        
-        // Vérifier si c'est un fichier .gjs
-        if (strstr(entry->d_name, ".gjs") != NULL) {
-            // Extraire le nom du sous-module
-            char sub_name[256];
-            strncpy(sub_name, entry->d_name, strlen(entry->d_name) - 4);
-            sub_name[strlen(entry->d_name) - 4] = '\0';
-            
-            // Charger le sous-module
-            LoadedModule* sub = load_module_from_file(full_path, sub_name, dir_module->env);
-            if (sub) {
-                // Exporter les symboles publics du sous-module
-                export_all_public_symbols(sub, dir_module);
+    // Cas spécial: __builtin__ (module intégré)
+    if (strcmp(import_path, "__builtin__") == 0) {
+        // Vérifier d'abord dans le chemin spécial
+        char special_path[PATH_MAX];
+        snprintf(special_path, PATH_MAX, "/usr/local/lib/goscript/protocole/__builtin__.gjs");
+        if (access(special_path, F_OK) == 0) {
+            if (realpath(special_path, resolved)) {
+                return strdup(resolved);
             }
         }
-        // Vérifier si c'est un sous-dossier
-        else {
-            struct stat st;
-            if (stat(full_path, &st) == 0 && S_ISDIR(st.st_mode)) {
-                // Charger récursivement
-                LoadedModule* sub = load_directory(full_path, entry->d_name, dir_module->env);
-                if (sub) {
-                    export_all_public_symbols(sub, dir_module);
+        
+        // Sinon chercher dans tous les chemins
+        for (int i = 0; search_paths[i]; i++) {
+            char with_ext[PATH_MAX];
+            snprintf(with_ext, PATH_MAX, "%s/__builtin__.gjs", search_paths[i]);
+            if (access(with_ext, F_OK) == 0) {
+                char real_path[PATH_MAX];
+                if (realpath(with_ext, real_path)) {
+                    return strdup(real_path);
+                }
+            }
+        }
+        
+        // Dernier recours: chercher dans le répertoire courant
+        if (access("__builtin__.gjs", F_OK) == 0) {
+            if (realpath("__builtin__.gjs", resolved)) {
+                return strdup(resolved);
+            }
+        }
+        
+        fprintf(stderr, "Warning: __builtin__.gjs not found in any search path\n");
+        return NULL;
+    }
+    
+    // 1. Chemin absolu
+    if (import_path[0] == '/') {
+        snprintf(resolved, PATH_MAX, "%s", import_path);
+        
+        char with_ext[PATH_MAX];
+        snprintf(with_ext, PATH_MAX, "%s.gjs", resolved);
+        if (access(with_ext, F_OK) == 0) {
+            if (realpath(with_ext, resolved)) {
+                return strdup(resolved);
+            }
+        }
+        
+        snprintf(with_ext, PATH_MAX, "%s/__self__.gjs", resolved);
+        if (access(with_ext, F_OK) == 0) {
+            if (realpath(with_ext, resolved)) {
+                return strdup(resolved);
+            }
+        }
+        
+        if (access(resolved, F_OK) == 0) {
+            if (realpath(resolved, resolved)) {
+                return strdup(resolved);
+            }
+        }
+    }
+    
+    // 2. Chemin relatif
+    if (import_path[0] == '.') {
+        char base[PATH_MAX];
+        
+        if (current_file && current_file[0] && strcmp(current_file, "REPL") != 0) {
+            strcpy(base, current_file);
+            char* dir = dirname(base);
+            snprintf(resolved, PATH_MAX, "%s/%s", dir, import_path);
+        } else {
+            if (getcwd(resolved, PATH_MAX) == NULL) {
+                return NULL;
+            }
+            strcat(resolved, "/");
+            strcat(resolved, import_path);
+        }
+        
+        char clean_path[PATH_MAX];
+        if (realpath(resolved, clean_path)) {
+            strcpy(resolved, clean_path);
+        }
+        
+        char with_ext[PATH_MAX];
+        snprintf(with_ext, PATH_MAX, "%s.gjs", resolved);
+        if (access(with_ext, F_OK) == 0) {
+            if (realpath(with_ext, resolved)) {
+                return strdup(resolved);
+            }
+        }
+        
+        snprintf(with_ext, PATH_MAX, "%s/__self__.gjs", resolved);
+        if (access(with_ext, F_OK) == 0) {
+            if (realpath(with_ext, resolved)) {
+                return strdup(resolved);
+            }
+        }
+        
+        if (access(resolved, F_OK) == 0) {
+            if (realpath(resolved, resolved)) {
+                return strdup(resolved);
+            }
+        }
+    }
+    
+    // 3. Recherche dans les chemins standards
+    for (int i = 0; search_paths[i]; i++) {
+        char with_ext[PATH_MAX];
+        snprintf(with_ext, PATH_MAX, "%s/%s.gjs", search_paths[i], import_path);
+        if (access(with_ext, F_OK) == 0) {
+            char real_path[PATH_MAX];
+            if (realpath(with_ext, real_path)) {
+                return strdup(real_path);
+            }
+        }
+        
+        snprintf(with_ext, PATH_MAX, "%s/%s/__self__.gjs", search_paths[i], import_path);
+        if (access(with_ext, F_OK) == 0) {
+            char real_path[PATH_MAX];
+            if (realpath(with_ext, real_path)) {
+                return strdup(real_path);
+            }
+        }
+        
+        snprintf(with_ext, PATH_MAX, "%s/%s", search_paths[i], import_path);
+        if (access(with_ext, F_OK) == 0) {
+            struct stat path_stat;
+            if (stat(with_ext, &path_stat) == 0 && !S_ISDIR(path_stat.st_mode)) {
+                char real_path[PATH_MAX];
+                if (realpath(with_ext, real_path)) {
+                    return strdup(real_path);
                 }
             }
         }
     }
     
-    closedir(dir);
-    dir_module->status = MODULE_STATUS_LOADED;
-    return dir_module;
+    return NULL;
 }
 
-// ============================================
-// EXPORTER TOUS LES SYMBOLES PUBLICS
-// ============================================
-
-void export_all_public_symbols(LoadedModule* src, LoadedModule* dst) {
-    for (int i = 0; i < src->env->var_count; i++) {
-        char* name = src->env->vars[i].name;
-        Value val = src->env->vars[i].value;
-        
-        // Vérifier si c'est public (commence par majuscule ou est dans la liste d'export)
-        if (isupper(name[0]) || is_exported(src, name)) {
-            env_set(dst->env, name, val);
-        }
-    }
-}
 // ==================== TRAITEMENT DES CONTRAINTES ====================
 
 void process_constraints(LoadedModule* module, ASTNode* constraints) {

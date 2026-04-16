@@ -90,6 +90,71 @@ Promise* run_async_command(char* command) {
     return p;
 }
 
+
+// Structure pour await qui préserve stdin
+Value builtin_await(Value* args, int arg_count) {
+    Value result = {0};
+    
+    if (arg_count < 1) {
+        return result;
+    }
+    
+    // Si c'est une promesse
+    if (args[0].type == VALUE_TYPE_PROMISE) {
+        Promise* p = (Promise*)args[0].int_val;
+        result = await_promise(p, NULL);
+        return result;
+    }
+    
+    // Si c'est une commande string
+    if (args[0].type == 2 && args[0].string_val) {
+        char* cmd = args[0].string_val;
+        
+        // Utiliser un fichier temporaire pour la sortie
+        char temp_out[] = "/tmp/goscript_await_XXXXXX";
+        int fd = mkstemp(temp_out);
+        if (fd == -1) {
+            result.type = 2;
+            result.string_val = strdup("");
+            return result;
+        }
+        
+        // Créer la commande complète avec redirection
+        char full_cmd[4096];
+        snprintf(full_cmd, sizeof(full_cmd), 
+                 "(%s) > %s 2>&1", cmd, temp_out);
+        
+        // Exécuter avec system() qui préserve stdin
+        int ret = system(full_cmd);
+        
+        // Lire le résultat
+        FILE* f = fopen(temp_out, "r");
+        if (f) {
+            fseek(f, 0, SEEK_END);
+            long size = ftell(f);
+            fseek(f, 0, SEEK_SET);
+            
+            char* output = malloc(size + 1);
+            fread(output, 1, size, f);
+            output[size] = '\0';
+            
+            fclose(f);
+            
+            result.type = 2;
+            result.string_val = output;
+        } else {
+            result.type = 2;
+            result.string_val = strdup("");
+        }
+        
+        close(fd);
+        unlink(temp_out);
+        
+        return result;
+    }
+    
+    return result;
+}
 // Vérifier si une promesse est résolue
 int poll_promise(Promise* p) {
     if (p->state != 0) return 1;
@@ -124,7 +189,7 @@ Value await_promise(Promise* p, Environment* env) {
     // Boucle d'attente non-bloquante
     while (p->state == 0) {
         poll_promise(p);
-        usleep(10000);  // 10ms
+        usleep(1000000000);  // 1000ms
     }
     
     return p->result;
@@ -145,10 +210,11 @@ void run_event_loop(AsyncContext* ctx) {
         }
         
         if (pending) {
-            usleep(10000);  // 10ms
+            usleep(1000000);  // 1200ms
         }
     }
 }
+
 
 // ==================== FONCTIONS UTILITAIRES ====================
 

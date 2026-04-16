@@ -100,6 +100,8 @@ Value builtin_await(Value* args, int arg_count) {
     Value result = {0};
     
     if (arg_count < 1) {
+        result.type = 2;
+        result.string_val = strdup("");
         return result;
     }
     
@@ -129,7 +131,7 @@ Value builtin_await(Value* args, int arg_count) {
                  "(%s) > %s 2>&1", cmd, temp_out);
         
         // Exécuter avec system() qui préserve stdin
-        int ret = system(full_cmd);
+        system(full_cmd);
         
         // Lire le résultat
         FILE* f = fopen(temp_out, "r");
@@ -139,13 +141,20 @@ Value builtin_await(Value* args, int arg_count) {
             fseek(f, 0, SEEK_SET);
             
             char* output = malloc(size + 1);
-            fread(output, 1, size, f);
-            output[size] = '\0';
+            if (output) {
+                fread(output, 1, size, f);
+                output[size] = '\0';
+                
+                // Enlever le \n final si présent
+                if (size > 0 && output[size-1] == '\n') {
+                    output[size-1] = '\0';
+                }
+            }
             
             fclose(f);
             
             result.type = 2;
-            result.string_val = output;
+            result.string_val = output ? output : strdup("");
         } else {
             result.type = 2;
             result.string_val = strdup("");
@@ -157,6 +166,8 @@ Value builtin_await(Value* args, int arg_count) {
         return result;
     }
     
+    result.type = 2;
+    result.string_val = strdup("");
     return result;
 }
 // Vérifier si une promesse est résolue

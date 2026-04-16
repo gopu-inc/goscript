@@ -98,9 +98,9 @@ Promise* run_async_command(char* command) {
 // Structure pour await qui préserve stdin
 Value builtin_await(Value* args, int arg_count) {
     Value result = {0};
+    result.type = 2;
     
     if (arg_count < 1) {
-        result.type = 2;
         result.string_val = strdup("");
         return result;
     }
@@ -116,22 +116,28 @@ Value builtin_await(Value* args, int arg_count) {
     if (args[0].type == 2 && args[0].string_val) {
         char* cmd = args[0].string_val;
         
-        // Utiliser un fichier temporaire pour la sortie
+        // Utiliser un template modifiable
         char temp_out[] = "/tmp/goscript_await_XXXXXX";
         int fd = mkstemp(temp_out);
         if (fd == -1) {
-            result.type = 2;
+            perror("mkstemp");
             result.string_val = strdup("");
             return result;
         }
+        close(fd);  // On ferme le fd car on va rouvrir avec fopen
         
         // Créer la commande complète avec redirection
-        char full_cmd[4096];
-        snprintf(full_cmd, sizeof(full_cmd), 
-                 "(%s) > %s 2>&1", cmd, temp_out);
+        char* full_cmd = malloc(strlen(cmd) + strlen(temp_out) + 20);
+        if (!full_cmd) {
+            unlink(temp_out);
+            result.string_val = strdup("");
+            return result;
+        }
+        sprintf(full_cmd, "(%s) > %s 2>&1", cmd, temp_out);
         
-        // Exécuter avec system() qui préserve stdin
-        system(full_cmd);
+        // Exécuter avec system()
+        int ret = system(full_cmd);
+        free(full_cmd);
         
         // Lire le résultat
         FILE* f = fopen(temp_out, "r");
@@ -142,31 +148,26 @@ Value builtin_await(Value* args, int arg_count) {
             
             char* output = malloc(size + 1);
             if (output) {
-                fread(output, 1, size, f);
-                output[size] = '\0';
+                size_t read_size = fread(output, 1, size, f);
+                output[read_size] = '\0';
                 
                 // Enlever le \n final si présent
-                if (size > 0 && output[size-1] == '\n') {
-                    output[size-1] = '\0';
+                if (read_size > 0 && output[read_size-1] == '\n') {
+                    output[read_size-1] = '\0';
                 }
+                result.string_val = output;
+            } else {
+                result.string_val = strdup("");
             }
-            
             fclose(f);
-            
-            result.type = 2;
-            result.string_val = output ? output : strdup("");
         } else {
-            result.type = 2;
             result.string_val = strdup("");
         }
         
-        close(fd);
         unlink(temp_out);
-        
         return result;
     }
     
-    result.type = 2;
     result.string_val = strdup("");
     return result;
 }

@@ -22,6 +22,22 @@ ASTNode* create_struct_extend_node(char* name, char* parent, ASTNodeList* fields
     return node;
 }
 
+ASTNode* create_sysf_node(ASTNode* command) {
+    ASTNode* node = malloc(sizeof(ASTNode));
+    node->type = NODE_SYSF;
+    node->sysf.command = command;
+    node->sysf.capture_output = 1;
+    return node;
+}
+
+ASTNode* create_sh_node(ASTNode* command) {
+    ASTNode* node = malloc(sizeof(ASTNode));
+    node->type = NODE_SH;
+    node->sysf.command = command;
+    node->sysf.capture_output = 0;  // sh n'a pas de capture par défaut
+    return node;
+}
+
 void add_to_node_list(ASTNodeList* list, ASTNode* node) {
     if (!list) return;
     

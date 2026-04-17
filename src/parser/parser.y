@@ -83,7 +83,7 @@ ASTNode* program_root;
 %type <node> try_statement catch_block finally_block throw_statement
 %type <node> module_decl dict_access
 %type <node> continue_statement
-%type <node> sysf_statement sh_statement
+%type <node> sysf_expr sh_expr
 %type <node> import_constraints import_options
 %type <node_list> name_list
 %type <node> dict_expr dict_type
@@ -158,15 +158,13 @@ statement:
     | unsafe_stmt
     | while_statement
     | loop_statement
-    | sysf_statement  
-    | sh_statement
     | match_statement
     | return_statement
     | expression {
         $$ = create_expr_statement($1);
     }
     ;
-sysf_statement:
+sysf_expr:
     TOKEN_SYSF TOKEN_LPAREN expression TOKEN_RPAREN {
         $$ = create_sysf_node($3);
     }
@@ -175,14 +173,15 @@ sysf_statement:
     }
     ;
 
-sh_statement:
+sh_expr:
     TOKEN_SH TOKEN_LPAREN expression TOKEN_RPAREN {
-        $$ = create_sysf_node($3);
+        $$ = create_sh_node($3);
     }
     | TOKEN_SH expression {
-        $$ = create_sysf_node($2);
+        $$ = create_sh_node($2);
     }
     ;
+
 nnl_statement:
     TOKEN_NNL TOKEN_IDENTIFIER TOKEN_LBRACE statement_list TOKEN_RBRACE {
         $$ = create_nnl_node($2, $4);

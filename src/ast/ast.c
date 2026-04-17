@@ -24,7 +24,7 @@ ASTNode* create_struct_extend_node(char* name, char* parent, ASTNodeList* fields
 
 ASTNode* create_sysf_node(ASTNode* command) {
     ASTNode* node = malloc(sizeof(ASTNode));
-    node->type = NODE_SYSF;
+    node->type = NODE_SYSF;  // Vérifie que NODE_SYSF est bien défini
     node->sysf.command = command;
     node->sysf.capture_output = 1;
     return node;
@@ -34,7 +34,7 @@ ASTNode* create_sh_node(ASTNode* command) {
     ASTNode* node = malloc(sizeof(ASTNode));
     node->type = NODE_SH;
     node->sysf.command = command;
-    node->sysf.capture_output = 0;  // sh n'a pas de capture par défaut
+    node->sysf.capture_output = 0;
     return node;
 }
 

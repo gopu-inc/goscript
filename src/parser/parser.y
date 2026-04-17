@@ -51,6 +51,8 @@ ASTNode* program_root;
 %token TOKEN_ARROW TOKEN_FAT_ARROW TOKEN_PIPE_FORWARD
 %token TOKEN_OPTIONAL TOKEN_COALESCE
 %token TOKEN_RANGE TOKEN_RANGE_INC TOKEN_MUTS
+%token TOKEN_SYSF TOKEN_SH
+
 
 /* Delimiters */
 %token TOKEN_LPAREN TOKEN_RPAREN TOKEN_LBRACE TOKEN_RBRACE
@@ -155,10 +157,29 @@ statement:
     | unsafe_stmt
     | while_statement
     | loop_statement
+    | sysf_statement  
+    | sh_statement
     | match_statement
     | return_statement
     | expression {
         $$ = create_expr_statement($1);
+    }
+    ;
+sysf_statement:
+    TOKEN_SYSF TOKEN_LPAREN expression TOKEN_RPAREN {
+        $$ = create_sysf_node($3);
+    }
+    | TOKEN_SYSF expression {
+        $$ = create_sysf_node($2);
+    }
+    ;
+
+sh_statement:
+    TOKEN_SH TOKEN_LPAREN expression TOKEN_RPAREN {
+        $$ = create_sysf_node($3);
+    }
+    | TOKEN_SH expression {
+        $$ = create_sysf_node($2);
     }
     ;
 nnl_statement:

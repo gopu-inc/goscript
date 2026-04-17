@@ -1786,41 +1786,55 @@ case NODE_ARRAY: {
     arr_val.array_val.count = node->array.elements ? node->array.elements->count : 0;
     return arr_val;
 }
-case NODE_SH:
-case NODE_SYSF: {
-    // 1. Évaluer la commande (qui est une expression, ex: une string)
+case NODE_SYSF:
+case NODE_SH: {
     Value cmd_val = evaluate_expr(node->sysf.command, env);
-    if (cmd_val.type != 2) { // Vérifie si c'est bien une string (type 2 dans ton code)
-        fprintf(stderr, "Error: sh/sysf expects a string command\n");
-        return (Value){0};
+    
+    if (cmd_val.type != 2) {
+        fprintf(stderr, "Error: sysf/sh expects a string command\n");
+        result.type = 0;
+        result.int_val = -1;
+        break;
     }
-
+    
+    char* command = cmd_val.string_val;
+    
     if (node->type == NODE_SYSF) {
-        // Logique pour sysf : utiliser popen pour capturer la sortie
-        FILE* fp = popen(cmd_val.string_val, "r");
-        if (fp == NULL) return (Value){0};
-
+        // sysf - capturer la sortie
         char buffer[4096];
-        char* result = malloc(1);
-        result[0] = '\0';
-        while (fgets(buffer, sizeof(buffer), fp) != NULL) {
-            result = realloc(result, strlen(result) + strlen(buffer) + 1);
-            strcat(result, buffer);
+        FILE* pipe = popen(command, "r");
+        if (pipe) {
+            char* output = malloc(1);
+            output[0] = '\0';
+            size_t total = 0;
+            
+            while (fgets(buffer, sizeof(buffer), pipe)) {
+                size_t len = strlen(buffer);
+                output = realloc(output, total + len + 1);
+                memcpy(output + total, buffer, len);
+                total += len;
+                output[total] = '\0';
+            }
+            pclose(pipe);
+            
+            // Enlever le \n final si présent
+            if (total > 0 && output[total-1] == '\n') {
+                output[total-1] = '\0';
+            }
+            
+            result.type = 2;
+            result.string_val = output;
+        } else {
+            result.type = 2;
+            result.string_val = strdup("");
         }
-        pclose(fp);
-        
-        Value v;
-        v.type = 2; // Type String
-        v.string_val = result;
-        return v;
     } else {
-        // Logique pour sh : utiliser system() et retourner le code
-        int status = system(cmd_val.string_val);
-        Value v;
-        v.type = 0; // Type Int
-        v.int_val = WEXITSTATUS(status);
-        return v;
+        // sh - exécuter sans capture, retourner le code de sortie
+        int ret = system(command);
+        result.type = 0;
+        result.int_val = WEXITSTATUS(ret);
     }
+    break;
 }
 
 case NODE_AWAIT: {

@@ -766,6 +766,8 @@ primary_expr:
     | lambda_expr
     | array_access
     | await_expr
+    | sysf_expr  
+    | sh_expr   
     | spawn_expr
     | f_string
     ;

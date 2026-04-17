@@ -2149,81 +2149,89 @@ int evaluate_statement(ASTNode* node, Environment* env, char* current_file) {
             }
             return 0;
         }
-        // Structure pour stocker les contextes de saut
 
-        // Dans evaluate_expr ou evaluate_statement
-case NODE_SYSF:
-case NODE_SH: {
-    Value cmd_val = evaluate_expr(node->sysf.command, env);
-    
-    if (cmd_val.type != 2) {  // Pas une string
-        fprintf(stderr, "Error: sysf/sh expects a string command\n");
-        return (Value){.type = 0, .int_val = -1};
-    }
-    
-    char* command = cmd_val.string_val;
-    
-    // Exécuter la commande
-    int pipefd[2];
-    if (pipe(pipefd) == -1) {
-        return (Value){.type = 0, .int_val = -1};
-    }
-    
-    pid_t pid = fork();
-    
-    if (pid == 0) {
-        // Enfant
-        close(pipefd[0]);
-        dup2(pipefd[1], STDOUT_FILENO);
-        dup2(pipefd[1], STDERR_FILENO);
-        close(pipefd[1]);
         
-        execl("/bin/sh", "sh", "-c", command, NULL);
-        exit(127);
-    } else if (pid > 0) {
-        // Parent
-        close(pipefd[1]);
-        
-        if (node->type == NODE_SYSF || node->sysf.capture_output) {
-            // Lire la sortie
-            char buffer[4096];
-            char* output = malloc(1);
-            output[0] = '\0';
-            size_t total = 0;
+        case NODE_SYSF:
+        case NODE_SH: {
+            Value cmd_val = evaluate_expr(node->sysf.command, env);
             
-            ssize_t n;
-            while ((n = read(pipefd[0], buffer, sizeof(buffer))) > 0) {
-                output = realloc(output, total + n + 1);
-                memcpy(output + total, buffer, n);
-                total += n;
-                output[total] = '\0';
+            if (cmd_val.type != 2) {  // Pas une string
+                fprintf(stderr, "Error: sysf/sh expects a string command\n");
+                return 0;  // Retourne 0 pour continuer l'exécution
             }
             
-            close(pipefd[0]);
+            char* command = cmd_val.string_val;
             
-            int status;
-            waitpid(pid, &status, 0);
+            // Exécuter la commande
+            int pipefd[2];
+            if (pipe(pipefd) == -1) {
+                fprintf(stderr, "Error: Cannot create pipe\n");
+                return 0;
+            }
             
-            Value result;
-            result.type = 2;  // string
-            result.string_val = output;
-            return result;
-        } else {
-            // sh sans capture - juste exécuter
-            close(pipefd[0]);
+            pid_t pid = fork();
             
-            int status;
-            waitpid(pid, &status, 0);
+            if (pid == 0) {
+                // Enfant
+                close(pipefd[0]);
+                dup2(pipefd[1], STDOUT_FILENO);
+                dup2(pipefd[1], STDERR_FILENO);
+                close(pipefd[1]);
+                
+                execl("/bin/sh", "sh", "-c", command, NULL);
+                exit(127);
+            } else if (pid > 0) {
+                // Parent
+                close(pipefd[1]);
+                
+                if (node->type == NODE_SYSF) {
+                    // sysf - capturer la sortie
+                    char buffer[4096];
+                    char* output = malloc(1);
+                    if (!output) {
+                        close(pipefd[0]);
+                        waitpid(pid, NULL, 0);
+                        return 0;
+                    }
+                    output[0] = '\0';
+                    size_t total = 0;
+                    
+                    ssize_t n;
+                    while ((n = read(pipefd[0], buffer, sizeof(buffer))) > 0) {
+                        output = realloc(output, total + n + 1);
+                        if (!output) break;
+                        memcpy(output + total, buffer, n);
+                        total += n;
+                        output[total] = '\0';
+                    }
+                    
+                    close(pipefd[0]);
+                    
+                    int status;
+                    waitpid(pid, &status, 0);
+                    
+                    // Stocker le résultat dans une variable temporaire
+                    // ou l'afficher directement
+                    if (output) {
+                        printf("%s", output);
+                        free(output);
+                    }
+                } else {
+                    // sh - sans capture
+                    close(pipefd[0]);
+                    
+                    int status;
+                    waitpid(pid, &status, 0);
+                }
+            } else {
+                fprintf(stderr, "Error: fork failed\n");
+            }
             
-            Value result;
-            result.type = 0;  // int
-            result.int_val = WEXITSTATUS(status);
-            return result;
+            return 0;
         }
-    }
-    
-    return (Value){.type = 0, .int_val = -1};
-}
+
+        // Structure pour stocker les contextes de saut
+
 case NODE_NNL: {
     // Créer un nouveau contexte
     NnlContext* ctx = malloc(sizeof(NnlContext));

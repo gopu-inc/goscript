@@ -12,6 +12,8 @@ struct Environment;
 typedef enum {
     NODE_ASYNC_FUNCTION,
     NODE_TRY,
+    NODE_SYSF,
+    NODE_SH,
     NODE_CATCH,
     NODE_FINALLY,
     NODE_THROW,
@@ -154,6 +156,11 @@ struct {
     struct ASTNode* dict;
     struct ASTNode* key;
 } dict_access;
+        /* Sysf / Sh command */
+        struct {
+            struct ASTNode* command;
+            int capture_output;  // 1 = capture, 0 = execute only
+        } sysf;
 
 struct {
     char* template;           // La chaîne template
@@ -547,7 +554,8 @@ ASTNode* create_unsafe_node(ASTNodeList* body);
 ASTNode* create_lambda_node(ASTNodeList* params, ASTNodeList* body);
 ASTNode* create_array_access_node(ASTNode* array, ASTNode* index);
 
-
+ASTNode* create_sysf_node(ASTNode* command);
+ASTNode* create_sh_node(ASTNode* command);
 
 
 

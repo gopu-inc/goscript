@@ -63,7 +63,8 @@ void yyerror(const char* msg);
 "muts"                  { return TOKEN_MUTS; }
 "unsafe"                { return TOKEN_UNSAFE; }
 "_"                     { return TOKEN_UNDERSCORE; }
-
+"sysf"                  { return TOKEN_SYSF; }
+"sh"                    { return TOKEN_SH; }
  /* Try/Catch/Throw */
 "try"                   { return TOKEN_TRY; }
 "catch"                 { return TOKEN_CATCH; }

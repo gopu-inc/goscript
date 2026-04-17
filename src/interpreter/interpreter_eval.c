@@ -94,6 +94,57 @@ Promise* run_async_command(char* command) {
     return p;
 }
 
+// ==================== FONCTION NATIVE SYSF ====================
+
+Value sysf_command(char* command) {
+    Value result = {0};
+    
+    if (!command) {
+        result.type = 0;
+        result.int_val = -1;
+        return result;
+    }
+    
+    // Exécuter la commande et capturer la sortie
+    char buffer[8192];
+    char full_cmd[8192];
+    
+    // Rediriger stderr vers stdout pour capturer toutes les sorties
+    snprintf(full_cmd, sizeof(full_cmd), "%s 2>&1", command);
+    
+    FILE* pipe = popen(full_cmd, "r");
+    if (!pipe) {
+        result.type = 0;
+        result.int_val = -1;
+        return result;
+    }
+    
+    // Lire toute la sortie
+    size_t total_read = 0;
+    char* output = malloc(1);
+    output[0] = '\0';
+    
+    while (fgets(buffer, sizeof(buffer), pipe) != NULL) {
+        total_read += strlen(buffer);
+        output = realloc(output, total_read + 1);
+        strcat(output, buffer);
+    }
+    
+    int exit_code = pclose(pipe);
+    
+    // Retourner la sortie comme chaîne
+    result.type = 2;  // TYPE_STRING
+    result.string_val = output;
+    
+    // Si la sortie est vide, retourner le code de sortie
+    if (strlen(output) == 0) {
+        free(output);
+        result.type = 0;  // TYPE_INT
+        result.int_val = WEXITSTATUS(exit_code);
+    }
+    
+    return result;
+}
 
 // Structure pour await qui préserve stdin
 Value builtin_await(Value* args, int arg_count) {

@@ -2496,35 +2496,21 @@ void interpret_program(ASTNode* program) {
     // ============================================
     ModuleRegistry* reg = get_module_registry();
     
-    // Chercher le chemin du fichier builtin
     char* builtin_path = resolve_module_path(NULL, "__builtin__");
     if (!builtin_path) {
-        // Essayer dans ./lib
         builtin_path = resolve_module_path(NULL, "./lib/__builtin__");
     }
     
     if (builtin_path) {
         LoadedModule* builtin = load_module(
-            reg, 
-            global, 
-            builtin_path,  // current_file
-            "__builtin__", // import_path
-            NULL,          // alias
-            NULL           // constraints
+            reg, global, builtin_path, "__builtin__", NULL, NULL
         );
-        
         if (builtin && builtin->env) {
-            // Fusionner tous les symboles du builtin dans l'environnement global
             for (int i = 0; i < builtin->env->var_count; i++) {
                 env_set(global, builtin->env->vars[i].name, builtin->env->vars[i].value);
             }
-        printf("");
-        } else {
-            fprintf(stderr, "Warning: Could not load built-in module\n");
         }
         free(builtin_path);
-    } else {
-        fprintf(stderr, "Warning: Built-in module not found\n");
     }
     
     // ============================================
@@ -2582,7 +2568,7 @@ void interpret_program(ASTNode* program) {
         }
     }
     
-    // 6. Exécuter main
+    // 6. Exécuter le programme
     if (main_func) {
         Environment* main_env = create_env(global);
         for (int i = 0; i < main_func->function.body->count; i++) {
@@ -2591,10 +2577,27 @@ void interpret_program(ASTNode* program) {
         }
         free(main_env);
     } else {
+        // ============================================
+        // CORRECTION : Exécuter TOUS les statements du niveau global
+        // ============================================
         for (int i = 0; i < program->program.statements->count; i++) {
             ASTNode* stmt = program->program.statements->nodes[i];
-            if (stmt->type == NODE_EXPR_STMT) {
-                evaluate_statement(stmt, global, NULL);
+            
+            // Ignorer les déclarations déjà traitées (fonctions, structs, impls)
+            // et exécuter tout le reste
+            switch (stmt->type) {
+                case NODE_FUNCTION:
+                case NODE_PUBLIC_FUNCTION:
+                case NODE_STRUCT:
+                case NODE_IMPL:
+                case NODE_IMPORT:
+                    // Déjà traités, on ignore
+                    break;
+                    
+                default:
+                    // Exécuter : LET, CONST, EXPR_STMT, IF, FOR, etc.
+                    evaluate_statement(stmt, global, NULL);
+                    break;
             }
         }
     }

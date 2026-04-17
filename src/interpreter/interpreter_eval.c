@@ -94,57 +94,8 @@ Promise* run_async_command(char* command) {
     return p;
 }
 
-// ==================== FONCTION NATIVE SYSF ====================
 
-Value sysf_command(char* command) {
-    Value result = {0};
-    
-    if (!command) {
-        result.type = 0;
-        result.int_val = -1;
-        return result;
-    }
-    
-    // Exécuter la commande et capturer la sortie
-    char buffer[8192];
-    char full_cmd[8192];
-    
-    // Rediriger stderr vers stdout pour capturer toutes les sorties
-    snprintf(full_cmd, sizeof(full_cmd), "%s 2>&1", command);
-    
-    FILE* pipe = popen(full_cmd, "r");
-    if (!pipe) {
-        result.type = 0;
-        result.int_val = -1;
-        return result;
-    }
-    
-    // Lire toute la sortie
-    size_t total_read = 0;
-    char* output = malloc(1);
-    output[0] = '\0';
-    
-    while (fgets(buffer, sizeof(buffer), pipe) != NULL) {
-        total_read += strlen(buffer);
-        output = realloc(output, total_read + 1);
-        strcat(output, buffer);
-    }
-    
-    int exit_code = pclose(pipe);
-    
-    // Retourner la sortie comme chaîne
-    result.type = 2;  // TYPE_STRING
-    result.string_val = output;
-    
-    // Si la sortie est vide, retourner le code de sortie
-    if (strlen(output) == 0) {
-        free(output);
-        result.type = 0;  // TYPE_INT
-        result.int_val = WEXITSTATUS(exit_code);
-    }
-    
-    return result;
-}
+
 
 // Structure pour await qui préserve stdin
 Value builtin_await(Value* args, int arg_count) {
@@ -2200,6 +2151,79 @@ int evaluate_statement(ASTNode* node, Environment* env, char* current_file) {
         }
         // Structure pour stocker les contextes de saut
 
+        // Dans evaluate_expr ou evaluate_statement
+case NODE_SYSF:
+case NODE_SH: {
+    Value cmd_val = evaluate_expr(node->sysf.command, env);
+    
+    if (cmd_val.type != 2) {  // Pas une string
+        fprintf(stderr, "Error: sysf/sh expects a string command\n");
+        return (Value){.type = 0, .int_val = -1};
+    }
+    
+    char* command = cmd_val.string_val;
+    
+    // Exécuter la commande
+    int pipefd[2];
+    if (pipe(pipefd) == -1) {
+        return (Value){.type = 0, .int_val = -1};
+    }
+    
+    pid_t pid = fork();
+    
+    if (pid == 0) {
+        // Enfant
+        close(pipefd[0]);
+        dup2(pipefd[1], STDOUT_FILENO);
+        dup2(pipefd[1], STDERR_FILENO);
+        close(pipefd[1]);
+        
+        execl("/bin/sh", "sh", "-c", command, NULL);
+        exit(127);
+    } else if (pid > 0) {
+        // Parent
+        close(pipefd[1]);
+        
+        if (node->type == NODE_SYSF || node->sysf.capture_output) {
+            // Lire la sortie
+            char buffer[4096];
+            char* output = malloc(1);
+            output[0] = '\0';
+            size_t total = 0;
+            
+            ssize_t n;
+            while ((n = read(pipefd[0], buffer, sizeof(buffer))) > 0) {
+                output = realloc(output, total + n + 1);
+                memcpy(output + total, buffer, n);
+                total += n;
+                output[total] = '\0';
+            }
+            
+            close(pipefd[0]);
+            
+            int status;
+            waitpid(pid, &status, 0);
+            
+            Value result;
+            result.type = 2;  // string
+            result.string_val = output;
+            return result;
+        } else {
+            // sh sans capture - juste exécuter
+            close(pipefd[0]);
+            
+            int status;
+            waitpid(pid, &status, 0);
+            
+            Value result;
+            result.type = 0;  // int
+            result.int_val = WEXITSTATUS(status);
+            return result;
+        }
+    }
+    
+    return (Value){.type = 0, .int_val = -1};
+}
 case NODE_NNL: {
     // Créer un nouveau contexte
     NnlContext* ctx = malloc(sizeof(NnlContext));

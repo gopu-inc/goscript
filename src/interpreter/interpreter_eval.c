@@ -1786,78 +1786,43 @@ case NODE_ARRAY: {
     arr_val.array_val.count = node->array.elements ? node->array.elements->count : 0;
     return arr_val;
 }
-        case NODE_SYSF:
-        case NODE_SH: {
-            Value cmd_val = evaluate_expr(node->sysf.command, env);
-            
-            if (cmd_val.type != 2) {
-                fprintf(stderr, "Error: sysf/sh expects a string command\n");
-                result.type = 0;
-                result.int_val = -1;
-                break;
-            }
-            
-            char* command = cmd_val.string_val;
-            
-            if (node->type == NODE_SYSF) {
-                // sysf - capturer la sortie
-                char buffer[4096];
-                char full_cmd[8192];
-                snprintf(full_cmd, sizeof(full_cmd), "%s 2>&1", command);
-                
-                FILE* pipe = popen(full_cmd, "r");
-                if (pipe) {
-                    char* output = malloc(1);
-                    if (!output) {
-                        pclose(pipe);
-                        result.type = 2;
-                        result.string_val = strdup("");
-                        break;
-                    }
-                    output[0] = '\0';
-                    size_t total = 0;
-                    
-                    while (fgets(buffer, sizeof(buffer), pipe)) {
-                        size_t len = strlen(buffer);
-                        char* new_output = realloc(output, total + len + 1);
-                        if (!new_output) {
-                            free(output);
-                            pclose(pipe);
-                            result.type = 2;
-                            result.string_val = strdup("");
-                            break;
-                        }
-                        output = new_output;
-                        memcpy(output + total, buffer, len);
-                        total += len;
-                        output[total] = '\0';
-                    }
-                    pclose(pipe);
-                    
-                    result.type = 2;
-                    result.string_val = output;
-                    
-                    // Stocker dans $_
-                    env_set(env, "_", result);
-                } else {
-                    result.type = 2;
-                    result.string_val = strdup("");
-                }
-            } else {
-                // sh - exécuter sans capture, retourner le code de sortie
-                int ret = system(command);
-                
-                result.type = 0;
-                result.int_val = WEXITSTATUS(ret);
-                
-                // Stocker dans $_
-                Value status_val;
-                status_val.type = 0;
-                status_val.int_val = result.int_val;
-                env_set(env, "_", status_val);
-            }
-            break;
+case NODE_SH:
+case NODE_SYSF: {
+    // 1. Évaluer la commande (qui est une expression, ex: une string)
+    Value cmd_val = evaluate_expr(node->sysf.command, env);
+    if (cmd_val.type != 2) { // Vérifie si c'est bien une string (type 2 dans ton code)
+        fprintf(stderr, "Error: sh/sysf expects a string command\n");
+        return (Value){0};
+    }
+
+    if (node->type == NODE_SYSF) {
+        // Logique pour sysf : utiliser popen pour capturer la sortie
+        FILE* fp = popen(cmd_val.string_val, "r");
+        if (fp == NULL) return (Value){0};
+
+        char buffer[4096];
+        char* result = malloc(1);
+        result[0] = '\0';
+        while (fgets(buffer, sizeof(buffer), fp) != NULL) {
+            result = realloc(result, strlen(result) + strlen(buffer) + 1);
+            strcat(result, buffer);
         }
+        pclose(fp);
+        
+        Value v;
+        v.type = 2; // Type String
+        v.string_val = result;
+        return v;
+    } else {
+        // Logique pour sh : utiliser system() et retourner le code
+        int status = system(cmd_val.string_val);
+        Value v;
+        v.type = 0; // Type Int
+        v.int_val = WEXITSTATUS(status);
+        return v;
+    }
+}
+
 case NODE_AWAIT: {
     Value val = evaluate_expr(node->await.expr, env);
     

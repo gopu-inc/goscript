@@ -160,6 +160,8 @@ Environment* create_env(Environment* parent);
 void env_set(Environment* env, char* name, Value value);
 Value* env_get(Environment* env, char* name);
 
+// sysf(args)
+Value sysf_command(char* command);
 // Fonctions FFI
 ffi_type* get_ffi_type(char* type_name);
 void register_c_function(Environment* env, char* name, void* func_ptr, char* ret_type, int arg_count, ...);

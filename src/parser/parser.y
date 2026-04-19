@@ -38,6 +38,7 @@ ASTNode* program_root;
 %token TOKEN_LAMBDA
 %token TOKEN_EXTENDS
 %token TOKEN_UNDERSCORE
+%token TOKEN_SWITCH
 
 /* Operators */
 %token TOKEN_PLUS TOKEN_MINUS TOKEN_MULTIPLY TOKEN_DIVIDE TOKEN_MODULO
@@ -80,6 +81,7 @@ ASTNode* program_root;
          TOKEN_MULTIPLY_ASSIGN TOKEN_DIVIDE_ASSIGN TOKEN_MODULO_ASSIGN
 
 /* Non-terminals */
+%type <node> switch_statement ternary_expr
 %type <node> try_statement catch_block finally_block throw_statement
 %type <node> module_decl dict_access
 %type <node> continue_statement
@@ -161,6 +163,7 @@ statement:
     | packet_decl
     | function_decl
     | struct_decl
+    | switch_statement
     | enum_decl
     | impl_decl
     | let_decl
@@ -482,11 +485,10 @@ if_statement:
     | TOKEN_IF expression TOKEN_LBRACE statement_list TOKEN_RBRACE TOKEN_ELSE TOKEN_LBRACE statement_list TOKEN_RBRACE {
         $$ = create_if_node($2, $4, $8);
     }
-    | TOKEN_IF expression TOKEN_LBRACE statement_list TOKEN_RBRACE TOKEN_ELSE TOKEN_IF expression TOKEN_LBRACE statement_list TOKEN_RBRACE {
-        // else if -> transforme en if imbriqué dans le else
+    | TOKEN_IF expression TOKEN_LBRACE statement_list TOKEN_RBRACE TOKEN_ELSE if_statement {
+        // else if -> le else contient un autre if
         ASTNodeList* else_branch = create_node_list();
-        ASTNode* inner_if = create_if_node($9, $11, NULL);
-        add_to_node_list(else_branch, inner_if);
+        add_to_node_list(else_branch, $7);
         $$ = create_if_node($2, $4, else_branch);
     }
     ;

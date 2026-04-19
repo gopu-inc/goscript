@@ -2328,18 +2328,33 @@ case NODE_JMP: {
     }
     return 0;
 }
-        case NODE_WHILE: {
-            while (1) {
-                Value cond = evaluate_expr(node->while_stmt.condition, env);
-                if (cond.type != 3 || !cond.bool_val) break;
-                for (int i = 0; i < node->while_stmt.body->count; i++) {
-                    int ret = evaluate_statement(node->while_stmt.body->nodes[i], env, current_file);
-                    if (ret == 1) return 1;
-                    if (ret == 2) break;
-                }
-            }
-            return 0;
+        #define EVAL_RETURN 1
+#define EVAL_CONTINUE 2
+#define EVAL_BREAK 3
+
+case NODE_WHILE: {
+    while (1) {
+        Value cond = evaluate_expr(node->while_stmt.condition, env);
+        if (cond.type != 3 || !cond.bool_val) break;
+        
+        for (int i = 0; i < node->while_stmt.body->count; i++) {
+            int ret = evaluate_statement(node->while_stmt.body->nodes[i], env, current_file);
+            if (ret == EVAL_RETURN) return EVAL_RETURN;
+            if (ret == EVAL_BREAK) goto while_end;
+            if (ret == EVAL_CONTINUE) break;  // continue l'itération suivante
         }
+    }
+    while_end:
+    return 0;
+}
+
+case NODE_BREAK:
+    return EVAL_BREAK;
+
+case NODE_CONTINUE:
+    return EVAL_CONTINUE;
+
+        
         case NODE_MUTS: {
             Value val = evaluate_expr(node->muts_decl.value, env);
             env_set(env, node->muts_decl.name, val);
@@ -2383,12 +2398,6 @@ case NODE_JMP: {
             return 0;
         }
         
-        case NODE_BREAK:
-            return 2;
-        
-        case NODE_CONTINUE:
-            return 2;  // Code pour continue (saut à l'itération suivante)
-
 case NODE_FOR_IN: {
     Value collection = evaluate_expr(node->for_in.collection, env);
     

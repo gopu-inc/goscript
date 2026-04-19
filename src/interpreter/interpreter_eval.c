@@ -2386,39 +2386,66 @@ case NODE_JMP: {
             return 2;  // Code pour continue (saut à l'itération suivante)
 
 case NODE_FOR_IN: {
-    // Évaluer la collection (tableau)
     Value collection = evaluate_expr(node->for_in.collection, env);
     
-    if (collection.type == 8) {  // Type array
+    if (collection.type == 8) {  // Tableau
         for (int idx = 0; idx < collection.array_val.count; idx++) {
-            // Récupérer l'élément courant
             Value elem = evaluate_expr(collection.array_val.elements->nodes[idx], env);
-            
-            // Créer un environnement pour l'itération
             Environment* loop_env = create_env(env);
             env_set(loop_env, node->for_in.var, elem);
             
-            // Exécuter le corps de la boucle
             int should_break = 0;
             for (int i = 0; i < node->for_in.body->count; i++) {
                 int ret = evaluate_statement(node->for_in.body->nodes[i], loop_env, current_file);
-                if (ret == 1) {  // return
-                    free(loop_env);
-                    return 1;
-                }
-                if (ret == 2) {  // continue
-                    break;  // Sortir du corps, passer à l'itération suivante
-                }
-                if (ret == 3) {  // break
-                    should_break = 1;
-                    break;
-                }
+                if (ret == 1) { free(loop_env); return 1; }
+                if (ret == 2) break;      // continue
+                if (ret == 3) { should_break = 1; break; }  // break
             }
             free(loop_env);
+            if (should_break) break;
+        }
+    }
+    else if (collection.type == 10) {  // Dictionnaire
+        for (int idx = 0; idx < collection.dict_val.count; idx++) {
+            Value key = *(collection.dict_val.entries[idx].key);
+            Value val = *(collection.dict_val.entries[idx].value);
             
-            if (should_break) {
-                break;
+            Environment* loop_env = create_env(env);
+            env_set(loop_env, node->for_in.var, key);   // ou une paire key/value
+            
+            int should_break = 0;
+            for (int i = 0; i < node->for_in.body->count; i++) {
+                int ret = evaluate_statement(node->for_in.body->nodes[i], loop_env, current_file);
+                if (ret == 1) { free(loop_env); return 1; }
+                if (ret == 2) break;
+                if (ret == 3) { should_break = 1; break; }
             }
+            free(loop_env);
+            if (should_break) break;
+        }
+    }
+    else if (collection.type == 2) {  // String - itérer sur les caractères
+        char* str = collection.string_val;
+        for (int idx = 0; str[idx]; idx++) {
+            Value char_val;
+            char_val.type = 2;
+            char_val.string_val = malloc(2);
+            char_val.string_val[0] = str[idx];
+            char_val.string_val[1] = '\0';
+            
+            Environment* loop_env = create_env(env);
+            env_set(loop_env, node->for_in.var, char_val);
+            
+            int should_break = 0;
+            for (int i = 0; i < node->for_in.body->count; i++) {
+                int ret = evaluate_statement(node->for_in.body->nodes[i], loop_env, current_file);
+                if (ret == 1) { free(char_val.string_val); free(loop_env); return 1; }
+                if (ret == 2) break;
+                if (ret == 3) { should_break = 1; break; }
+            }
+            free(char_val.string_val);
+            free(loop_env);
+            if (should_break) break;
         }
     }
     return 0;

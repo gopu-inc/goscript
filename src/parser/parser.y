@@ -505,6 +505,33 @@ for_statement:
         node->for_in.body = body;
         $$ = node;
     }
+    | TOKEN_FOR TOKEN_IDENTIFIER TOKEN_IN expression TOKEN_RANGE expression TOKEN_LBRACE statement_list TOKEN_RBRACE {
+        // for i in 0..10 { ... }
+        ASTNode* start = $4;
+        ASTNode* end = $6;
+        ASTNodeList* body = $8;
+        
+        ASTNode* node = malloc(sizeof(ASTNode));
+        node->type = NODE_FOR_RANGE;
+        node->for_range.var = strdup($2);
+        node->for_range.start = start;
+        node->for_range.end = end;
+        node->for_range.body = body;
+        node->for_range.inclusive = 0;
+        $$ = node;
+    }
+    | TOKEN_FOR TOKEN_IDENTIFIER TOKEN_IN expression TOKEN_RANGE_INC expression TOKEN_LBRACE statement_list TOKEN_RBRACE {
+        // for i in 0..=10 { ... } (inclusif)
+        ASTNode* node = malloc(sizeof(ASTNode));
+        node->type = NODE_FOR_RANGE;
+        node->for_range.var = strdup($2);
+        node->for_range.start = $4;
+        node->for_range.end = $6;
+        node->for_range.body = $8;
+        node->for_range.inclusive = 1;
+        $$ = node;
+    }
+    ;
     ;
 
 while_statement:

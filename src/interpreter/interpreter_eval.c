@@ -356,6 +356,10 @@ void init_libc() {
         }
         if (!libc_handle) {
             // Essayer avec NULL pour le programme courant
+            libc_handle = dlopen("libc*", RTLD_LAZY);
+        }
+        if (!libc_handle) {
+            // Essayer avec NULL pour le programme courant
             libc_handle = dlopen(NULL, RTLD_LAZY);
         }
         libc_initialized = 1;

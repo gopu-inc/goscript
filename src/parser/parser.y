@@ -469,6 +469,13 @@ if_statement:
     | TOKEN_IF expression TOKEN_LBRACE statement_list TOKEN_RBRACE TOKEN_ELSE TOKEN_LBRACE statement_list TOKEN_RBRACE {
         $$ = create_if_node($2, $4, $8);
     }
+    | TOKEN_IF expression TOKEN_LBRACE statement_list TOKEN_RBRACE TOKEN_ELSE TOKEN_IF expression TOKEN_LBRACE statement_list TOKEN_RBRACE {
+        // else if -> transforme en if imbriqué dans le else
+        ASTNodeList* else_branch = create_node_list();
+        ASTNode* inner_if = create_if_node($9, $11, NULL);
+        add_to_node_list(else_branch, inner_if);
+        $$ = create_if_node($2, $4, else_branch);
+    }
     ;
 break_statement:
     TOKEN_BREAK {

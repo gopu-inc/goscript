@@ -108,6 +108,19 @@ ASTNode* program_root;
 
 %%
 
+
+switch_statement:
+    TOKEN_SWITCH expression TOKEN_LBRACE match_cases TOKEN_RBRACE {
+        $$ = create_match_node($2, $4);
+    }
+    ;
+ternary_expr:
+    expression TOKEN_OPTIONAL expression TOKEN_COLON expression {
+        // condition ? true_expr : false_expr
+        $$ = create_ternary_node($1, $3, $5);
+    }
+    ;
+
 program:
     statement_list {
         program_root = create_program_node($1);

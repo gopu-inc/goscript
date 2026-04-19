@@ -568,20 +568,23 @@ match_case:
     pattern TOKEN_FAT_ARROW expression {
         $$ = create_match_case_node($1, $3);
     }
+    | pattern TOKEN_FAT_ARROW block {
+        $$ = create_match_case_node($1, (ASTNode*)$3);
+    }
     ;
 
 pattern:
-    TOKEN_NUMBER {
-        $$ = create_pattern_number($1);
+    TOKEN_NUMBER { $$ = create_pattern_number($1); }
+    | TOKEN_STRING { $$ = create_pattern_string($1); }
+    | TOKEN_IDENTIFIER { $$ = create_pattern_ident($1); }
+    | TOKEN_UNDERSCORE { $$ = create_pattern_wildcard(); }
+    | TOKEN_IDENTIFIER TOKEN_LPAREN pattern TOKEN_RPAREN {
+        // Constructor pattern: Some(x)
+        $$ = create_pattern_constructor($1, $3);
     }
-    | TOKEN_STRING {
-        $$ = create_pattern_string($1);
-    }
-    | TOKEN_IDENTIFIER {
-        $$ = create_pattern_ident($1);
-    }
-    | TOKEN_UNDERSCORE {
-        $$ = create_pattern_wildcard();
+    | pattern TOKEN_PIPE pattern {
+        // OR pattern: 1 | 2
+        $$ = create_pattern_or($1, $3);
     }
     ;
 

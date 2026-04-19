@@ -65,6 +65,7 @@ void yyerror(const char* msg);
 "_"                     { return TOKEN_UNDERSCORE; }
 "sysf"                  { return TOKEN_SYSF; }
 "sh"                    { return TOKEN_SH; }
+"switch"                { return TOKEN_SWITCH; }
  /* Try/Catch/Throw */
 "try"                   { return TOKEN_TRY; }
 "catch"                 { return TOKEN_CATCH; }

@@ -1529,96 +1529,63 @@ if (node->binary.op == OP_ASSIGN) {
             result.int_val = 0;
             break;
             
-        case OP_PIPE: {
-    // 1. On évalue toujours la partie gauche en premier
+case OP_PIPE: {
+    // 1. Évaluer la partie gauche (la donnée)
     Value left_val = evaluate_expr(node->binary.left, env);
     ASTNode* right_node = node->binary.right;
+    Value result = {0};
 
     // --- CAS 1 : Goscript -> Commande Shell (sysf ou sh) ---
     if (right_node->type == NODE_SYSF || right_node->type == NODE_SH) {
+        // Transformation de left_val en string pour le shell
+        char* input_str = value_to_string(left_val); // Utilise ta fonction de conversion interne
         
-        // On convertit la valeur de gauche en chaîne (à adapter selon ta fonction d'affichage)
-        char left_str[4096] = ""; 
-        if (left_val.type == 2) strcpy(left_str, left_val.string_val);
-        else if (left_val.type == 0) sprintf(left_str, "%d", left_val.int_val);
-        // (Ajoute la conversion float/bool si besoin)
-
-        Value cmd_val = evaluate_expr(right_node->sysf.command, env);
-        if (cmd_val.type == 2) {
-            // Magie UNIX : On crée un fichier temp sécurisé pour passer les données via stdin
-            char temp_in[] = "/tmp/gs_pipe_XXXXXX";
-            int fd = mkstemp(temp_in);
-            if (fd != -1) {
-                write(fd, left_str, strlen(left_str));
-                close(fd);
-
-                // On réécrit la commande : cat temp_in | (commande_originale)
-                char* full_cmd = malloc(strlen(cmd_val.string_val) + strlen(temp_in) + 30);
-                sprintf(full_cmd, "cat %s | (%s)", temp_in, cmd_val.string_val);
-
-                // On exécute la nouvelle commande selon le type
-                if (right_node->type == NODE_SYSF) {
-                    char buffer[4096];
-                    FILE* pipe = popen(full_cmd, "r");
-                    if (pipe) {
-                        char* output = malloc(1); output[0] = '\0';
-                        size_t total = 0;
-                        while (fgets(buffer, sizeof(buffer), pipe)) {
-                            size_t len = strlen(buffer);
-                            output = realloc(output, total + len + 1);
-                            memcpy(output + total, buffer, len);
-                            total += len; output[total] = '\0';
-                        }
-                        pclose(pipe);
-                        if (total > 0 && output[total-1] == '\n') output[total-1] = '\0';
-                        
-                        result.type = 2;
-                        result.string_val = output;
-                    }
-                } else {
-                    result.type = 0;
-                    result.int_val = system(full_cmd);
-                }
-
-                // Nettoyage de la RAM et du disque
-                unlink(temp_in);
-                free(full_cmd);
+        // Évaluation de la commande (ex: "grep .gjs")
+        Value cmd_expr = evaluate_expr(right_node->sysf.command, env);
+        if (cmd_expr.type == 2) { // 2 = STRING
+            char cmd_final[8192];
+            // On injecte la donnée via un echo streamé (plus performant que mkstemp sur mobile)
+            // Format: printf "data" | (commande)
+            snprintf(cmd_final, sizeof(cmd_final), "printf \"%%s\" '%s' | %s", input_str, cmd_expr.string_val);
+            
+            if (right_node->type == NODE_SYSF) {
+                result.type = 2;
+                result.string_val = execute_sysf(cmd_final); // Appelle ta fonction sysf existante
+            } else {
+                result.type = 0;
+                result.int_val = system(cmd_final);
             }
         }
-    }
+        free(input_str);
+    } 
     // --- CAS 2 : Goscript -> Fonction Goscript ---
     else if (right_node->type == NODE_CALL) {
-        // Astuce : On injecte temporairement left_val comme PREMIER argument de l'appel
-        ASTNodeList* new_args = create_node_list();
+        // Au lieu de modifier l'AST, on évalue la fonction manuellement
+        // en ajoutant la valeur de gauche comme argument prioritaire.
         
-        // On crée un nœud littéral temporaire pour porter la valeur évaluée
-        ASTNode* injected_arg = malloc(sizeof(ASTNode));
-        if (left_val.type == 0) { injected_arg->type = NODE_NUMBER; injected_arg->number.value = left_val.int_val; }
-        else if (left_val.type == 2) { injected_arg->type = NODE_STRING; injected_arg->string_val.value = strdup(left_val.string_val); }
-        
-        add_to_node_list(new_args, injected_arg);
-
-        // On ajoute les autres arguments existants à la suite
-        if (right_node->call.args) {
-            for(int i = 0; i < right_node->call.args->count; i++) {
-                add_to_node_list(new_args, right_node->call.args->nodes[i]);
+        // On récupère la définition de la fonction
+        Symbol* sym = lookup_symbol(env, right_node->call.name);
+        if (sym && sym->type == SYM_FUNCTION) {
+            Environment* call_env = create_environment(sym->func_env);
+            
+            // On injecte left_val comme premier paramètre
+            if (sym->param_count > 0) {
+                define_symbol(call_env, sym->params[0], left_val, 0);
             }
+            
+            // On évalue les autres arguments du script
+            for (int i = 0; i < right_node->call.args->count && (i+1) < sym->param_count; i++) {
+                Value arg_v = evaluate_expr(right_node->call.args->nodes[i], env);
+                define_symbol(call_env, sym->params[i+1], arg_v, 0);
+            }
+            
+            result = evaluate_statement(sym->body, call_env);
+            // Nettoyage call_env...
         }
-
-        // Évaluation avec la nouvelle liste d'arguments
-        ASTNodeList* old_args = right_node->call.args;
-        right_node->call.args = new_args;
-        
-        result = evaluate_expr(right_node, env);
-
-        // Restauration de l'AST d'origine
-        right_node->call.args = old_args;
-        free(new_args->nodes);
-        free(new_args);
-        free(injected_arg);
     }
-    break;
+    return result;
 }
+
 
             
         default:

@@ -71,7 +71,6 @@ ASTNode* program_root;
 
 /* Précédence des opérateurs (du plus faible au plus fort) */
 %left TOKEN_OR
-%left TOKEN_PIPE_FORWARD
 %left TOKEN_AND
 %left TOKEN_EQ TOKEN_NEQ
 %left TOKEN_LT TOKEN_LTE TOKEN_GT TOKEN_GTE
@@ -756,12 +755,7 @@ binary_expr:
     | expression TOKEN_MODULO_ASSIGN expression {
         $$ = create_assign_op_node($1, OP_MOD_ASSIGN, $3);
     }
-
-    | expression TOKEN_PIPE_FORWARD expression {
-        $$ = create_binary_op($1, OP_PIPE, $3);
-    }
     ;
-
 
 unary_expr:
     TOKEN_NOT expression {

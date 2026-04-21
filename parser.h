@@ -1,4 +1,4 @@
-/* A Bison parser, made by GNU Bison 3.8.2.  */
+/* A Bison parser, made by GNU Bison 3.7.6.  */
 
 /* Bison interface for Yacc-like parsers in C
 
@@ -97,62 +97,65 @@ extern int yydebug;
     TOKEN_LAMBDA = 298,            /* TOKEN_LAMBDA  */
     TOKEN_EXTENDS = 299,           /* TOKEN_EXTENDS  */
     TOKEN_UNDERSCORE = 300,        /* TOKEN_UNDERSCORE  */
-    TOKEN_PLUS = 301,              /* TOKEN_PLUS  */
-    TOKEN_MINUS = 302,             /* TOKEN_MINUS  */
-    TOKEN_MULTIPLY = 303,          /* TOKEN_MULTIPLY  */
-    TOKEN_DIVIDE = 304,            /* TOKEN_DIVIDE  */
-    TOKEN_MODULO = 305,            /* TOKEN_MODULO  */
-    TOKEN_ASSIGN = 306,            /* TOKEN_ASSIGN  */
-    TOKEN_PLUS_ASSIGN = 307,       /* TOKEN_PLUS_ASSIGN  */
-    TOKEN_MINUS_ASSIGN = 308,      /* TOKEN_MINUS_ASSIGN  */
-    TOKEN_MULTIPLY_ASSIGN = 309,   /* TOKEN_MULTIPLY_ASSIGN  */
-    TOKEN_DIVIDE_ASSIGN = 310,     /* TOKEN_DIVIDE_ASSIGN  */
-    TOKEN_MODULO_ASSIGN = 311,     /* TOKEN_MODULO_ASSIGN  */
-    TOKEN_EQ = 312,                /* TOKEN_EQ  */
-    TOKEN_NEQ = 313,               /* TOKEN_NEQ  */
-    TOKEN_LT = 314,                /* TOKEN_LT  */
-    TOKEN_LTE = 315,               /* TOKEN_LTE  */
-    TOKEN_GT = 316,                /* TOKEN_GT  */
-    TOKEN_GTE = 317,               /* TOKEN_GTE  */
-    TOKEN_AND = 318,               /* TOKEN_AND  */
-    TOKEN_OR = 319,                /* TOKEN_OR  */
-    TOKEN_NOT = 320,               /* TOKEN_NOT  */
-    TOKEN_AMP = 321,               /* TOKEN_AMP  */
-    TOKEN_PIPE = 322,              /* TOKEN_PIPE  */
-    TOKEN_XOR = 323,               /* TOKEN_XOR  */
-    TOKEN_LSHIFT = 324,            /* TOKEN_LSHIFT  */
-    TOKEN_RSHIFT = 325,            /* TOKEN_RSHIFT  */
-    TOKEN_DOUBLE_COLON = 326,      /* TOKEN_DOUBLE_COLON  */
-    TOKEN_DOT = 327,               /* TOKEN_DOT  */
-    TOKEN_SECURITY = 328,          /* TOKEN_SECURITY  */
-    TOKEN_COLON = 329,             /* TOKEN_COLON  */
-    TOKEN_SEMICOLON = 330,         /* TOKEN_SEMICOLON  */
-    TOKEN_COMMA = 331,             /* TOKEN_COMMA  */
-    TOKEN_ARROW = 332,             /* TOKEN_ARROW  */
-    TOKEN_FAT_ARROW = 333,         /* TOKEN_FAT_ARROW  */
-    TOKEN_PIPE_FORWARD = 334,      /* TOKEN_PIPE_FORWARD  */
-    TOKEN_OPTIONAL = 335,          /* TOKEN_OPTIONAL  */
-    TOKEN_COALESCE = 336,          /* TOKEN_COALESCE  */
-    TOKEN_RANGE = 337,             /* TOKEN_RANGE  */
-    TOKEN_RANGE_INC = 338,         /* TOKEN_RANGE_INC  */
-    TOKEN_MUTS = 339,              /* TOKEN_MUTS  */
-    TOKEN_LPAREN = 340,            /* TOKEN_LPAREN  */
-    TOKEN_RPAREN = 341,            /* TOKEN_RPAREN  */
-    TOKEN_LBRACE = 342,            /* TOKEN_LBRACE  */
-    TOKEN_RBRACE = 343,            /* TOKEN_RBRACE  */
-    TOKEN_LBRACKET = 344,          /* TOKEN_LBRACKET  */
-    TOKEN_RBRACKET = 345,          /* TOKEN_RBRACKET  */
-    TOKEN_TRY = 346,               /* TOKEN_TRY  */
-    TOKEN_CATCH = 347,             /* TOKEN_CATCH  */
-    TOKEN_FINALLY = 348,           /* TOKEN_FINALLY  */
-    TOKEN_THROW = 349,             /* TOKEN_THROW  */
-    TOKEN_EXCEPT = 350,            /* TOKEN_EXCEPT  */
-    TOKEN_RAISE = 351,             /* TOKEN_RAISE  */
-    TOKEN_IDENTIFIER = 352,        /* TOKEN_IDENTIFIER  */
-    TOKEN_NUMBER = 353,            /* TOKEN_NUMBER  */
-    TOKEN_FLOAT = 354,             /* TOKEN_FLOAT  */
-    TOKEN_STRING = 355,            /* TOKEN_STRING  */
-    TOKEN_F_STRING = 356           /* TOKEN_F_STRING  */
+    TOKEN_SWITCH = 301,            /* TOKEN_SWITCH  */
+    TOKEN_PLUS = 302,              /* TOKEN_PLUS  */
+    TOKEN_MINUS = 303,             /* TOKEN_MINUS  */
+    TOKEN_MULTIPLY = 304,          /* TOKEN_MULTIPLY  */
+    TOKEN_DIVIDE = 305,            /* TOKEN_DIVIDE  */
+    TOKEN_MODULO = 306,            /* TOKEN_MODULO  */
+    TOKEN_ASSIGN = 307,            /* TOKEN_ASSIGN  */
+    TOKEN_PLUS_ASSIGN = 308,       /* TOKEN_PLUS_ASSIGN  */
+    TOKEN_MINUS_ASSIGN = 309,      /* TOKEN_MINUS_ASSIGN  */
+    TOKEN_MULTIPLY_ASSIGN = 310,   /* TOKEN_MULTIPLY_ASSIGN  */
+    TOKEN_DIVIDE_ASSIGN = 311,     /* TOKEN_DIVIDE_ASSIGN  */
+    TOKEN_MODULO_ASSIGN = 312,     /* TOKEN_MODULO_ASSIGN  */
+    TOKEN_EQ = 313,                /* TOKEN_EQ  */
+    TOKEN_NEQ = 314,               /* TOKEN_NEQ  */
+    TOKEN_LT = 315,                /* TOKEN_LT  */
+    TOKEN_LTE = 316,               /* TOKEN_LTE  */
+    TOKEN_GT = 317,                /* TOKEN_GT  */
+    TOKEN_GTE = 318,               /* TOKEN_GTE  */
+    TOKEN_AND = 319,               /* TOKEN_AND  */
+    TOKEN_OR = 320,                /* TOKEN_OR  */
+    TOKEN_NOT = 321,               /* TOKEN_NOT  */
+    TOKEN_AMP = 322,               /* TOKEN_AMP  */
+    TOKEN_PIPE = 323,              /* TOKEN_PIPE  */
+    TOKEN_XOR = 324,               /* TOKEN_XOR  */
+    TOKEN_LSHIFT = 325,            /* TOKEN_LSHIFT  */
+    TOKEN_RSHIFT = 326,            /* TOKEN_RSHIFT  */
+    TOKEN_DOUBLE_COLON = 327,      /* TOKEN_DOUBLE_COLON  */
+    TOKEN_DOT = 328,               /* TOKEN_DOT  */
+    TOKEN_SECURITY = 329,          /* TOKEN_SECURITY  */
+    TOKEN_COLON = 330,             /* TOKEN_COLON  */
+    TOKEN_SEMICOLON = 331,         /* TOKEN_SEMICOLON  */
+    TOKEN_COMMA = 332,             /* TOKEN_COMMA  */
+    TOKEN_ARROW = 333,             /* TOKEN_ARROW  */
+    TOKEN_FAT_ARROW = 334,         /* TOKEN_FAT_ARROW  */
+    TOKEN_PIPE_FORWARD = 335,      /* TOKEN_PIPE_FORWARD  */
+    TOKEN_OPTIONAL = 336,          /* TOKEN_OPTIONAL  */
+    TOKEN_COALESCE = 337,          /* TOKEN_COALESCE  */
+    TOKEN_RANGE = 338,             /* TOKEN_RANGE  */
+    TOKEN_RANGE_INC = 339,         /* TOKEN_RANGE_INC  */
+    TOKEN_MUTS = 340,              /* TOKEN_MUTS  */
+    TOKEN_SYSF = 341,              /* TOKEN_SYSF  */
+    TOKEN_SH = 342,                /* TOKEN_SH  */
+    TOKEN_LPAREN = 343,            /* TOKEN_LPAREN  */
+    TOKEN_RPAREN = 344,            /* TOKEN_RPAREN  */
+    TOKEN_LBRACE = 345,            /* TOKEN_LBRACE  */
+    TOKEN_RBRACE = 346,            /* TOKEN_RBRACE  */
+    TOKEN_LBRACKET = 347,          /* TOKEN_LBRACKET  */
+    TOKEN_RBRACKET = 348,          /* TOKEN_RBRACKET  */
+    TOKEN_TRY = 349,               /* TOKEN_TRY  */
+    TOKEN_CATCH = 350,             /* TOKEN_CATCH  */
+    TOKEN_FINALLY = 351,           /* TOKEN_FINALLY  */
+    TOKEN_THROW = 352,             /* TOKEN_THROW  */
+    TOKEN_EXCEPT = 353,            /* TOKEN_EXCEPT  */
+    TOKEN_RAISE = 354,             /* TOKEN_RAISE  */
+    TOKEN_IDENTIFIER = 355,        /* TOKEN_IDENTIFIER  */
+    TOKEN_NUMBER = 356,            /* TOKEN_NUMBER  */
+    TOKEN_FLOAT = 357,             /* TOKEN_FLOAT  */
+    TOKEN_STRING = 358,            /* TOKEN_STRING  */
+    TOKEN_F_STRING = 359           /* TOKEN_F_STRING  */
   };
   typedef enum yytokentype yytoken_kind_t;
 #endif
@@ -169,7 +172,7 @@ union YYSTYPE
     struct ASTNode* node;
     struct ASTNodeList* node_list;
 
-#line 173 "parser.h"
+#line 176 "parser.h"
 
 };
 typedef union YYSTYPE YYSTYPE;
@@ -180,8 +183,6 @@ typedef union YYSTYPE YYSTYPE;
 
 extern YYSTYPE yylval;
 
-
 int yyparse (void);
-
 
 #endif /* !YY_YY_PARSER_H_INCLUDED  */

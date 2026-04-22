@@ -990,6 +990,67 @@ ASTNode* find_method(ASTNode* impl_node, char* method_name) {
     return NULL;
 }
 
+// Fonction de comparaison profonde pour le pattern matching
+int match_pattern(ASTNode* pattern, Value target, Environment* env) {
+    if (!pattern) return 0;
+
+    // Cas 1: Joker '_'
+    if (pattern->type == NODE_PATTERN_WILDCARD) {
+        return 1;
+    }
+
+    // Cas 2: Nombres
+    if (pattern->type == NODE_PATTERN_NUMBER) {
+        return (target.type == 0 && target.int_val == pattern->pattern_number.value);
+    }
+
+    // Cas 3: Chaînes de caractères
+    if (pattern->type == NODE_PATTERN_STRING) {
+        return (target.type == 2 && target.string_val && 
+                strcmp(target.string_val, pattern->pattern_string.value) == 0);
+    }
+
+    // Cas 4: Binding de variable (ex: "lt port")
+    if (pattern->type == NODE_PATTERN_BINDING) {
+        // Capture la valeur cible dans l'environnement local
+        env_set(env, pattern->pattern_binding.var_name, target);
+        return 1;
+    }
+
+    // Cas 5: Tableaux (Comparaison profonde)
+    if (pattern->type == NODE_PATTERN_ARRAY) {
+        if (target.type != 8) return 0; // La cible doit être un tableau
+        
+        ASTNodeList* pat_elems = pattern->pattern_array.elements;
+        int pat_count = pat_elems ? pat_elems->count : 0;
+        
+        // Les tailles doivent correspondre
+        if (pat_count != target.array_val.count) return 0;
+        
+        // Comparer chaque élément récursivement
+        for (int i = 0; i < pat_count; i++) {
+            Value elem = evaluate_expr(target.array_val.elements->nodes[i], env);
+            if (!match_pattern(pat_elems->nodes[i], elem, env)) {
+                return 0;
+            }
+        }
+        return 1;
+    }
+    
+    // Cas 6: Identifiants (Variables existantes)
+    if (pattern->type == NODE_PATTERN_IDENT) {
+        Value* v = env_get(env, pattern->pattern_ident.value);
+        if (v && target.type == v->type) {
+            if (target.type == 0) return target.int_val == v->int_val;
+            if (target.type == 1) return target.float_val == v->float_val;
+            if (target.type == 2) return strcmp(target.string_val, v->string_val) == 0;
+            if (target.type == 3) return target.bool_val == v->bool_val;
+        }
+        return 0;
+    }
+
+    return 0;
+}
 
 Value call_method(Value* obj, char* method_name, ASTNodeList* args, Environment* env) {
     Value result = {0};
@@ -2485,50 +2546,36 @@ case NODE_FOR_IN: {
         
 case NODE_MATCH: {
     Value target = evaluate_expr(node->match_stmt.value, env);
-    
     for (int i = 0; i < node->match_stmt.cases->count; i++) {
         ASTNode* case_node = node->match_stmt.cases->nodes[i];
-        
         if (case_node->type == NODE_MATCH_CASE) {
-            int match = 0;
             ASTNode* pattern_node = case_node->match_case.pattern;
 
-            // 1. Gérer explicitement le Joker '_'
-            if (pattern_node->type == NODE_PATTERN_WILDCARD) {
-                match = 1;
-            } 
-            else {
-                // 2. Évaluer le pattern et comparer
-                Value pattern = evaluate_expr(pattern_node, env);
-                
-                if (target.type == pattern.type) {
-                    if (target.type == 0 && target.int_val == pattern.int_val) match = 1;
-                    else if (target.type == 1 && target.float_val == pattern.float_val) match = 1;
-                    else if (target.type == 2 && strcmp(target.string_val, pattern.string_val) == 0) match = 1;
-                    else if (target.type == 3 && target.bool_val == pattern.bool_val) match = 1;
-                    // Note: Il faudra ajouter ici la comparaison profonde pour le type 8 (Array) !
-                }
-            }
+            // Créer un environnement temporaire pour isoler les variables capturées (ex: lt port)
+            Environment* match_env = create_env(env);
 
-            // 3. Exécuter l'action si on a une correspondance
-            if (match) {
-                void* action_ptr = case_node->match_case.value;
+            // Appel de notre nouvelle logique de pattern matching
+            if (match_pattern(pattern_node, target, match_env)) {
                 
-                // BIDOUILLE DE SECURITÉ : Comme tu as casté ASTNodeList* en ASTNode* dans parser.y
-                // Il faut l'exécuter comme une liste de statements.
+                void* action_ptr = case_node->match_case.value;
                 ASTNodeList* block = (ASTNodeList*)action_ptr;
                 
-                // Exécuter chaque ligne du bloc
+                // Exécuter chaque ligne du bloc avec l'environnement contenant les variables capturées
                 for (int j = 0; j < block->count; j++) {
-                    evaluate_statement(block->nodes[j], env, current_file);
+                    evaluate_statement(block->nodes[j], match_env, current_file);
                 }
                 
+                free(match_env);
                 return 0; // On quitte le match après la première correspondance
             }
+            
+            // Si ça ne matche pas, on détruit l'environnement temporaire
+            free(match_env);
         }
     }
     return 0;
 }
+
         
         case NODE_UNSAFE: {
             for (int i = 0; i < node->unsafe_block.body->count; i++) {

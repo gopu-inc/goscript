@@ -37,6 +37,19 @@ ASTNode* create_sh_node(ASTNode* command) {
     node->sysf.capture_output = 0;
     return node;
 }
+ASTNode* create_pattern_array(ASTNodeList* elements) {
+    ASTNode* node = malloc(sizeof(ASTNode));
+    node->type = NODE_PATTERN_ARRAY;
+    node->pattern_array.elements = elements;
+    return node;
+}
+
+ASTNode* create_pattern_binding(char* var_name) {
+    ASTNode* node = malloc(sizeof(ASTNode));
+    node->type = NODE_PATTERN_BINDING;
+    node->pattern_binding.var_name = strdup(var_name);
+    return node;
+}
 
 void add_to_node_list(ASTNodeList* list, ASTNode* node) {
     if (!list) return;

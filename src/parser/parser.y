@@ -69,8 +69,8 @@ ASTNode* program_root;
 %token <string> TOKEN_STRING
 %token TOKEN_F_STRING
 
-
 /* Précédence des opérateurs (du plus faible au plus fort) */
+%right TOKEN_ASSIGN TOKEN_PLUS_ASSIGN TOKEN_MINUS_ASSIGN TOKEN_MULTIPLY_ASSIGN TOKEN_DIVIDE_ASSIGN TOKEN_MODULO_ASSIGN
 %left TOKEN_OR
 %left TOKEN_AND
 %left TOKEN_EQ TOKEN_NEQ
@@ -78,8 +78,7 @@ ASTNode* program_root;
 %left TOKEN_PLUS TOKEN_MINUS
 %left TOKEN_MULTIPLY TOKEN_DIVIDE TOKEN_MODULO
 %right TOKEN_NOT
-%nonassoc TOKEN_ASSIGN TOKEN_PLUS_ASSIGN TOKEN_MINUS_ASSIGN 
-         TOKEN_MULTIPLY_ASSIGN TOKEN_DIVIDE_ASSIGN TOKEN_MODULO_ASSIGN
+
 
 /* Non-terminals */
 %type <node> switch_statement ternary_expr

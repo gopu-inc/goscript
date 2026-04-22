@@ -1944,6 +1944,22 @@ case NODE_ARRAY_ACCESS: {
         // Clé non trouvée, retourner nil
         return (Value){.type = 0, .int_val = 0};
     }
+    // Cas 3: Chaîne de caractères
+    else if (container.type == 2 && idx.type == 0) {
+        int index = idx.int_val;
+        // On récupère la longueur de la chaîne
+        int length = strlen(container.string_val); 
+        
+        if (index >= 0 && index < length) {
+            Value char_val;
+            char_val.type = 2; // Type String
+            char_val.string_val = malloc(2);
+            char_val.string_val[0] = container.string_val[index];
+            char_val.string_val[1] = '\0';
+            return char_val;
+        }
+    }
+
     return (Value){.type = 0, .int_val = 0};
 }
 case NODE_LAMBDA: {

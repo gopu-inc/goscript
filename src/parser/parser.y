@@ -162,6 +162,7 @@ statement:
     | try_statement
     | throw_statement
     | packet_decl
+    | use_statement
     | function_decl
     | struct_decl
     | switch_statement

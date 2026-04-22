@@ -246,40 +246,39 @@ jmp_statement:
     }
     ;
 // Nouvelles règles d'import
+// ==================== IMPORT STATEMENTS ====================
+
 import_statement:
-    TOKEN_IMPORT TOKEN_IDENTIFIER {
+    // import time
+    TOKEN_IMPORT import_path {
         $$ = create_import_node($2, NULL, NULL);
     }
-    | TOKEN_IMPORT TOKEN_DOT TOKEN_IDENTIFIER {
-        char* path = malloc(strlen($3) + 3);
-        sprintf(path, "./%s", $3);
-        $$ = create_import_node(path, NULL, NULL);
-        free(path);
-    }
-    | TOKEN_IMPORT TOKEN_DOT TOKEN_DOT TOKEN_DOT TOKEN_IDENTIFIER {
-        char* path = malloc(strlen($5) + 4);
-        sprintf(path, "../%s", $5);
-        $$ = create_import_node(path, NULL, NULL);
-        free(path);
-    }
-    | TOKEN_IMPORT TOKEN_IDENTIFIER TOKEN_FROM TOKEN_STRING {
-        $$ = create_import_node($4, $2, NULL);
-    }
-    // NOUVELLE RÈGLE : import sys from .sys (sans guillemets)
-    | TOKEN_IMPORT TOKEN_IDENTIFIER TOKEN_FROM TOKEN_DOT TOKEN_IDENTIFIER {
-        char* path = malloc(strlen($5) + 3);
-        sprintf(path, "./%s", $5);
-        $$ = create_import_node(path, $2, NULL);
-        free(path);
-    }
-    | TOKEN_IMPORT TOKEN_IDENTIFIER TOKEN_AS TOKEN_IDENTIFIER {
+    // import time as t
+    | TOKEN_IMPORT import_path TOKEN_AS TOKEN_IDENTIFIER {
         $$ = create_import_node($2, $4, NULL);
     }
-    | TOKEN_IMPORT TOKEN_IDENTIFIER import_constraints {
+    // import time with constraints
+    | TOKEN_IMPORT import_path import_constraints {
         $$ = create_import_node($2, NULL, $3);
+    }
+    // import time as t with constraints
+    | TOKEN_IMPORT import_path TOKEN_AS TOKEN_IDENTIFIER import_constraints {
+        $$ = create_import_node($2, $4, $5);
     }
     ;
 
+// Chemin d'import avec dots (ex: time.ft, time.v.b)
+import_path:
+    TOKEN_IDENTIFIER {
+        $$ = strdup($1);
+    }
+    | import_path TOKEN_DOT TOKEN_IDENTIFIER {
+        char* path = malloc(strlen($1) + strlen($3) + 2);
+        sprintf(path, "%s.%s", $1, $3);
+        free($1);
+        $$ = path;
+    }
+    ;
 import_constraints:
     TOKEN_LBRACE import_options TOKEN_RBRACE {
         $$ = $2;

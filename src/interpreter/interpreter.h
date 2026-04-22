@@ -70,13 +70,31 @@ typedef struct Environment {
 // Structure pour un module chargé
 #define VALUE_TYPE_DICT 10
 
+// Type de module
+typedef enum {
+    MODULE_TYPE_FILE,
+    MODULE_TYPE_PACKAGE
+} ModuleType;
+
+// Structure pour un module chargé
 typedef struct LoadedModule {
-    char* module_path;      // Chemin absolu
-    char* module_name;      // Nom du module
+    char* module_path;      // Chemin absolu (fichier ou dossier)
+    char* module_name;      // Nom complet du module (ex: "time.ft")
     char* alias;            // Alias d'import (optionnel)
     Environment* env;       // Environnement propre au module
-    int status;             // 0: loading, 1: loaded, -1: error
+    
+    ModuleType type;        // FILE ou PACKAGE
+    struct LoadedModule* parent; // Package parent (si sous-module)
+    
+    struct {
+        struct LoadedModule** list;
+        int count;
+        int capacity;
+    } submodules;           // Pour un PACKAGE, liste des sous-modules chargés
+    
+    int status;             // 0: unloaded, 1: loading, 2: loaded, -1: error
     int ref_count;          // Nombre de références
+    
     struct {
         char** allowed_names;  // Noms autorisés (only)
         int allowed_count;
@@ -85,6 +103,8 @@ typedef struct LoadedModule {
         int allow_ffi;         // 1 = FFI autorisé
     } constraints;
 } LoadedModule;
+
+
 // Table globale des modules
 typedef struct ModuleRegistry {
     LoadedModule** modules;

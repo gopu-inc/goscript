@@ -2497,9 +2497,14 @@ case NODE_FOR_IN: {
                         else if (target.type == 3 && target.bool_val == pattern.bool_val) match = 1;
                     }
                     if (match) {
-                        evaluate_expr(case_node->match_case.value, env);
+                        // Si la valeur du cas est un bloc d'instructions (ASTNodeList*) :
+                        ASTNodeList* block_stmts = (ASTNodeList*)case_node->match_case.value;
+                        for (int j = 0; j < block_stmts->count; j++) {
+                            evaluate_statement(block_stmts->nodes[j], env, current_file);
+                        }
                         return 0;
                     }
+
                 }
             }
             return 0;

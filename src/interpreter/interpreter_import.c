@@ -30,40 +30,6 @@ extern void register_native_c_functions(Environment* env);
 
 // ==================== TYPES DE MODULES ====================
 
-typedef enum {
-    MODULE_TYPE_FILE,      // Fichier .gjs simple
-    MODULE_TYPE_PACKAGE    // Dossier avec ou sans __self__.gjs
-} ModuleType;
-
-// ==================== STRUCTURE LOADEDMODULE ÉTENDUE ====================
-
-typedef struct LoadedModule {
-    char* module_path;      // Chemin absolu (fichier ou dossier)
-    char* module_name;      // Nom complet du module (ex: "time.ft")
-    char* alias;            // Alias d'import (optionnel)
-    Environment* env;       // Environnement propre au module
-    
-    ModuleType type;        // FILE ou PACKAGE
-    struct LoadedModule* parent; // Package parent (si sous-module)
-    
-    struct {
-        struct LoadedModule** list;
-        int count;
-        int capacity;
-    } submodules;           // Pour un PACKAGE, liste des sous-modules chargés
-    
-    int status;             // 0: unloaded, 1: loading, 2: loaded, -1: error
-    int ref_count;          // Nombre de références
-    
-    struct {
-        char** allowed_names;  // Noms autorisés (only)
-        int allowed_count;
-        int timeout_ms;        // Timeout en ms
-        int sandbox;           // 1 = sandboxé
-        int allow_ffi;         // 1 = FFI autorisé
-    } constraints;
-} LoadedModule;
-
 // ==================== REGISTRY GLOBAL ====================
 
 static LoadedModule* modules[1024];

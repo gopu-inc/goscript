@@ -2204,24 +2204,26 @@ int evaluate_statement(ASTNode* node, Environment* env, char* current_file) {
         }
         
         case NODE_IF: {
-            Value cond = evaluate_expr(node->if_stmt.condition, env);
-            if (cond.type == 3 && cond.bool_val) {
-                for (int i = 0; i < node->if_stmt.then_branch->count; i++) {
-                    int ret = evaluate_statement(node->if_stmt.then_branch->nodes[i], env, current_file);
-                    if (ret == 1) return 1;
-                    if (ret == 2) return 2;
-                }
-            } else if (node->if_stmt.else_branch) {
-                for (int i = 0; i < node->if_stmt.else_branch->count; i++) {
-                    int ret = evaluate_statement(node->if_stmt.else_branch->nodes[i], env, current_file);
-                    if (ret == 1) return 1;
-                    if (ret == 2) return 2;
-                }
-            }
-            return 0;
+    Value cond = evaluate_expr(node->if_stmt.condition, env);
+    if (cond.type == 3 && cond.bool_val) {
+        for (int i = 0; i < node->if_stmt.then_branch->count; i++) {
+            int ret = evaluate_statement(node->if_stmt.then_branch->nodes[i], env, current_file);
+            if (ret == 1) return 1;
+            if (ret == 2) return 2;
+            if (ret == 3) return 3; // <-- AJOUT POUR PROPAGER LE BREAK (EVAL_BREAK)
         }
+    } else if (node->if_stmt.else_branch) {
+        for (int i = 0; i < node->if_stmt.else_branch->count; i++) {
+            int ret = evaluate_statement(node->if_stmt.else_branch->nodes[i], env, current_file);
+            if (ret == 1) return 1;
+            if (ret == 2) return 2;
+            if (ret == 3) return 3; // <-- AJOUT POUR PROPAGER LE BREAK (EVAL_BREAK)
+        }
+    }
+    return 0;
+}
 
-
+        
         // Structure pour stocker les contextes de saut
 
 case NODE_NNL: {

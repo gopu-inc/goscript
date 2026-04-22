@@ -737,6 +737,19 @@ void free_ast(ASTNode* node) {
             if (node->muts_decl.var_type) free_ast(node->muts_decl.var_type);
             if (node->muts_decl.value) free_ast(node->muts_decl.value);
             break;
+        case NODE_PATTERN_ARRAY:
+            if (node->pattern_array.elements) {
+                for (int i = 0; i < node->pattern_array.elements->count; i++) {
+                    free_ast(node->pattern_array.elements->nodes[i]);
+                }
+                free(node->pattern_array.elements->nodes);
+                free(node->pattern_array.elements);
+            }
+            break;
+        case NODE_PATTERN_BINDING:
+            free(node->pattern_binding.var_name);
+            break;
+
         case NODE_PROGRAM:
             if (node->program.statements) {
                 for (int i = 0; i < node->program.statements->count; i++) {

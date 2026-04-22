@@ -42,10 +42,29 @@ static int module_capacity = 1024;
  * Transforme "time.ft" en "time/ft"
  */
 static void module_name_to_path(const char* name, char* path_out) {
-    strcpy(path_out, name);
-    for (char* p = path_out; *p; p++) {
-        if (*p == '.') *p = '/';
+    const char* p = name;
+    char* out = path_out;
+    
+    // 1. Gérer les préfixes relatifs
+    if (*p == '.') {
+        if (*(p+1) == '.') { 
+            // ".." devient "../"
+            *out++ = '.'; *out++ = '.'; *out++ = '/';
+            p += 2;
+        } else { 
+            // "." devient "./"
+            *out++ = '.'; *out++ = '/';
+            p += 1;
+        }
     }
+    
+    // 2. Remplacer le reste des points par des slashes
+    while (*p) {
+        if (*p == '.') *out++ = '/';
+        else *out++ = *p;
+        p++;
+    }
+    *out = '\0';
 }
 
 /**

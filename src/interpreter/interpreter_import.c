@@ -230,9 +230,9 @@ char* resolve_module_path(char* current_file, char* import_path) {
     char resolved[PATH_MAX];
     char module_path[PATH_MAX];
     
-    // Convertit "time.ft" en "time/ft"
+    // Convertit "time.ft" en "time/ft", ".client" en "./client"
     module_name_to_path(import_path, module_path);
-    
+
     // Chemins de recherche standards
     const char* search_paths[] = {
         "./modules",
@@ -250,7 +250,7 @@ char* resolve_module_path(char* current_file, char* import_path) {
         "../../../../..",
         NULL
     };
-    
+
     // Cas spécial: __builtin__
     if (strcmp(import_path, "__builtin__") == 0) {
         char special_path[PATH_MAX];
@@ -313,20 +313,21 @@ char* resolve_module_path(char* current_file, char* import_path) {
         }
     }
     
-    // 2. Chemin relatif
+    // 2. Chemin relatif (CORRIGÉ ICI)
     if (import_path[0] == '.') {
         char base[PATH_MAX];
-        
         if (current_file && current_file[0] && strcmp(current_file, "REPL") != 0) {
             strcpy(base, current_file);
             char* dir = dirname(base);
-            snprintf(resolved, PATH_MAX, "%s/%s", dir, import_path);
+            // CRITIQUE : Utilisation de module_path (ex: "./client") au lieu de import_path (".client")
+            snprintf(resolved, PATH_MAX, "%s/%s", dir, module_path);
         } else {
             if (getcwd(resolved, PATH_MAX) == NULL) {
                 return NULL;
             }
             strcat(resolved, "/");
-            strcat(resolved, import_path);
+            // CRITIQUE : Utilisation de module_path ici aussi
+            strcat(resolved, module_path);
         }
         
         char clean_path[PATH_MAX];
@@ -395,6 +396,7 @@ char* resolve_module_path(char* current_file, char* import_path) {
     
     return NULL;
 }
+
 
 // ==================== CHARGEMENT D'UN FICHIER ====================
 

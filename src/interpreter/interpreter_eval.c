@@ -1031,9 +1031,10 @@ Value call_method(Value* obj, char* method_name, ASTNodeList* args, Environment*
 
 Value evaluate_expr(ASTNode* node, Environment* env) {
     Value result = {0};
-    
+    if (!node) return result; // PROTECTION ANTI-CRASH OBLIGATOIRE
     switch (node->type) {
-        // ==================== VALEURS LITTÉRALES ====================
+
+// ==================== VALEURS LITTÉRALES ====================
        case NODE_RETURN_STRUCT_FIELD: {
     // Chercher la structure dans l'environnement
     char* struct_name = node->return_struct_field.struct_name;

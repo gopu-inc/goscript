@@ -2,7 +2,7 @@
                     GOSCRIPT LANGUAGE SPECIFICATION
 ================================================================================
 
-Date: 2026-04-21 12:54:47
+Date: 2026-04-22 02:14:47
 Contient TOUT le code source du langage Goscript
 
 ================================================================================
@@ -31,6 +31,7 @@ void yyerror(const char* msg);
  /* ============================================ */
 
 "async"                 { return TOKEN_ASYNC; }
+"use"                   { return TOKEN_USE; }
 "await"                 { return TOKEN_AWAIT; }
 "spawn"                 { return TOKEN_SPAWN; }
 "fn"                    { return TOKEN_FN; }
@@ -425,6 +426,7 @@ ASTNode* program_root;
 %token TOKEN_EXTENDS
 %token TOKEN_UNDERSCORE
 %token TOKEN_SWITCH
+%token TOKEN_USE
 
 /* Operators */
 %token TOKEN_PLUS TOKEN_MINUS TOKEN_MULTIPLY TOKEN_DIVIDE TOKEN_MODULO
@@ -471,6 +473,8 @@ ASTNode* program_root;
 %type <node> try_statement catch_block finally_block throw_statement
 %type <node> module_decl dict_access
 %type <node> continue_statement
+%type <node> use_statement
+%type <string> import_path use_path
 %type <node> sysf_expr sh_expr
 %type <node> import_constraints import_options
 %type <node_list> name_list
@@ -547,6 +551,7 @@ statement:
     | try_statement
     | throw_statement
     | packet_decl
+    | use_statement
     | function_decl
     | struct_decl
     | switch_statement
@@ -572,6 +577,35 @@ sysf_expr:
     }
     | TOKEN_SYSF expression {
         $$ = create_sysf_node($2);
+    }
+    ;
+
+use_statement:
+    // use time::ft::sleep
+    TOKEN_USE use_path {
+        $$ = create_use_node($2, NULL);
+    }
+    // use time::ft::{sleep, now}
+    | TOKEN_USE use_path TOKEN_DOUBLE_COLON TOKEN_LBRACE name_list TOKEN_RBRACE {
+        $$ = create_use_node($2, $5);
+    }
+    // use time::ft::sleep as slp
+    | TOKEN_USE use_path TOKEN_AS TOKEN_IDENTIFIER {
+        $$ = create_use_node($2, NULL);
+        // Stocker l'alias dans le nœud
+        $$->use_stmt.alias = strdup($4);
+    }
+    ;
+
+use_path:
+    TOKEN_IDENTIFIER {
+        $$ = strdup($1);
+    }
+    | use_path TOKEN_DOUBLE_COLON TOKEN_IDENTIFIER {
+        char* path = malloc(strlen($1) + strlen($3) + 3);
+        sprintf(path, "%s::%s", $1, $3);
+        free($1);
+        $$ = path;
     }
     ;
 
@@ -631,40 +665,39 @@ jmp_statement:
     }
     ;
 // Nouvelles règles d'import
+// ==================== IMPORT STATEMENTS ====================
+
 import_statement:
-    TOKEN_IMPORT TOKEN_IDENTIFIER {
+    // import time
+    TOKEN_IMPORT import_path {
         $$ = create_import_node($2, NULL, NULL);
     }
-    | TOKEN_IMPORT TOKEN_DOT TOKEN_IDENTIFIER {
-        char* path = malloc(strlen($3) + 3);
-        sprintf(path, "./%s", $3);
-        $$ = create_import_node(path, NULL, NULL);
-        free(path);
-    }
-    | TOKEN_IMPORT TOKEN_DOT TOKEN_DOT TOKEN_DOT TOKEN_IDENTIFIER {
-        char* path = malloc(strlen($5) + 4);
-        sprintf(path, "../%s", $5);
-        $$ = create_import_node(path, NULL, NULL);
-        free(path);
-    }
-    | TOKEN_IMPORT TOKEN_IDENTIFIER TOKEN_FROM TOKEN_STRING {
-        $$ = create_import_node($4, $2, NULL);
-    }
-    // NOUVELLE RÈGLE : import sys from .sys (sans guillemets)
-    | TOKEN_IMPORT TOKEN_IDENTIFIER TOKEN_FROM TOKEN_DOT TOKEN_IDENTIFIER {
-        char* path = malloc(strlen($5) + 3);
-        sprintf(path, "./%s", $5);
-        $$ = create_import_node(path, $2, NULL);
-        free(path);
-    }
-    | TOKEN_IMPORT TOKEN_IDENTIFIER TOKEN_AS TOKEN_IDENTIFIER {
+    // import time as t
+    | TOKEN_IMPORT import_path TOKEN_AS TOKEN_IDENTIFIER {
         $$ = create_import_node($2, $4, NULL);
     }
-    | TOKEN_IMPORT TOKEN_IDENTIFIER import_constraints {
+    // import time with constraints
+    | TOKEN_IMPORT import_path import_constraints {
         $$ = create_import_node($2, NULL, $3);
+    }
+    // import time as t with constraints
+    | TOKEN_IMPORT import_path TOKEN_AS TOKEN_IDENTIFIER import_constraints {
+        $$ = create_import_node($2, $4, $5);
     }
     ;
 
+// Chemin d'import avec dots (ex: time.ft, time.v.b)
+import_path:
+    TOKEN_IDENTIFIER {
+        $$ = strdup($1);
+    }
+    | import_path TOKEN_DOT TOKEN_IDENTIFIER {
+        char* path = malloc(strlen($1) + strlen($3) + 2);
+        sprintf(path, "%s.%s", $1, $3);
+        free($1);
+        $$ = path;
+    }
+    ;
 import_constraints:
     TOKEN_LBRACE import_options TOKEN_RBRACE {
         $$ = $2;
@@ -1349,6 +1382,7 @@ struct Environment;
 typedef enum {
     NODE_ASYNC_FUNCTION,
     NODE_TRY,
+    NODE_USE,
     NODE_SYSF,
     NODE_SH,
     NODE_CATCH,
@@ -1493,6 +1527,12 @@ struct {
     struct ASTNode* dict;
     struct ASTNode* key;
 } dict_access;
+struct {
+    char* path;
+    ASTNodeList* symbols;  // NULL si import tout
+    char* alias;
+} use_stmt;
+
         /* Sysf / Sh command */
         struct {
             struct ASTNode* command;
@@ -1894,7 +1934,7 @@ ASTNode* create_array_access_node(ASTNode* array, ASTNode* index);
 ASTNode* create_sysf_node(ASTNode* command);
 ASTNode* create_sh_node(ASTNode* command);
 
-
+ASTNode* create_use_node(char* path, ASTNodeList* symbols);
 
 /* ==================== Nœuds principaux ==================== */
 ASTNode* create_program_node(ASTNodeList* statements);
@@ -2122,6 +2162,14 @@ ASTNode* create_finally_node(ASTNodeList* body) {
     return node;
 }
 
+ASTNode* create_use_node(char* path, ASTNodeList* symbols) {
+    ASTNode* node = malloc(sizeof(ASTNode));
+    node->type = NODE_USE;
+    node->use_stmt.path = strdup(path);
+    node->use_stmt.symbols = symbols;
+    node->use_stmt.alias = NULL;
+    return node;
+}
 ASTNode* create_throw_node(ASTNode* value) {
     ASTNode* node = malloc(sizeof(ASTNode));
     node->type = NODE_THROW;
@@ -2877,13 +2925,31 @@ typedef struct Environment {
 // Structure pour un module chargé
 #define VALUE_TYPE_DICT 10
 
+// Type de module
+typedef enum {
+    MODULE_TYPE_FILE,
+    MODULE_TYPE_PACKAGE
+} ModuleType;
+
+// Structure pour un module chargé
 typedef struct LoadedModule {
-    char* module_path;      // Chemin absolu
-    char* module_name;      // Nom du module
+    char* module_path;      // Chemin absolu (fichier ou dossier)
+    char* module_name;      // Nom complet du module (ex: "time.ft")
     char* alias;            // Alias d'import (optionnel)
     Environment* env;       // Environnement propre au module
-    int status;             // 0: loading, 1: loaded, -1: error
+    
+    ModuleType type;        // FILE ou PACKAGE
+    struct LoadedModule* parent; // Package parent (si sous-module)
+    
+    struct {
+        struct LoadedModule** list;
+        int count;
+        int capacity;
+    } submodules;           // Pour un PACKAGE, liste des sous-modules chargés
+    
+    int status;             // 0: unloaded, 1: loading, 2: loaded, -1: error
     int ref_count;          // Nombre de références
+    
     struct {
         char** allowed_names;  // Noms autorisés (only)
         int allowed_count;
@@ -2892,6 +2958,8 @@ typedef struct LoadedModule {
         int allow_ffi;         // 1 = FFI autorisé
     } constraints;
 } LoadedModule;
+
+
 // Table globale des modules
 typedef struct ModuleRegistry {
     LoadedModule** modules;
@@ -5826,6 +5894,7 @@ void call_c_function(Value* cfunc, Value* args, int arg_count, Value* result) {
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
+#include <dirent.h>
 
 extern ASTNode* program_root;
 extern int yyparse(void);
@@ -5847,13 +5916,52 @@ extern void register_native_c_functions(Environment* env);
 #define MODULE_STATUS_LOADED 2
 #define MODULE_STATUS_ERROR 3
 
-// ==================== GESTION DU CACHE ====================
+// ==================== TYPES DE MODULES ====================
+
+// ==================== REGISTRY GLOBAL ====================
 
 static LoadedModule* modules[1024];
 static int module_count = 0;
 static int module_capacity = 1024;
 
+// ==================== UTILITAIRES DE NOMS ====================
+
+/**
+ * Transforme "time.ft" en "time/ft"
+ */
+static void module_name_to_path(const char* name, char* path_out) {
+    strcpy(path_out, name);
+    for (char* p = path_out; *p; p++) {
+        if (*p == '.') *p = '/';
+    }
+}
+
+/**
+ * Extrait le dernier composant du nom (ex: "time.ft" -> "ft")
+ */
+static const char* get_last_component(const char* name) {
+    const char* last = strrchr(name, '.');
+    return last ? last + 1 : name;
+}
+
+/**
+ * Extrait le parent (ex: "time.ft" -> "time", retourne NULL si pas de parent)
+ */
+static char* get_parent_name(const char* name) {
+    char* dot = strrchr(name, '.');
+    if (!dot) return NULL;
+    
+    int len = dot - name;
+    char* parent = malloc(len + 1);
+    strncpy(parent, name, len);
+    parent[len] = '\0';
+    return parent;
+}
+
+// ==================== RECHERCHE DANS LE CACHE ====================
+
 static LoadedModule* find_module_by_path(const char* path) {
+    if (!path) return NULL;
     for (int i = 0; i < module_count; i++) {
         if (modules[i] && modules[i]->module_path && 
             strcmp(modules[i]->module_path, path) == 0) {
@@ -5864,6 +5972,7 @@ static LoadedModule* find_module_by_path(const char* path) {
 }
 
 static LoadedModule* find_module_by_name(const char* name) {
+    if (!name) return NULL;
     for (int i = 0; i < module_count; i++) {
         if (modules[i] && modules[i]->module_name && 
             strcmp(modules[i]->module_name, name) == 0) {
@@ -5873,9 +5982,12 @@ static LoadedModule* find_module_by_name(const char* name) {
     return NULL;
 }
 
-static LoadedModule* create_module(const char* path, const char* name, const char* alias) {
+// ==================== CRÉATION / DESTRUCTION ====================
+
+static LoadedModule* create_module(const char* path, const char* name, 
+                                   const char* alias, ModuleType type) {
     if (module_count >= module_capacity) {
-        fprintf(stderr, "Module registry full\n");
+        fprintf(stderr, "[Goscript] Module registry full\n");
         return NULL;
     }
     
@@ -5885,6 +5997,11 @@ static LoadedModule* create_module(const char* path, const char* name, const cha
     mod->module_path = path ? strdup(path) : NULL;
     mod->module_name = name ? strdup(name) : NULL;
     mod->alias = alias ? strdup(alias) : NULL;
+    mod->type = type;
+    mod->parent = NULL;
+    mod->submodules.list = NULL;
+    mod->submodules.count = 0;
+    mod->submodules.capacity = 0;
     mod->status = MODULE_STATUS_LOADING;
     mod->env = create_env(NULL);
     mod->ref_count = 1;
@@ -5907,6 +6024,10 @@ static void free_module(LoadedModule* mod) {
     if (mod->alias) free(mod->alias);
     if (mod->env) free(mod->env);
     
+    if (mod->submodules.list) {
+        free(mod->submodules.list);
+    }
+    
     if (mod->constraints.allowed_names) {
         for (int i = 0; i < mod->constraints.allowed_count; i++) {
             if (mod->constraints.allowed_names[i]) free(mod->constraints.allowed_names[i]);
@@ -5917,6 +6038,41 @@ static void free_module(LoadedModule* mod) {
     free(mod);
 }
 
+// ==================== GESTION DES SOUS-MODULES ====================
+
+/**
+ * Ajoute un sous-module au parent (pour l'API "parent::child::func")
+ */
+static void add_submodule(LoadedModule* parent, LoadedModule* child) {
+    if (!parent || parent->type != MODULE_TYPE_PACKAGE) return;
+    if (!child) return;
+    
+    // Éviter les doublons
+    for (int i = 0; i < parent->submodules.count; i++) {
+        if (parent->submodules.list[i] == child) return;
+    }
+    
+    if (parent->submodules.count >= parent->submodules.capacity) {
+        parent->submodules.capacity = parent->submodules.capacity == 0 ? 4 : parent->submodules.capacity * 2;
+        parent->submodules.list = realloc(parent->submodules.list, 
+                                          parent->submodules.capacity * sizeof(LoadedModule*));
+    }
+    
+    child->parent = parent;
+    parent->submodules.list[parent->submodules.count++] = child;
+    
+    // Rendre le sous-module accessible dans l'environnement du parent
+    const char* short_name = get_last_component(child->module_name);
+    
+    Value mod_val;
+    mod_val.type = 7;
+    mod_val.int_val = (int)child;
+    
+    env_set(parent->env, short_name, mod_val);
+}
+
+// ==================== ENREGISTREMENT DES EXPORTS ====================
+
 static void register_export(LoadedModule* mod, const char* symbol, const char* alias) {
     if (!mod || !symbol) return;
     
@@ -5925,7 +6081,6 @@ static void register_export(LoadedModule* mod, const char* symbol, const char* a
         mod->constraints.allowed_count = 0;
     }
     
-    // Vérifier si déjà exporté
     for (int i = 0; i < mod->constraints.allowed_count; i++) {
         if (mod->constraints.allowed_names[i] && 
             strcmp(mod->constraints.allowed_names[i], symbol) == 0) {
@@ -5939,38 +6094,43 @@ static void register_export(LoadedModule* mod, const char* symbol, const char* a
 }
 
 // ==================== RÉSOLUTION DE CHEMIN ====================
+
 char* resolve_module_path(char* current_file, char* import_path) {
     char resolved[PATH_MAX];
+    char module_path[PATH_MAX];
     
-    // Chemins de recherche pour les modules
+    // Convertit "time.ft" en "time/ft"
+    module_name_to_path(import_path, module_path);
+    
+    // Chemins de recherche standards
     const char* search_paths[] = {
-        "./modules",                      // modules/__builtin__.gjs
-        "./lib",                          // lib/__builtin__.gjs
+        "./modules",
+        "./lib",
         "./lib/std",
-        "./src",                          // src/__builtin__.gjs
-        "/usr/local/lib/goscript/protocole",       // Chemin spécial pour le builtin
+        "./src",
         "/usr/local/lib/goscript",
         "/usr/local/lib/goscript/std",
         "/usr/lib/goscript",
-        "../",
-        "../../",
-        "../../../",
-        "./",                             // ./__builtin__.gjs
+        ".",
+        "..",
+        "../..",
+        "../../..",
+        "../../../..",
+        "../../../../..",
         NULL
     };
     
-    // Cas spécial: __builtin__ (module intégré)
+    // Cas spécial: __builtin__
     if (strcmp(import_path, "__builtin__") == 0) {
-        // Vérifier d'abord dans le chemin spécial
         char special_path[PATH_MAX];
         snprintf(special_path, PATH_MAX, "/usr/local/lib/goscript/__builtin__.gjs");
         if (access(special_path, F_OK) == 0) {
-            if (realpath(special_path, resolved)) {
-                return strdup(resolved);
+            char real_path[PATH_MAX];
+            if (realpath(special_path, real_path)) {
+                return strdup(real_path);
             }
         }
         
-        // Sinon chercher dans tous les chemins
         for (int i = 0; search_paths[i]; i++) {
             char with_ext[PATH_MAX];
             snprintf(with_ext, PATH_MAX, "%s/__builtin__.gjs", search_paths[i]);
@@ -5982,14 +6142,14 @@ char* resolve_module_path(char* current_file, char* import_path) {
             }
         }
         
-        // Dernier recours: chercher dans le répertoire courant
         if (access("__builtin__.gjs", F_OK) == 0) {
-            if (realpath("__builtin__.gjs", resolved)) {
-                return strdup(resolved);
+            char real_path[PATH_MAX];
+            if (realpath("__builtin__.gjs", real_path)) {
+                return strdup(real_path);
             }
         }
         
-        fprintf(stderr, "Warning: __builtin__.gjs not found in any search path\n");
+        fprintf(stderr, "[Goscript] Warning: __builtin__.gjs not found\n");
         return NULL;
     }
     
@@ -6000,21 +6160,24 @@ char* resolve_module_path(char* current_file, char* import_path) {
         char with_ext[PATH_MAX];
         snprintf(with_ext, PATH_MAX, "%s.gjs", resolved);
         if (access(with_ext, F_OK) == 0) {
-            if (realpath(with_ext, resolved)) {
-                return strdup(resolved);
+            char real_path[PATH_MAX];
+            if (realpath(with_ext, real_path)) {
+                return strdup(real_path);
             }
         }
         
         snprintf(with_ext, PATH_MAX, "%s/__self__.gjs", resolved);
         if (access(with_ext, F_OK) == 0) {
-            if (realpath(with_ext, resolved)) {
-                return strdup(resolved);
+            char real_path[PATH_MAX];
+            if (realpath(with_ext, real_path)) {
+                return strdup(real_path);
             }
         }
         
         if (access(resolved, F_OK) == 0) {
-            if (realpath(resolved, resolved)) {
-                return strdup(resolved);
+            char real_path[PATH_MAX];
+            if (realpath(resolved, real_path)) {
+                return strdup(real_path);
             }
         }
     }
@@ -6043,21 +6206,25 @@ char* resolve_module_path(char* current_file, char* import_path) {
         char with_ext[PATH_MAX];
         snprintf(with_ext, PATH_MAX, "%s.gjs", resolved);
         if (access(with_ext, F_OK) == 0) {
-            if (realpath(with_ext, resolved)) {
-                return strdup(resolved);
+            char real_path[PATH_MAX];
+            if (realpath(with_ext, real_path)) {
+                return strdup(real_path);
             }
         }
         
         snprintf(with_ext, PATH_MAX, "%s/__self__.gjs", resolved);
         if (access(with_ext, F_OK) == 0) {
-            if (realpath(with_ext, resolved)) {
-                return strdup(resolved);
+            char real_path[PATH_MAX];
+            if (realpath(with_ext, real_path)) {
+                return strdup(real_path);
             }
         }
         
-        if (access(resolved, F_OK) == 0) {
-            if (realpath(resolved, resolved)) {
-                return strdup(resolved);
+        struct stat st;
+        if (stat(resolved, &st) == 0 && S_ISDIR(st.st_mode)) {
+            char real_path[PATH_MAX];
+            if (realpath(resolved, real_path)) {
+                return strdup(real_path);
             }
         }
     }
@@ -6065,7 +6232,9 @@ char* resolve_module_path(char* current_file, char* import_path) {
     // 3. Recherche dans les chemins standards
     for (int i = 0; search_paths[i]; i++) {
         char with_ext[PATH_MAX];
-        snprintf(with_ext, PATH_MAX, "%s/%s.gjs", search_paths[i], import_path);
+        
+        // Fichier .gjs direct
+        snprintf(with_ext, PATH_MAX, "%s/%s.gjs", search_paths[i], module_path);
         if (access(with_ext, F_OK) == 0) {
             char real_path[PATH_MAX];
             if (realpath(with_ext, real_path)) {
@@ -6073,7 +6242,8 @@ char* resolve_module_path(char* current_file, char* import_path) {
             }
         }
         
-        snprintf(with_ext, PATH_MAX, "%s/%s/__self__.gjs", search_paths[i], import_path);
+        // Dossier avec __self__.gjs
+        snprintf(with_ext, PATH_MAX, "%s/%s/__self__.gjs", search_paths[i], module_path);
         if (access(with_ext, F_OK) == 0) {
             char real_path[PATH_MAX];
             if (realpath(with_ext, real_path)) {
@@ -6081,14 +6251,13 @@ char* resolve_module_path(char* current_file, char* import_path) {
             }
         }
         
-        snprintf(with_ext, PATH_MAX, "%s/%s", search_paths[i], import_path);
-        if (access(with_ext, F_OK) == 0) {
-            struct stat path_stat;
-            if (stat(with_ext, &path_stat) == 0 && !S_ISDIR(path_stat.st_mode)) {
-                char real_path[PATH_MAX];
-                if (realpath(with_ext, real_path)) {
-                    return strdup(real_path);
-                }
+        // Dossier (package)
+        snprintf(with_ext, PATH_MAX, "%s/%s", search_paths[i], module_path);
+        struct stat st;
+        if (stat(with_ext, &st) == 0 && S_ISDIR(st.st_mode)) {
+            char real_path[PATH_MAX];
+            if (realpath(with_ext, real_path)) {
+                return strdup(real_path);
             }
         }
     }
@@ -6096,68 +6265,29 @@ char* resolve_module_path(char* current_file, char* import_path) {
     return NULL;
 }
 
-// ==================== TRAITEMENT DES CONTRAINTES ====================
+// ==================== CHARGEMENT D'UN FICHIER ====================
 
-void process_constraints(LoadedModule* module, ASTNode* constraints) {
-    (void)module;
-    (void)constraints;
-}
-
-int is_name_allowed(LoadedModule* module, char* name) {
-    (void)module;
-    (void)name;
-    return 1;
-}
-
-int is_ffi_allowed(LoadedModule* module) {
-    (void)module;
-    return 1;
-}
-
-// ==================== CHARGEMENT DE MODULE ===================
-
-LoadedModule* load_module(ModuleRegistry* reg, Environment* parent_env,
-                          char* current_file, char* import_path, 
-                          char* alias, ASTNode* constraints) {
-    (void)reg;
-    (void)constraints;
-    
-    // 1. Résoudre le chemin
-    char* full_path = resolve_module_path(current_file, import_path);
-    if (!full_path) {
-        fprintf(stderr, "Module not found: %s\n", import_path);
-        return NULL;
-    }
-    
-    // 2. Vérifier le cache
+static LoadedModule* load_file_module(const char* full_path, const char* module_name, 
+                                      const char* alias) {
+    // Vérifier le cache
     LoadedModule* existing = find_module_by_path(full_path);
     if (existing) {
         if (existing->status == MODULE_STATUS_LOADING) {
-            fprintf(stderr, "Circular import detected: %s\n", import_path);
-            free(full_path);
+            fprintf(stderr, "[Goscript] Circular import detected: %s\n", module_name);
             return NULL;
         }
-        
         existing->ref_count++;
-        
-        Value module_val;
-        module_val.type = 7;
-        module_val.int_val = (int)existing;
-        env_set(parent_env, alias ? alias : existing->module_name, module_val);
-        
-        free(full_path);
         return existing;
     }
     
-    // 3. Créer le module
-    LoadedModule* mod = create_module(full_path, import_path, alias);
-    free(full_path);
-    
+    // Créer le module
+    LoadedModule* mod = create_module(full_path, module_name, alias, MODULE_TYPE_FILE);
     if (!mod) return NULL;
     
-    // 4. Lire le fichier
-    FILE* f = fopen(mod->module_path, "r");
+    // Lire le fichier
+    FILE* f = fopen(full_path, "r");
     if (!f) {
+        fprintf(stderr, "[Goscript] Cannot open file: %s\n", full_path);
         mod->status = MODULE_STATUS_ERROR;
         return NULL;
     }
@@ -6177,9 +6307,10 @@ LoadedModule* load_module(ModuleRegistry* reg, Environment* parent_env,
     source[size] = '\0';
     fclose(f);
     
-    // 5. Parser le module
+    // Parser
     FILE* old_yyin = yyin;
     int old_lineno = yylineno;
+    ASTNode* old_program_root = program_root;  // <-- SAUVEGARDER L'AST PRINCIPAL
     
     yyin = fmemopen(source, size, "r");
     if (!yyin) {
@@ -6189,70 +6320,102 @@ LoadedModule* load_module(ModuleRegistry* reg, Environment* parent_env,
     }
     
     yylineno = 1;
-    
+    program_root = NULL;  // <-- RÉINITIALISER POUR LE PARSER
     int parse_result = yyparse();
     fclose(yyin);
+    
     yyin = old_yyin;
     yylineno = old_lineno;
     
     if (parse_result != 0 || !program_root) {
+        fprintf(stderr, "[Goscript] Parse error in module: %s\n", module_name);
         mod->status = MODULE_STATUS_ERROR;
+        program_root = old_program_root;  // <-- RESTAURER
         free(source);
         return NULL;
     }
     
-    // 6. Enregistrer les fonctions natives dans l'environnement du module
-    register_native_c_functions((Environment*)mod->env);
+    // Enregistrer les fonctions natives
+    register_native_c_functions(mod->env);
     
-    // 7. Évaluer le contenu du module pour remplir son environnement
-    if (program_root && program_root->type == NODE_PROGRAM) {
-        for (int i = 0; i < program_root->program.statements->count; i++) {
-            ASTNode* stmt = program_root->program.statements->nodes[i];
+    // Évaluer le contenu du module (remplit mod->env)
+    ASTNode* module_ast = program_root;  // <-- GARDER UNE RÉFÉRENCE
+    
+    if (module_ast && module_ast->type == NODE_PROGRAM) {
+        for (int i = 0; i < module_ast->program.statements->count; i++) {
+            ASTNode* stmt = module_ast->program.statements->nodes[i];
             
             switch (stmt->type) {
                 case NODE_MODULE:
-                    // Ignorer la déclaration module
                     break;
                     
                 case NODE_CONST:
-                case NODE_LET:
-                    {
-                        Value val = evaluate_expr(stmt->var_decl.value, (Environment*)mod->env);
-                        env_set((Environment*)mod->env, stmt->var_decl.name, val);
-                        if (stmt->var_decl.is_public) {
-                            register_export(mod, stmt->var_decl.name, NULL);
-                        }
+                case NODE_LET: {
+                    Value val = evaluate_expr(stmt->var_decl.value, mod->env);
+                    env_set(mod->env, stmt->var_decl.name, val);
+                    if (stmt->var_decl.is_public) {
+                        register_export(mod, stmt->var_decl.name, NULL);
                     }
                     break;
-                    
+                }
+                
+                case NODE_MUTS: {
+                    Value val = evaluate_expr(stmt->muts_decl.value, mod->env);
+                    env_set(mod->env, stmt->muts_decl.name, val);
+                    if (stmt->muts_decl.is_public) {
+                        register_export(mod, stmt->muts_decl.name, NULL);
+                    }
+                    break;
+                }
+                
                 case NODE_FUNCTION:
                 case NODE_PUBLIC_FUNCTION:
-                    {
-                        Value func_val;
-                        func_val.type = 4;
-                        func_val.func_val.node = stmt;
-                        func_val.func_val.closure = (Environment*)mod->env;
-                        env_set((Environment*)mod->env, stmt->function.name, func_val);
-                        if (stmt->type == NODE_PUBLIC_FUNCTION || stmt->function.is_public) {
-                            register_export(mod, stmt->function.name, NULL);
-                        }
+                case NODE_ASYNC_FUNCTION: {
+                    Value func_val;
+                    func_val.type = 4;
+                    func_val.func_val.node = stmt;  // <-- POINTE VERS L'AST DU MODULE
+                    func_val.func_val.closure = mod->env;
+                    env_set(mod->env, stmt->function.name, func_val);
+                    if (stmt->type == NODE_PUBLIC_FUNCTION || stmt->function.is_public) {
+                        register_export(mod, stmt->function.name, NULL);
                     }
                     break;
-                    
-                case NODE_STRUCT:
-                    {
-                        Value struct_val;
-                        struct_val.type = 6;
-                        struct_val.struct_val.struct_name = strdup(stmt->struct_def.name);
-                        struct_val.struct_val.fields = NULL;
-                        struct_val.struct_val.field_count = 0;
-                        env_set((Environment*)mod->env, stmt->struct_def.name, struct_val);
-                        if (stmt->struct_def.is_public) {
-                            register_export(mod, stmt->struct_def.name, NULL);
-                        }
+                }
+                
+                case NODE_STRUCT: {
+                    Value struct_val;
+                    struct_val.type = 6;
+                    struct_val.struct_val.struct_name = strdup(stmt->struct_def.name);
+                    struct_val.struct_val.fields = NULL;
+                    struct_val.struct_val.field_count = 0;
+                    env_set(mod->env, stmt->struct_def.name, struct_val);
+                    if (stmt->struct_def.is_public) {
+                        register_export(mod, stmt->struct_def.name, NULL);
                     }
                     break;
-                    
+                }
+                
+                case NODE_STRUCT_EXTENDS: {
+                    Value struct_val;
+                    struct_val.type = 6;
+                    struct_val.struct_val.struct_name = strdup(stmt->struct_extend.name);
+                    struct_val.struct_val.fields = NULL;
+                    struct_val.struct_val.field_count = 0;
+                    env_set(mod->env, stmt->struct_extend.name, struct_val);
+                    if (stmt->struct_extend.is_public) {
+                        register_export(mod, stmt->struct_extend.name, NULL);
+                    }
+                    break;
+                }
+                
+                case NODE_ENUM: {
+                    Value enum_val;
+                    enum_val.type = 6;
+                    enum_val.struct_val.struct_name = strdup(stmt->enum_def.name);
+                    env_set(mod->env, stmt->enum_def.name, enum_val);
+                    break;
+                }
+                
                 case NODE_IMPL:
                     register_impl(stmt->impl.name, stmt);
                     break;
@@ -6267,24 +6430,139 @@ LoadedModule* load_module(ModuleRegistry* reg, Environment* parent_env,
         }
     }
     
-    // 8. Marquer comme chargé
     mod->status = MODULE_STATUS_LOADED;
     
-    // 9. Lier le module à l'environnement parent
-    Value module_val;
-    module_val.type = 7;
-    module_val.int_val = (int)mod;
-    env_set(parent_env, alias ? alias : mod->module_name, module_val);
+    // NE PAS LIBÉRER L'AST DU MODULE !
+    // free_ast(module_ast);  // <-- SURTOUT PAS !
     
-    // 10. Nettoyage
-    free_ast(program_root);
-    program_root = NULL;
+    program_root = old_program_root;  // <-- RESTAURER L'AST PRINCIPAL
     free(source);
     
     return mod;
 }
 
-// ==================== FONCTIONS D'ACCÈS ====================
+// ==================== CHARGEMENT D'UN PACKAGE ====================
+static LoadedModule* load_package_module(const char* dir_path, const char* module_name, 
+                                         const char* alias) {
+    // Vérifier le cache
+    LoadedModule* existing = find_module_by_path(dir_path);
+    if (existing) {
+        existing->ref_count++;
+        return existing;
+    }
+    
+    // Vérifier si __self__.gjs existe
+    char self_path[PATH_MAX];
+    snprintf(self_path, PATH_MAX, "%s/__self__.gjs", dir_path);
+    
+    LoadedModule* mod = NULL;
+    
+    if (access(self_path, F_OK) == 0) {
+        // Charger __self__.gjs comme module principal du package
+        mod = load_file_module(self_path, module_name, alias);
+        if (mod) {
+            mod->type = MODULE_TYPE_PACKAGE;
+            // Mettre à jour le chemin pour pointer vers le dossier
+            free(mod->module_path);
+            mod->module_path = strdup(dir_path);
+        }
+    } else {
+        // Pas de __self__.gjs, créer un package vide (namespace)
+        mod = create_module(dir_path, module_name, alias, MODULE_TYPE_PACKAGE);
+        if (mod) {
+            mod->status = MODULE_STATUS_LOADED;
+            register_native_c_functions(mod->env);
+        }
+    }
+    
+    return mod;
+}
+
+// ==================== CHARGEMENT PRINCIPAL ====================
+
+LoadedModule* load_module(ModuleRegistry* reg, Environment* parent_env,
+                          char* current_file, char* import_path, 
+                          char* alias, ASTNode* constraints) {
+    (void)reg;
+    (void)constraints;
+    
+    if (!import_path) return NULL;
+    
+    // 1. Résoudre le chemin
+    char* full_path = resolve_module_path(current_file, import_path);
+    if (!full_path) {
+        fprintf(stderr, "[Goscript] Module not found: %s\n", import_path);
+        return NULL;
+    }
+    
+    // 2. Déterminer le type et charger
+    struct stat st;
+    LoadedModule* mod = NULL;
+    
+    if (stat(full_path, &st) == 0) {
+        if (S_ISDIR(st.st_mode)) {
+            mod = load_package_module(full_path, import_path, alias);
+        } else {
+            mod = load_file_module(full_path, import_path, alias);
+        }
+    }
+    
+    free(full_path);
+    
+    if (!mod) return NULL;
+    
+    // 3. Lier à l'environnement parent
+    if (parent_env) {
+        const char* env_name = alias ? alias : get_last_component(import_path);
+        
+        Value module_val;
+        module_val.type = 7;
+        module_val.int_val = (int)mod;
+        env_set(parent_env, env_name, module_val);
+        
+        // 4. Gérer la hiérarchie parent-enfant
+        char* parent_name = get_parent_name(import_path);
+        if (parent_name) {
+            LoadedModule* parent_mod = find_module_by_name(parent_name);
+            if (!parent_mod) {
+                // Charger le parent automatiquement
+                parent_mod = load_module(NULL, parent_env, current_file, parent_name, NULL, NULL);
+            }
+            if (parent_mod) {
+                add_submodule(parent_mod, mod);
+            }
+            free(parent_name);
+        }
+    }
+    
+    return mod;
+}
+
+// ==================== CONTRAINTES ====================
+
+void process_constraints(LoadedModule* module, ASTNode* constraints) {
+    (void)module;
+    (void)constraints;
+}
+
+int is_name_allowed(LoadedModule* module, char* name) {
+    if (!module || !name) return 1;
+    if (module->constraints.allowed_count == 0) return 1;
+    
+    for (int i = 0; i < module->constraints.allowed_count; i++) {
+        if (module->constraints.allowed_names[i] && 
+            strcmp(module->constraints.allowed_names[i], name) == 0) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+int is_ffi_allowed(LoadedModule* module) {
+    return module ? module->constraints.allow_ffi : 1;
+}
+
+// ==================== REGISTRY ====================
 
 ModuleRegistry* init_module_registry(void) {
     return NULL;
@@ -6303,27 +6581,51 @@ LoadedModule* find_module(ModuleRegistry* reg, char* path) {
 void free_module_registry(ModuleRegistry* reg) {
     (void)reg;
     for (int i = 0; i < module_count; i++) {
-        free_module(modules[i]);
-        modules[i] = NULL;
+        if (modules[i]) {
+            // Libérer l'AST du module si tu le stockes quelque part
+            // Pour l'instant, on ne le fait pas car l'AST est partagé
+            free_module(modules[i]);
+            modules[i] = NULL;
+        }
     }
     module_count = 0;
 }
 
+// ==================== DEBUG ====================
+
 void dump_modules(void) {
-    printf("\n=== MODULE REGISTRY ===\n");
+    printf("\n╔══════════════════════════════════════════════════════════════╗\n");
+    printf("║                    MODULE REGISTRY                            ║\n");
+    printf("╠══════════════════════════════════════════════════════════════╣\n");
+    
     for (int i = 0; i < module_count; i++) {
         LoadedModule* mod = modules[i];
-        printf("Module %d:\n", i);
-        printf("  Path: %s\n", mod->module_path ? mod->module_path : "(null)");
-        printf("  Name: %s\n", mod->module_name ? mod->module_name : "(null)");
-        printf("  Alias: %s\n", mod->alias ? mod->alias : "(null)");
-        printf("  Status: %d\n", mod->status);
-        printf("  RefCount: %d\n", mod->ref_count);
-        printf("  Exports: %d\n", mod->constraints.allowed_count);
-        printf("\n");
+        if (!mod) continue;
+        
+        printf("║ Module %d:\n", i);
+        printf("║   Path:   %s\n", mod->module_path ? mod->module_path : "(null)");
+        printf("║   Name:   %s\n", mod->module_name ? mod->module_name : "(null)");
+        printf("║   Alias:  %s\n", mod->alias ? mod->alias : "(null)");
+        printf("║   Type:   %s\n", mod->type == MODULE_TYPE_FILE ? "FILE" : "PACKAGE");
+        printf("║   Status: %d\n", mod->status);
+        printf("║   RefCount: %d\n", mod->ref_count);
+        printf("║   Submodules: %d\n", mod->submodules.count);
+        printf("║   Exports: %d\n", mod->constraints.allowed_count);
+        
+        if (mod->submodules.count > 0) {
+            printf("║   Children:\n");
+            for (int j = 0; j < mod->submodules.count; j++) {
+                printf("║     - %s\n", mod->submodules.list[j]->module_name);
+            }
+        }
+        
+        if (i < module_count - 1) {
+            printf("╟──────────────────────────────────────────────────────────────╢\n");
+        }
     }
-    printf("Total modules: %d\n", module_count);
-    printf("========================\n");
+    
+    printf("╚══════════════════════════════════════════════════════════════╝\n");
+    printf("Total modules: %d\n\n", module_count);
 }
 
 
@@ -6969,7 +7271,7 @@ void print_ast(ASTNode* node, int depth) {
 ================================================================================
 
 CC = gcc
-CFLAGS = -Wall -g -O2 -I./src -I./src/ast -I./src/interpreter -DDEBUG
+CFLAGS = -Wall -g -O0 -I./src -I./src/ast -I./src/interpreter
 LDFLAGS = -lm -ldl -lffi
 
 # Détection automatique de l'architecture
@@ -7098,76 +7400,32 @@ MODULE: lib/__builtin__.gjs
 ----------------------------------------
 module __builtin__
 
-struct GetMod {
-   inter: int,
-   stringer: string,
-   floater: float
-}
-/*
- function type of get mod and sizer use programme
- symplify developing goscript any sample
- use: typs("obj") type of -> result string 
-*/
-/* 
-fn typs(obj) {
-  lt p = new GetMod {
-   inter: obj,
-   striger: obj,
-   floater: obj
-   }
-   
-   lt m = obj = string
-   lt mm = obj = int
-   lt mmm = obj = float
-   cn cbj = (if obj == mm  {
-      ret obj + "int"
-   }
-   
-   if obj == m {
-      ret obj + "string"
-   }
-   if obj == mmm  {
-      ret obj + "float"
-   })
-   
-   ret cbj
-}
-*/
-/*
- char one input create arguments
-*/
-fn inputln(arg) {
-   if arg == 0 {
-      while arg < 0 {
-         arg = arg * 10
-         println(arg)
-      }
-      for args in arg {
-         while args < 0 {
-            args = args * 10
-            println(args)
-            continue
-         }
-       }
-    }
-    ret arg
-}
-/*
- string compare all arguments is true and false
-*/
-fn __str(s1, s2) {
-   ret s1 == s2
+pub fn inputln(): string {
+    // Utilisation de -r pour éviter les problèmes avec les backslashes
+    ret sysf("read -r _tmp_var && echo $_tmp_var")
 }
 
-fn __dict(args) {
-   ret "[" + args + "]"
+pub fn ints(s: string): int {
+    if s == nil || s == "" {
+        ret 0
+    }
+    ret atoi_c(s)
 }
-fn __stri(s1, s2) {
-   ret s1 > s2
+
+pub fn str(v: any): string {
+    if v == nil {
+        ret "nil"
+    }
+    // Utilisation de %s pour être plus propre avec printf si dispo, 
+    // sinon echo -n est très bien
+    ret sysf("echo -n \"" + v + "\"")
 }
-fn __floater(ann: int) {
-   ret ann + ".0"
+
+// Ajout du support void pour les fonctions système
+pub fn exit(code: int): void {
+    sh("exit " + str(code))
 }
+
 
 
 ----------------------------------------
@@ -7699,7 +7957,7 @@ MODULE: lib/json.gjs
 ----------------------------------------
 // ============================================
 // MODULE: json.gjs
-// Parser JSON avec pattern matching
+// Parser JSON
 // ============================================
 
 module json
@@ -7784,7 +8042,10 @@ pub fn get(json_str: string, key: string): string {
     if c == '{' || c == '[' {
         muts depth = 1
         muts end = start + 1
-        while end < strlen_c(json_str) && depth > 0 {
+        while end < strlen_c(json_str) {
+            if depth <= 0 {
+                break
+            }
             lt ch = json_str[end]
             if ch == '{' || ch == '[' {
                 depth = depth + 1
@@ -7817,19 +8078,26 @@ pub fn type_of(json_str: string, key: string): string {
     
     lt c = val[0]
     
-    match c {
-        '"' => ret "string"
-        '{' => ret "object"
-        '[' => ret "array"
-        't' => ret "boolean"
-        'f' => ret "boolean"
-        'n' => ret "null"
-        _ => ret "number"
+    if c == '"' {
+        ret "string"
     }
+    if c == '{' {
+        ret "object"
+    }
+    if c == '[' {
+        ret "array"
+    }
+    if c == 't' || c == 'f' {
+        ret "boolean"
+    }
+    if c == 'n' {
+        ret "null"
+    }
+    ret "number"
 }
 
 // ============================================
-// FONCTIONS AVEC MATCH
+// FONCTIONS AVEC MATCH (version if/else)
 // ============================================
 
 // Extraire et convertir selon le type
@@ -7850,29 +8118,31 @@ pub fn parse_response(response: string): string {
     }
     
     // Extraire le contenu selon le format
-    match type_of(response, "choices") {
-        "array" => {
-            // Format OpenAI/DeepSeek/Groq
-            lt choices = get(response, "choices")
-            if choices != "" {
-                lt message = get(choices, "message")
-                if message != "" {
-                    lt content = get(message, "content")
-                    ret content
-                }
-            }
-            ret ""
-        }
-        "object" => {
-            // Format direct
-            lt content = get(response, "content")
-            if content != "" {
+    lt choices_type = type_of(response, "choices")
+    
+    if choices_type == "array" {
+        // Format OpenAI/DeepSeek/Groq
+        lt choices = get(response, "choices")
+        if choices != "" {
+            lt message = get(choices, "message")
+            if message != "" {
+                lt content = get(message, "content")
                 ret content
             }
-            ret ""
         }
-        _ => ret ""
+        ret ""
     }
+    
+    if choices_type == "object" {
+        // Format direct
+        lt content = get(response, "content")
+        if content != "" {
+            ret content
+        }
+        ret ""
+    }
+    
+    ret ""
 }
 
 // ============================================
@@ -10822,6 +11092,42 @@ println("=== Test terminé ===")
 
 
 ----------------------------------------
+TEST: test-1.gjs
+----------------------------------------
+import __builtin__
+fn main() {
+    print("Entrez un nombre : ")
+    lt saisie = inputln()
+    
+    // Conversion en entier pour calcul
+    lt nombre = ints(saisie)
+    lt double = nombre * 2
+    
+    // Re-conversion en string pour concaténation complexe si nécessaire
+    println("Le double de " + str(nombre) + " est " + str(double))
+}
+
+
+
+----------------------------------------
+TEST: test-2.gjs
+----------------------------------------
+import __builtin__
+fn main() {
+    print("Entrez un nombre : ")
+    
+    // Utilisation du namespace du module
+    lt saisie = __builtin__::inputln()
+    
+    lt nombre = __builtin__::ints(saisie)
+    lt double = nombre * 2
+    
+    println("Le double de " + __builtin__::str(nombre) + " est " + __builtin__::str(double))
+}
+
+
+
+----------------------------------------
 TEST: test.gjs
 ----------------------------------------
 // ============================================
@@ -11102,6 +11408,38 @@ println("Goscript fonctionne correctement!")
 
 
 ----------------------------------------
+TEST: test_iteral.gjs
+----------------------------------------
+// test_gc.gjs
+fn main() {
+    muts i = 0
+    while i < 1 {
+        lt s = "iteration " + i
+        i = i + 1
+        println(i)
+    }
+    println("GC test passed!")
+    
+}
+
+
+----------------------------------------
+TEST: test_pipe.gjs
+----------------------------------------
+// La commande 'sysf' reçoit la sortie précédente via le pipe
+println(sysf("ls -la") |> sysf("grep .gjs") |> sysf("wc -l"))
+
+
+----------------------------------------
+TEST: test_s_pip.gjs
+----------------------------------------
+fn main() {
+  lt p = sysf("ls") || sysf("wc -l")
+  println(p)
+}
+
+
+----------------------------------------
 TEST: test_sys.gjs
 ----------------------------------------
 // === Test des appels système ===
@@ -11146,6 +11484,94 @@ println("=== Test terminé ===")
 
 
 ----------------------------------------
+TEST: test_time.gjs
+----------------------------------------
+// test_time.gjs
+// Test du module time avec use
+
+import time
+import time.ft
+
+// Utilisation de use pour importer des fonctions spécifiques
+use time::now
+use time::timestamp
+use time::ft::sleep_ms
+use time::ft::sleep
+
+fn main() {
+    println("=== TEST MODULE TIME ===\n")
+    
+    // Test 1: Utilisation directe avec namespace complet
+    println("1. Time::now(): " + time::now())
+    println("   Timestamp: " + time::timestamp())
+    println("")
+    
+    // Test 2: Utilisation avec use (fonctions importées directement)
+    println("2. Fonctions importées via use:")
+    println("   now(): " + now())
+    println("   timestamp(): " + timestamp())
+    println("")
+    
+    // Test 3: Sous-module ft
+    println("3. Test du sous-module ft:")
+    println("   sleep_ms(500) - attendez 0.5s...")
+    sleep_ms(500)
+    println("   Fait!")
+    println("")
+    
+    println("4. Test avec namespace complet:")
+    println("   time::ft::sleep(1) - attendez 1s...")
+    time::ft::sleep(1)
+    println("   Fait!")
+    println("")
+    
+    println("=== TEST TERMINÉ ===")
+    
+    ret 0
+}
+
+
+----------------------------------------
+TEST: test_times.gjs
+----------------------------------------
+import time
+import time.ft
+
+fn main() {
+    println("=== TEST 3: TIME + TIME.FT ===\n")
+    
+    println("Date: " + time::now())
+    println("Timestamp: " + time::timestamp())
+    
+    println("\nSleep 1 seconde...")
+    ft::sleep(1)
+    println("Fait!")
+    
+    println("\n=== OK ===")
+    ret 0
+}
+
+
+----------------------------------------
+TEST: test_use.gjs
+----------------------------------------
+import time
+
+use time::now
+use time::timestamp
+
+fn main() {
+    println("=== TEST 4: USE ===\n")
+    
+    println("Date: " + now())
+    println("Timestamp: " + timestamp())
+    
+    println("\n=== OK ===")
+    ret 0
+}
+
+
+----------------------------------------
 TEST: test_var.gjs
 ----------------------------------------
 // === Test des appels système ===
@@ -11178,7 +11604,7 @@ fn main() {
 ================================================================================
 
 Mots-clés du langage:
-!, !=, %, %=, &, &&, (, ), *, *=, +, +=, ,, -, -=, ->, ., .., ..=, /, /=, :, ::, ;, <, <<, <=, =, ==, =>, >, >=, >>, ?, ??, [, ], ^, _, as, async, await, bool, break, catch, cn, continue, dict, else, enm, except, export, extends, false, finally, float, fn, for, from, if, impl, import, in, int, jmp, lambda, loop, lt, map, match, module, muts, new, nil, nnl, only, packet, pub, raise, ret, sandbox, security, sh, spawn, string, struct, switch, sysf, throw, timeout, true, try, type, unsafe, void, while, {, |, |>, ||, }
+!, !=, %, %=, &, &&, (, ), *, *=, +, +=, ,, -, -=, ->, ., .., ..=, /, /=, :, ::, ;, <, <<, <=, =, ==, =>, >, >=, >>, ?, ??, [, ], ^, _, as, async, await, bool, break, catch, cn, continue, dict, else, enm, except, export, extends, false, finally, float, fn, for, from, if, impl, import, in, int, jmp, lambda, loop, lt, map, match, module, muts, new, nil, nnl, only, packet, pub, raise, ret, sandbox, security, sh, spawn, string, struct, switch, sysf, throw, timeout, true, try, type, unsafe, use, void, while, {, |, |>, ||, }
 
 ================================================================================
 STATISTIQUES
@@ -11186,6 +11612,6 @@ STATISTIQUES
 
 Modules lib/: 29
 Exemples: 117
-Tests: 10
+Tests: 18
 
-Taille totale du fichier: 325,991 octets
+Taille totale du fichier: 339,090 octets

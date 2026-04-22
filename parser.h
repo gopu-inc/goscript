@@ -98,64 +98,65 @@ extern int yydebug;
     TOKEN_EXTENDS = 299,           /* TOKEN_EXTENDS  */
     TOKEN_UNDERSCORE = 300,        /* TOKEN_UNDERSCORE  */
     TOKEN_SWITCH = 301,            /* TOKEN_SWITCH  */
-    TOKEN_PLUS = 302,              /* TOKEN_PLUS  */
-    TOKEN_MINUS = 303,             /* TOKEN_MINUS  */
-    TOKEN_MULTIPLY = 304,          /* TOKEN_MULTIPLY  */
-    TOKEN_DIVIDE = 305,            /* TOKEN_DIVIDE  */
-    TOKEN_MODULO = 306,            /* TOKEN_MODULO  */
-    TOKEN_ASSIGN = 307,            /* TOKEN_ASSIGN  */
-    TOKEN_PLUS_ASSIGN = 308,       /* TOKEN_PLUS_ASSIGN  */
-    TOKEN_MINUS_ASSIGN = 309,      /* TOKEN_MINUS_ASSIGN  */
-    TOKEN_MULTIPLY_ASSIGN = 310,   /* TOKEN_MULTIPLY_ASSIGN  */
-    TOKEN_DIVIDE_ASSIGN = 311,     /* TOKEN_DIVIDE_ASSIGN  */
-    TOKEN_MODULO_ASSIGN = 312,     /* TOKEN_MODULO_ASSIGN  */
-    TOKEN_EQ = 313,                /* TOKEN_EQ  */
-    TOKEN_NEQ = 314,               /* TOKEN_NEQ  */
-    TOKEN_LT = 315,                /* TOKEN_LT  */
-    TOKEN_LTE = 316,               /* TOKEN_LTE  */
-    TOKEN_GT = 317,                /* TOKEN_GT  */
-    TOKEN_GTE = 318,               /* TOKEN_GTE  */
-    TOKEN_AND = 319,               /* TOKEN_AND  */
-    TOKEN_OR = 320,                /* TOKEN_OR  */
-    TOKEN_NOT = 321,               /* TOKEN_NOT  */
-    TOKEN_AMP = 322,               /* TOKEN_AMP  */
-    TOKEN_PIPE = 323,              /* TOKEN_PIPE  */
-    TOKEN_XOR = 324,               /* TOKEN_XOR  */
-    TOKEN_LSHIFT = 325,            /* TOKEN_LSHIFT  */
-    TOKEN_RSHIFT = 326,            /* TOKEN_RSHIFT  */
-    TOKEN_DOUBLE_COLON = 327,      /* TOKEN_DOUBLE_COLON  */
-    TOKEN_DOT = 328,               /* TOKEN_DOT  */
-    TOKEN_SECURITY = 329,          /* TOKEN_SECURITY  */
-    TOKEN_COLON = 330,             /* TOKEN_COLON  */
-    TOKEN_SEMICOLON = 331,         /* TOKEN_SEMICOLON  */
-    TOKEN_COMMA = 332,             /* TOKEN_COMMA  */
-    TOKEN_ARROW = 333,             /* TOKEN_ARROW  */
-    TOKEN_FAT_ARROW = 334,         /* TOKEN_FAT_ARROW  */
-    TOKEN_PIPE_FORWARD = 335,      /* TOKEN_PIPE_FORWARD  */
-    TOKEN_OPTIONAL = 336,          /* TOKEN_OPTIONAL  */
-    TOKEN_COALESCE = 337,          /* TOKEN_COALESCE  */
-    TOKEN_RANGE = 338,             /* TOKEN_RANGE  */
-    TOKEN_RANGE_INC = 339,         /* TOKEN_RANGE_INC  */
-    TOKEN_MUTS = 340,              /* TOKEN_MUTS  */
-    TOKEN_SYSF = 341,              /* TOKEN_SYSF  */
-    TOKEN_SH = 342,                /* TOKEN_SH  */
-    TOKEN_LPAREN = 343,            /* TOKEN_LPAREN  */
-    TOKEN_RPAREN = 344,            /* TOKEN_RPAREN  */
-    TOKEN_LBRACE = 345,            /* TOKEN_LBRACE  */
-    TOKEN_RBRACE = 346,            /* TOKEN_RBRACE  */
-    TOKEN_LBRACKET = 347,          /* TOKEN_LBRACKET  */
-    TOKEN_RBRACKET = 348,          /* TOKEN_RBRACKET  */
-    TOKEN_TRY = 349,               /* TOKEN_TRY  */
-    TOKEN_CATCH = 350,             /* TOKEN_CATCH  */
-    TOKEN_FINALLY = 351,           /* TOKEN_FINALLY  */
-    TOKEN_THROW = 352,             /* TOKEN_THROW  */
-    TOKEN_EXCEPT = 353,            /* TOKEN_EXCEPT  */
-    TOKEN_RAISE = 354,             /* TOKEN_RAISE  */
-    TOKEN_IDENTIFIER = 355,        /* TOKEN_IDENTIFIER  */
-    TOKEN_NUMBER = 356,            /* TOKEN_NUMBER  */
-    TOKEN_FLOAT = 357,             /* TOKEN_FLOAT  */
-    TOKEN_STRING = 358,            /* TOKEN_STRING  */
-    TOKEN_F_STRING = 359           /* TOKEN_F_STRING  */
+    TOKEN_USE = 302,               /* TOKEN_USE  */
+    TOKEN_PLUS = 303,              /* TOKEN_PLUS  */
+    TOKEN_MINUS = 304,             /* TOKEN_MINUS  */
+    TOKEN_MULTIPLY = 305,          /* TOKEN_MULTIPLY  */
+    TOKEN_DIVIDE = 306,            /* TOKEN_DIVIDE  */
+    TOKEN_MODULO = 307,            /* TOKEN_MODULO  */
+    TOKEN_ASSIGN = 308,            /* TOKEN_ASSIGN  */
+    TOKEN_PLUS_ASSIGN = 309,       /* TOKEN_PLUS_ASSIGN  */
+    TOKEN_MINUS_ASSIGN = 310,      /* TOKEN_MINUS_ASSIGN  */
+    TOKEN_MULTIPLY_ASSIGN = 311,   /* TOKEN_MULTIPLY_ASSIGN  */
+    TOKEN_DIVIDE_ASSIGN = 312,     /* TOKEN_DIVIDE_ASSIGN  */
+    TOKEN_MODULO_ASSIGN = 313,     /* TOKEN_MODULO_ASSIGN  */
+    TOKEN_EQ = 314,                /* TOKEN_EQ  */
+    TOKEN_NEQ = 315,               /* TOKEN_NEQ  */
+    TOKEN_LT = 316,                /* TOKEN_LT  */
+    TOKEN_LTE = 317,               /* TOKEN_LTE  */
+    TOKEN_GT = 318,                /* TOKEN_GT  */
+    TOKEN_GTE = 319,               /* TOKEN_GTE  */
+    TOKEN_AND = 320,               /* TOKEN_AND  */
+    TOKEN_OR = 321,                /* TOKEN_OR  */
+    TOKEN_NOT = 322,               /* TOKEN_NOT  */
+    TOKEN_AMP = 323,               /* TOKEN_AMP  */
+    TOKEN_PIPE = 324,              /* TOKEN_PIPE  */
+    TOKEN_XOR = 325,               /* TOKEN_XOR  */
+    TOKEN_LSHIFT = 326,            /* TOKEN_LSHIFT  */
+    TOKEN_RSHIFT = 327,            /* TOKEN_RSHIFT  */
+    TOKEN_DOUBLE_COLON = 328,      /* TOKEN_DOUBLE_COLON  */
+    TOKEN_DOT = 329,               /* TOKEN_DOT  */
+    TOKEN_SECURITY = 330,          /* TOKEN_SECURITY  */
+    TOKEN_COLON = 331,             /* TOKEN_COLON  */
+    TOKEN_SEMICOLON = 332,         /* TOKEN_SEMICOLON  */
+    TOKEN_COMMA = 333,             /* TOKEN_COMMA  */
+    TOKEN_ARROW = 334,             /* TOKEN_ARROW  */
+    TOKEN_FAT_ARROW = 335,         /* TOKEN_FAT_ARROW  */
+    TOKEN_PIPE_FORWARD = 336,      /* TOKEN_PIPE_FORWARD  */
+    TOKEN_OPTIONAL = 337,          /* TOKEN_OPTIONAL  */
+    TOKEN_COALESCE = 338,          /* TOKEN_COALESCE  */
+    TOKEN_RANGE = 339,             /* TOKEN_RANGE  */
+    TOKEN_RANGE_INC = 340,         /* TOKEN_RANGE_INC  */
+    TOKEN_MUTS = 341,              /* TOKEN_MUTS  */
+    TOKEN_SYSF = 342,              /* TOKEN_SYSF  */
+    TOKEN_SH = 343,                /* TOKEN_SH  */
+    TOKEN_LPAREN = 344,            /* TOKEN_LPAREN  */
+    TOKEN_RPAREN = 345,            /* TOKEN_RPAREN  */
+    TOKEN_LBRACE = 346,            /* TOKEN_LBRACE  */
+    TOKEN_RBRACE = 347,            /* TOKEN_RBRACE  */
+    TOKEN_LBRACKET = 348,          /* TOKEN_LBRACKET  */
+    TOKEN_RBRACKET = 349,          /* TOKEN_RBRACKET  */
+    TOKEN_TRY = 350,               /* TOKEN_TRY  */
+    TOKEN_CATCH = 351,             /* TOKEN_CATCH  */
+    TOKEN_FINALLY = 352,           /* TOKEN_FINALLY  */
+    TOKEN_THROW = 353,             /* TOKEN_THROW  */
+    TOKEN_EXCEPT = 354,            /* TOKEN_EXCEPT  */
+    TOKEN_RAISE = 355,             /* TOKEN_RAISE  */
+    TOKEN_IDENTIFIER = 356,        /* TOKEN_IDENTIFIER  */
+    TOKEN_NUMBER = 357,            /* TOKEN_NUMBER  */
+    TOKEN_FLOAT = 358,             /* TOKEN_FLOAT  */
+    TOKEN_STRING = 359,            /* TOKEN_STRING  */
+    TOKEN_F_STRING = 360           /* TOKEN_F_STRING  */
   };
   typedef enum yytokentype yytoken_kind_t;
 #endif
@@ -172,7 +173,7 @@ union YYSTYPE
     struct ASTNode* node;
     struct ASTNodeList* node_list;
 
-#line 176 "parser.h"
+#line 177 "parser.h"
 
 };
 typedef union YYSTYPE YYSTYPE;

@@ -1,50 +1,20 @@
-import sys from .sys
+// === Test des appels système ===
 
-fn main() {
-    println("=== SYS MODULE TEST ===\n")
-    
-    // 1. Informations système
-    println("1. Système:")
-    println("   Version: " + sys::VERSION)
-    println("   OS: " + sys::OS)
-    println("   ARCH: " + sys::ARCH)
-    println("   PID: " + sys::getpid())
-    println("")
-    
-    // 2. Variables d'environnement
-    println("2. Environnement:")
-    lt path = sys::env::get("PATH")
-    println("   PATH: " + path)
-    println("")
-    
-    // 3. Entrées/Sorties
-    println("3. I/O:")
-    sys::stdio::print("   Entrez votre nom: ")
-    lt name = sys::stdio::input("")
-    println("   Bonjour, " + name + "!")
-    println("")
-    
-    // 4. Système de fichiers
-    println("4. Fichiers:")
-    sys::fs::write_file("/tmp/test.txt", "Hello Goscript!")
-    lt content = sys::fs::read_file("/tmp/test.txt")
-    println("   Contenu: " + content)
-    sys::fs::remove("/tmp/test.txt")
-    println("")
-    
-    // 5. Temps
-    println("5. Temps:")
-    lt t = sys::time::now()
-    println("   Timestamp: " + t.sec)
-    println("   Microsecondes: " + t.usec)
-    println("")
-    
-    // 6. Processus
-    println("6. Processus:")
-    lt result = sys::process::system("echo 'Commande système exécutée!'")
-    println("   Code de retour: " + result)
-    println("")
-    
-    println("=== TEST TERMINÉ ===")
-    ret 0
-}
+println("--- 1. Test de 'sh' ---")
+// sh exécute la commande et retourne un int (le code de sortie)
+lt status = sh("echo 'Ceci est affiché directement par sh !'")
+println("Code de retour de sh (devrait être 0) :")
+println(status)
+
+println("\n--- 2. Test de 'sysf' ---")
+// sysf exécute la commande et capture la sortie dans une string
+lt output = sysf("echo 'Ceci a été capturé par sysf !'")
+println("Sortie capturée :")
+println(output)
+
+println("\n--- 3. Test d'erreur avec 'sh' ---")
+// On teste une commande qui n'existe pas pour vérifier le code de retour
+lt error_status = sh("commande_imaginaire_qui_plante 2>/dev/null")
+println("Code d'erreur de sh (devrait être différent de 0) :")
+println(error_status)
+

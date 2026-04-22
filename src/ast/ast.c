@@ -97,6 +97,14 @@ ASTNode* create_finally_node(ASTNodeList* body) {
     return node;
 }
 
+ASTNode* create_use_node(char* path, ASTNodeList* symbols) {
+    ASTNode* node = malloc(sizeof(ASTNode));
+    node->type = NODE_USE;
+    node->use_stmt.path = strdup(path);
+    node->use_stmt.symbols = symbols;
+    node->use_stmt.alias = NULL;
+    return node;
+}
 ASTNode* create_throw_node(ASTNode* value) {
     ASTNode* node = malloc(sizeof(ASTNode));
     node->type = NODE_THROW;

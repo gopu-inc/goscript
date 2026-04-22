@@ -15,6 +15,8 @@ typedef enum {
     NODE_USE,
     NODE_SYSF,
     NODE_SH,
+    NODE_PATTERN_ARRAY,
+    NODE_PATTERN_BINDING,
     NODE_CATCH,
     NODE_FINALLY,
     NODE_THROW,
@@ -147,6 +149,14 @@ typedef struct ASTNode {
           struct {
            struct ASTNodeList* body;
         } unsafe_block;
+        struct {
+            struct ASTNodeList* elements;
+        } pattern_array;
+        
+        struct {
+            char* var_name;
+        } pattern_binding;
+
 /* Dictionnaire */
 struct {
     ASTNodeList* entries;  /* Liste de paires clé-valeur */
@@ -664,6 +674,9 @@ ASTNode* create_public_muts_node(char* name, ASTNode* type, ASTNode* value);
 ASTNode* create_param_node(char* name, ASTNode* type);
 ASTNode* create_field_node(char* name, ASTNode* type);
 ASTNode* create_field_init_node(char* name, ASTNode* value);
+
+ASTNode* create_pattern_array(ASTNodeList* elements);
+ASTNode* create_pattern_binding(char* var_name);
 
 /* Patterns */
 ASTNode* create_pattern_number(int value);

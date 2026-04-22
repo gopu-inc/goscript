@@ -87,6 +87,7 @@ ASTNode* program_root;
 %type <node> continue_statement
 %type <node> use_statement
 %type <string> import_path use_path
+%type <node_list> array_patterns
 %type <node> sysf_expr sh_expr
 %type <node> import_constraints import_options
 %type <node_list> name_list
@@ -195,15 +196,15 @@ sysf_expr:
     ;
 
 use_statement:
-    // use time::ft::sleep
+    // use ft::sleep
     TOKEN_USE use_path {
         $$ = create_use_node($2, NULL);
     }
-    // use time::ft::{sleep, now}
+    // use ft::{sleep, now}
     | TOKEN_USE use_path TOKEN_DOUBLE_COLON TOKEN_LBRACE name_list TOKEN_RBRACE {
         $$ = create_use_node($2, $5);
     }
-    // use time::ft::sleep as slp
+    // use ft::sleep as slp
     | TOKEN_USE use_path TOKEN_AS TOKEN_IDENTIFIER {
         $$ = create_use_node($2, NULL);
         // Stocker l'alias dans le nœud
@@ -639,20 +640,22 @@ match_case:
         $$ = create_match_case_node($1, (ASTNode*)$3);
     }
     ;
+
 pattern:
-    TOKEN_NUMBER {
-        $$ = create_pattern_number($1);
-    }
-    | TOKEN_STRING {
-        $$ = create_pattern_string($1);
-    }
-    | TOKEN_IDENTIFIER {
-        $$ = create_pattern_ident($1);
-    }
-    | TOKEN_UNDERSCORE {
-        $$ = create_pattern_wildcard();
-    }
+    TOKEN_NUMBER { $$ = create_pattern_number($1); }
+    | TOKEN_STRING { $$ = create_pattern_string($1); }
+    | TOKEN_IDENTIFIER { $$ = create_pattern_ident($1); }
+    | TOKEN_UNDERSCORE { $$ = create_pattern_wildcard(); }
+    | TOKEN_LBRACKET array_patterns TOKEN_RBRACKET { $$ = create_pattern_array($2); }
+    | TOKEN_LET TOKEN_IDENTIFIER { $$ = create_pattern_binding($2); }
     ;
+
+array_patterns:
+    /* empty */ { $$ = NULL; }
+    | pattern { $$ = create_node_list(); add_to_node_list($$, $1); }
+    | array_patterns TOKEN_COMMA pattern { add_to_node_list($1, $3); $$ = $1; }
+    ;
+
 
 struct_decl:
     TOKEN_STRUCT TOKEN_IDENTIFIER TOKEN_LBRACE struct_fields TOKEN_RBRACE {

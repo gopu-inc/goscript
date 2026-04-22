@@ -422,6 +422,7 @@ static LoadedModule* load_file_module(const char* full_path, const char* module_
     // Parser
     FILE* old_yyin = yyin;
     int old_lineno = yylineno;
+    ASTNode* old_program_root = program_root;  // <-- SAUVEGARDER L'AST PRINCIPAL
     
     yyin = fmemopen(source, size, "r");
     if (!yyin) {
@@ -431,14 +432,17 @@ static LoadedModule* load_file_module(const char* full_path, const char* module_
     }
     
     yylineno = 1;
+    program_root = NULL;  // <-- RÉINITIALISER POUR LE PARSER
     int parse_result = yyparse();
     fclose(yyin);
+    
     yyin = old_yyin;
     yylineno = old_lineno;
     
     if (parse_result != 0 || !program_root) {
         fprintf(stderr, "[Goscript] Parse error in module: %s\n", module_name);
         mod->status = MODULE_STATUS_ERROR;
+        program_root = old_program_root;  // <-- RESTAURER
         free(source);
         return NULL;
     }
@@ -446,14 +450,15 @@ static LoadedModule* load_file_module(const char* full_path, const char* module_
     // Enregistrer les fonctions natives
     register_native_c_functions(mod->env);
     
-    // Évaluer le contenu
-    if (program_root && program_root->type == NODE_PROGRAM) {
-        for (int i = 0; i < program_root->program.statements->count; i++) {
-            ASTNode* stmt = program_root->program.statements->nodes[i];
+    // Évaluer le contenu du module (remplit mod->env)
+    ASTNode* module_ast = program_root;  // <-- GARDER UNE RÉFÉRENCE
+    
+    if (module_ast && module_ast->type == NODE_PROGRAM) {
+        for (int i = 0; i < module_ast->program.statements->count; i++) {
+            ASTNode* stmt = module_ast->program.statements->nodes[i];
             
             switch (stmt->type) {
                 case NODE_MODULE:
-                    // Ignorer la déclaration module
                     break;
                     
                 case NODE_CONST:
@@ -480,7 +485,7 @@ static LoadedModule* load_file_module(const char* full_path, const char* module_
                 case NODE_ASYNC_FUNCTION: {
                     Value func_val;
                     func_val.type = 4;
-                    func_val.func_val.node = stmt;
+                    func_val.func_val.node = stmt;  // <-- POINTE VERS L'AST DU MODULE
                     func_val.func_val.closure = mod->env;
                     env_set(mod->env, stmt->function.name, func_val);
                     if (stmt->type == NODE_PUBLIC_FUNCTION || stmt->function.is_public) {
@@ -516,7 +521,6 @@ static LoadedModule* load_file_module(const char* full_path, const char* module_
                 }
                 
                 case NODE_ENUM: {
-                    // Créer un objet enum
                     Value enum_val;
                     enum_val.type = 6;
                     enum_val.struct_val.struct_name = strdup(stmt->enum_def.name);
@@ -540,15 +544,16 @@ static LoadedModule* load_file_module(const char* full_path, const char* module_
     
     mod->status = MODULE_STATUS_LOADED;
     
-    free_ast(program_root);
-    program_root = NULL;
+    // NE PAS LIBÉRER L'AST DU MODULE !
+    // free_ast(module_ast);  // <-- SURTOUT PAS !
+    
+    program_root = old_program_root;  // <-- RESTAURER L'AST PRINCIPAL
     free(source);
     
     return mod;
 }
 
 // ==================== CHARGEMENT D'UN PACKAGE ====================
-
 static LoadedModule* load_package_module(const char* dir_path, const char* module_name, 
                                          const char* alias) {
     // Vérifier le cache
@@ -688,8 +693,12 @@ LoadedModule* find_module(ModuleRegistry* reg, char* path) {
 void free_module_registry(ModuleRegistry* reg) {
     (void)reg;
     for (int i = 0; i < module_count; i++) {
-        free_module(modules[i]);
-        modules[i] = NULL;
+        if (modules[i]) {
+            // Libérer l'AST du module si tu le stockes quelque part
+            // Pour l'instant, on ne le fait pas car l'AST est partagé
+            free_module(modules[i]);
+            modules[i] = NULL;
+        }
     }
     module_count = 0;
 }

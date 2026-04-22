@@ -107,6 +107,8 @@ ASTNode* program_root;
 %type <node> lambda_expr array_access
 %type <node> async_expr await_expr spawn_expr
 %type <node> async_function_decl
+%type <string> import_path_tail
+
 %type <node> f_string
 %start program
 

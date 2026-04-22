@@ -224,6 +224,11 @@ char* resolve_module_path(char* current_file, char* import_path) {
         "/usr/local/lib/goscript/std",
         "/usr/lib/goscript",
         ".",
+        "..",
+        "../..",
+        "../../..",
+        "../../../..",
+        "../../../../..",
         NULL
     };
     

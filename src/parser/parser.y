@@ -86,6 +86,7 @@ ASTNode* program_root;
 %type <node> try_statement catch_block finally_block throw_statement
 %type <node> module_decl dict_access
 %type <node> continue_statement
+%type <node> use_statement
 %type <string> import_path use_path
 %type <node> sysf_expr sh_expr
 %type <node> import_constraints import_options

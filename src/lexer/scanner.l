@@ -20,6 +20,7 @@ void yyerror(const char* msg);
  /* ============================================ */
 
 "async"                 { return TOKEN_ASYNC; }
+"use"                   { return TOKEN_USE; }
 "await"                 { return TOKEN_AWAIT; }
 "spawn"                 { return TOKEN_SPAWN; }
 "fn"                    { return TOKEN_FN; }

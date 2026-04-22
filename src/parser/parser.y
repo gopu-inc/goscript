@@ -86,6 +86,7 @@ ASTNode* program_root;
 %type <node> try_statement catch_block finally_block throw_statement
 %type <node> module_decl dict_access
 %type <node> continue_statement
+%type <string> import_path use_path
 %type <node> sysf_expr sh_expr
 %type <node> import_constraints import_options
 %type <node_list> name_list
@@ -188,6 +189,35 @@ sysf_expr:
     }
     | TOKEN_SYSF expression {
         $$ = create_sysf_node($2);
+    }
+    ;
+
+use_statement:
+    // use time::ft::sleep
+    TOKEN_USE use_path {
+        $$ = create_use_node($2, NULL);
+    }
+    // use time::ft::{sleep, now}
+    | TOKEN_USE use_path TOKEN_DOUBLE_COLON TOKEN_LBRACE name_list TOKEN_RBRACE {
+        $$ = create_use_node($2, $5);
+    }
+    // use time::ft::sleep as slp
+    | TOKEN_USE use_path TOKEN_AS TOKEN_IDENTIFIER {
+        $$ = create_use_node($2, NULL);
+        // Stocker l'alias dans le nœud
+        $$->use_stmt.alias = strdup($4);
+    }
+    ;
+
+use_path:
+    TOKEN_IDENTIFIER {
+        $$ = strdup($1);
+    }
+    | use_path TOKEN_DOUBLE_COLON TOKEN_IDENTIFIER {
+        char* path = malloc(strlen($1) + strlen($3) + 3);
+        sprintf(path, "%s::%s", $1, $3);
+        free($1);
+        $$ = path;
     }
     ;
 

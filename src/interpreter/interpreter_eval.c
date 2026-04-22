@@ -2483,32 +2483,52 @@ case NODE_FOR_IN: {
     return 0;
 }
         
-        case NODE_MATCH: {
-            Value target = evaluate_expr(node->match_stmt.value, env);
-            for (int i = 0; i < node->match_stmt.cases->count; i++) {
-                ASTNode* case_node = node->match_stmt.cases->nodes[i];
-                if (case_node->type == NODE_MATCH_CASE) {
-                    Value pattern = evaluate_expr(case_node->match_case.pattern, env);
-                    int match = 0;
-                    if (target.type == pattern.type) {
-                        if (target.type == 0 && target.int_val == pattern.int_val) match = 1;
-                        else if (target.type == 1 && target.float_val == pattern.float_val) match = 1;
-                        else if (target.type == 2 && strcmp(target.string_val, pattern.string_val) == 0) match = 1;
-                        else if (target.type == 3 && target.bool_val == pattern.bool_val) match = 1;
-                    }
-                    if (match) {
-                        // Si la valeur du cas est un bloc d'instructions (ASTNodeList*) :
-                        ASTNodeList* block_stmts = (ASTNodeList*)case_node->match_case.value;
-                        for (int j = 0; j < block_stmts->count; j++) {
-                            evaluate_statement(block_stmts->nodes[j], env, current_file);
-                        }
-                        return 0;
-                    }
+case NODE_MATCH: {
+    Value target = evaluate_expr(node->match_stmt.value, env);
+    
+    for (int i = 0; i < node->match_stmt.cases->count; i++) {
+        ASTNode* case_node = node->match_stmt.cases->nodes[i];
+        
+        if (case_node->type == NODE_MATCH_CASE) {
+            int match = 0;
+            ASTNode* pattern_node = case_node->match_case.pattern;
 
+            // 1. Gérer explicitement le Joker '_'
+            if (pattern_node->type == NODE_PATTERN_WILDCARD) {
+                match = 1;
+            } 
+            else {
+                // 2. Évaluer le pattern et comparer
+                Value pattern = evaluate_expr(pattern_node, env);
+                
+                if (target.type == pattern.type) {
+                    if (target.type == 0 && target.int_val == pattern.int_val) match = 1;
+                    else if (target.type == 1 && target.float_val == pattern.float_val) match = 1;
+                    else if (target.type == 2 && strcmp(target.string_val, pattern.string_val) == 0) match = 1;
+                    else if (target.type == 3 && target.bool_val == pattern.bool_val) match = 1;
+                    // Note: Il faudra ajouter ici la comparaison profonde pour le type 8 (Array) !
                 }
             }
-            return 0;
+
+            // 3. Exécuter l'action si on a une correspondance
+            if (match) {
+                void* action_ptr = case_node->match_case.value;
+                
+                // BIDOUILLE DE SECURITÉ : Comme tu as casté ASTNodeList* en ASTNode* dans parser.y
+                // Il faut l'exécuter comme une liste de statements.
+                ASTNodeList* block = (ASTNodeList*)action_ptr;
+                
+                // Exécuter chaque ligne du bloc
+                for (int j = 0; j < block->count; j++) {
+                    evaluate_statement(block->nodes[j], env, current_file);
+                }
+                
+                return 0; // On quitte le match après la première correspondance
+            }
         }
+    }
+    return 0;
+}
         
         case NODE_UNSAFE: {
             for (int i = 0; i < node->unsafe_block.body->count; i++) {

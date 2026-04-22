@@ -298,18 +298,37 @@ import_statement:
     }
     ;
 
-// Chemin d'import avec dots (ex: time.ft, time.v.b)
-import_path:
+// Chemin d'import avec dots (ex: time.ft, .client, ..utils.fs)
+import_path_tail:
     TOKEN_IDENTIFIER {
         $$ = strdup($1);
     }
-    | import_path TOKEN_DOT TOKEN_IDENTIFIER {
+    | import_path_tail TOKEN_DOT TOKEN_IDENTIFIER {
         char* path = malloc(strlen($1) + strlen($3) + 2);
         sprintf(path, "%s.%s", $1, $3);
         free($1);
         $$ = path;
     }
     ;
+
+import_path:
+    import_path_tail { 
+        $$ = $1; 
+    }
+    | TOKEN_DOT import_path_tail { // Import relatif: .fichier
+        char* path = malloc(strlen($2) + 2);
+        sprintf(path, ".%s", $2);
+        free($2);
+        $$ = path;
+    }
+    | TOKEN_RANGE import_path_tail { // Import relatif: ..fichier (utilise TOKEN_RANGE ".." du lexer)
+        char* path = malloc(strlen($2) + 3);
+        sprintf(path, "..%s", $2);
+        free($2);
+        $$ = path;
+    }
+    ;
+
 import_constraints:
     TOKEN_LBRACE import_options TOKEN_RBRACE {
         $$ = $2;

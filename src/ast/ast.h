@@ -12,6 +12,7 @@ struct Environment;
 typedef enum {
     NODE_ASYNC_FUNCTION,
     NODE_TRY,
+    NODE_USE,
     NODE_SYSF,
     NODE_SH,
     NODE_CATCH,
@@ -156,6 +157,12 @@ struct {
     struct ASTNode* dict;
     struct ASTNode* key;
 } dict_access;
+struct {
+    char* path;
+    ASTNodeList* symbols;  // NULL si import tout
+    char* alias;
+} use_stmt;
+
         /* Sysf / Sh command */
         struct {
             struct ASTNode* command;
@@ -557,7 +564,7 @@ ASTNode* create_array_access_node(ASTNode* array, ASTNode* index);
 ASTNode* create_sysf_node(ASTNode* command);
 ASTNode* create_sh_node(ASTNode* command);
 
-
+ASTNode* create_use_node(char* path, ASTNodeList* symbols);
 
 /* ==================== Nœuds principaux ==================== */
 ASTNode* create_program_node(ASTNodeList* statements);

@@ -750,6 +750,11 @@ expression:
     binary_expr
     | unary_expr
     | primary_expr
+    | expression TOKEN_DOT TOKEN_IDENTIFIER '(' arg_list ')' {
+        // Si expression est de type STRING et identifier est "len"
+        // Appeler la fonction interne get_string_length($1)
+    }
+
     ;
 
 binary_expr:

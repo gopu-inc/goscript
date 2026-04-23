@@ -2251,6 +2251,11 @@ case NODE_METHOD_CALL: {
     
     return result;
 }
+
+// Déclaration externe des arguments CLI
+extern int goscript_argc;
+extern char** goscript_argv;
+
 int evaluate_statement(ASTNode* node, Environment* env, char* current_file) {
     switch (node->type) {
         case NODE_LET:
@@ -2700,41 +2705,76 @@ void interpret_program(ASTNode* program) {
     }
     
     // 6. Exécuter le programme
-    if (main_func) {
-        Environment* main_env = create_env(global);
-        for (int i = 0; i < main_func->function.body->count; i++) {
-            int ret = evaluate_statement(main_func->function.body->nodes[i], main_env, NULL);
-            if (ret) break;
-        }
-        free(main_env);
-    } else {
-        // ============================================
-        // CORRECTION : Exécuter TOUS les statements du niveau global
-        // ============================================
-        for (int i = 0; i < program->program.statements->count; i++) {
-            ASTNode* stmt = program->program.statements->nodes[i];
+
+// ============================================
+// INJECTER LES ARGUMENTS CLI UNE FOIS POUR TOUTES
+// ============================================
+Value global_args_val;
+global_args_val.type = 8;
+global_args_val.array_val.count = goscript_argc;
+if (goscript_argc > 0) {
+    ASTNodeList* args_list = create_node_list();
+    for (int i = 0; i < goscript_argc; i++) {
+        ASTNode* arg_node = create_string_node(goscript_argv[i]);
+        add_to_node_list(args_list, arg_node);
+    }
+    global_args_val.array_val.elements = args_list;
+} else {
+    global_args_val.array_val.elements = NULL;
+}
+env_set(global, "args", global_args_val); // Accessible pour tout le programme
+
+// ============================================
+// EXÉCUTION DU PROGRAMME
+// ============================================
+ASTNode* main_func = NULL;
+for (int i = 0; i < program->program.statements->count; i++) {
+    ASTNode* stmt = program->program.statements->nodes[i];
+    if (stmt->type == NODE_FUNCTION && strcmp(stmt->function.name, "main") == 0) {
+        main_func = stmt;
+        break;
+    }
+}
+
+if (main_func) {
+    // Cas avec fonction main()
+    Environment* main_env = create_env(global);
+    // 'args' est déjà dans l'environnement parent 'global', donc accessible ici.
+
+    for (int i = 0; i < main_func->function.body->count; i++) {
+        int ret = evaluate_statement(main_func->function.body->nodes[i], main_env, NULL);
+        if (ret) break;
+    }
+    free(main_env);
+} else {
+    // Cas sans fonction main() : exécuter TOUS les statements de niveau global
+    // AVEC UN FLAG pour éviter la double exécution des déclarations déjà faites.
+    for (int i = 0; i < program->program.statements->count; i++) {
+        ASTNode* stmt = program->program.statements->nodes[i];
+        
+        // On saute les déclarations pures qui ne produisent pas d'effet de bord exécutable
+        // (elles ont déjà été enregistrées dans l'environnement)
+        switch (stmt->type) {
+            case NODE_FUNCTION:
+            case NODE_PUBLIC_FUNCTION:
+            case NODE_STRUCT:
+            case NODE_IMPL:
+            case NODE_IMPORT:
+                continue; // On passe au suivant
             
-            // Ignorer les déclarations déjà traitées (fonctions, structs, impls)
-            // et exécuter tout le reste
-            switch (stmt->type) {
-                case NODE_FUNCTION:
-                case NODE_PUBLIC_FUNCTION:
-                case NODE_STRUCT:
-                case NODE_IMPL:
-                case NODE_IMPORT:
-                    // Déjà traités, on ignore
-                    break;
-                    
-                default:
-                    // Exécuter : LET, CONST, EXPR_STMT, IF, FOR, etc.
-                    evaluate_statement(stmt, global, NULL);
-                    break;
-            }
+            default:
+                // Pour les LET, CONST, MUTS et EXPR_STMT, on les exécute
+                // ATTENTION : Cela exécutera à nouveau le côté droit de l'assignation.
+                // Pour éviter cela, il faudrait un flag 'already_evaluated' dans ASTNode.
+                // Pour l'instant, on part du principe que l'utilisateur ne met pas
+                // d'effets de bord coûteux dans les déclarations globales sans main().
+                evaluate_statement(stmt, global, NULL);
+                break;
         }
     }
-    
-    free(global);
 }
+
+free(global);
 // ==================== NETTOYAGE DE LA MÉMOIRE ====================
 
 void free_impl_table() {

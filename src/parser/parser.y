@@ -750,7 +750,7 @@ expression:
     binary_expr
     | unary_expr
     | primary_expr
-    | expression TOKEN_DOT TOKEN_IDENTIFIER '(' argument_list ')' {
+    | expression TOKEN_DOT TOKEN_IDENTIFIER TOKEN_LPAREN argument_list TOKEN_RPAREN {
         // 'expression' est l'objet ($1), 'TOKEN_IDENTIFIER' est la méthode ($3)
         // 'argument_list' est la liste des arguments ($5)
         $$ = create_method_call_node($1, $3, $5);

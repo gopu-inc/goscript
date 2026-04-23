@@ -140,6 +140,23 @@ f\"(\\.|[^"\\])*\"     {
                 case '\'': raw[j++] = '\''; break;
                 case '{': raw[j++] = '{'; break;
                 case '}': raw[j++] = '}'; break;
+                /* Support ANSI Escape \033 ou \x1b */
+                case '0':
+                    if (i+2 < len-1 && yytext[i+1] == '3' && yytext[i+2] == '3') {
+                        raw[j++] = '\033';
+                        i += 2;
+                    } else {
+                        raw[j++] = '0';
+                    }
+                    break;
+                case 'x':
+                    if (i+2 < len-1 && yytext[i+1] == '1' && yytext[i+2] == 'b') {
+                        raw[j++] = '\033';
+                        i += 2;
+                    } else {
+                        raw[j++] = 'x';
+                    }
+                    break;
                 default: raw[j++] = yytext[i]; break;
             }
         } else {
@@ -167,6 +184,23 @@ f\'(\\.|[^'\\])*\'     {
                 case '"': raw[j++] = '"'; break;
                 case '{': raw[j++] = '{'; break;
                 case '}': raw[j++] = '}'; break;
+                /* Support ANSI Escape */
+                case '0':
+                    if (i+2 < len-1 && yytext[i+1] == '3' && yytext[i+2] == '3') {
+                        raw[j++] = '\033';
+                        i += 2;
+                    } else {
+                        raw[j++] = '0';
+                    }
+                    break;
+                case 'x':
+                    if (i+2 < len-1 && yytext[i+1] == '1' && yytext[i+2] == 'b') {
+                        raw[j++] = '\033';
+                        i += 2;
+                    } else {
+                        raw[j++] = 'x';
+                    }
+                    break;
                 default: raw[j++] = yytext[i]; break;
             }
         } else {
@@ -196,6 +230,23 @@ f\'(\\.|[^'\\])*\'     {
                 case '\\': str[j++] = '\\'; break;
                 case '"': str[j++] = '"'; break;
                 case '\'': str[j++] = '\''; break;
+                /* Support ANSI Escape */
+                case '0':
+                    if (i+2 < len-1 && yytext[i+1] == '3' && yytext[i+2] == '3') {
+                        str[j++] = '\033';
+                        i += 2;
+                    } else {
+                        str[j++] = '0';
+                    }
+                    break;
+                case 'x':
+                    if (i+2 < len-1 && yytext[i+1] == '1' && yytext[i+2] == 'b') {
+                        str[j++] = '\033';
+                        i += 2;
+                    } else {
+                        str[j++] = 'x';
+                    }
+                    break;
                 default: str[j++] = yytext[i]; break;
             }
         } else {
@@ -221,6 +272,23 @@ f\'(\\.|[^'\\])*\'     {
                 case '\\': str[j++] = '\\'; break;
                 case '\'': str[j++] = '\''; break;
                 case '"': str[j++] = '"'; break;
+                /* Support ANSI Escape */
+                case '0':
+                    if (i+2 < len-1 && yytext[i+1] == '3' && yytext[i+2] == '3') {
+                        str[j++] = '\033';
+                        i += 2;
+                    } else {
+                        str[j++] = '0';
+                    }
+                    break;
+                case 'x':
+                    if (i+2 < len-1 && yytext[i+1] == '1' && yytext[i+2] == 'b') {
+                        str[j++] = '\033';
+                        i += 2;
+                    } else {
+                        str[j++] = 'x';
+                    }
+                    break;
                 default: str[j++] = yytext[i]; break;
             }
         } else {
@@ -246,6 +314,23 @@ f\'(\\.|[^'\\])*\'     {
                 case 'r': str[j++] = '\r'; break;
                 case '\\': str[j++] = '\\'; break;
                 case '"': str[j++] = '"'; break;
+                /* Support ANSI Escape */
+                case '0':
+                    if (i+2 < len-3 && yytext[i+1] == '3' && yytext[i+2] == '3') {
+                        str[j++] = '\033';
+                        i += 2;
+                    } else {
+                        str[j++] = '0';
+                    }
+                    break;
+                case 'x':
+                    if (i+2 < len-3 && yytext[i+1] == '1' && yytext[i+2] == 'b') {
+                        str[j++] = '\033';
+                        i += 2;
+                    } else {
+                        str[j++] = 'x';
+                    }
+                    break;
                 default: str[j++] = yytext[i]; break;
             }
         } else {
@@ -270,6 +355,23 @@ f\'(\\.|[^'\\])*\'     {
                 case 'r': str[j++] = '\r'; break;
                 case '\\': str[j++] = '\\'; break;
                 case '\'': str[j++] = '\''; break;
+                /* Support ANSI Escape */
+                case '0':
+                    if (i+2 < len-3 && yytext[i+1] == '3' && yytext[i+2] == '3') {
+                        str[j++] = '\033';
+                        i += 2;
+                    } else {
+                        str[j++] = '0';
+                    }
+                    break;
+                case 'x':
+                    if (i+2 < len-3 && yytext[i+1] == '1' && yytext[i+2] == 'b') {
+                        str[j++] = '\033';
+                        i += 2;
+                    } else {
+                        str[j++] = 'x';
+                    }
+                    break;
                 default: str[j++] = yytext[i]; break;
             }
         } else {
@@ -362,8 +464,6 @@ f\'(\\.|[^'\\])*\'     {
 /* ============================================ */
 /*              FONCTIONS                       */
 /* ============================================ */
-
-
 
 void cleanup_scanner(void) {
     /* Rien à faire pour l'instant */

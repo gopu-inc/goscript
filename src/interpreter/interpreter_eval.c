@@ -2645,6 +2645,25 @@ void interpret_program(ASTNode* program) {
     }
     
     // ============================================
+    // INJECTER LES ARGUMENTS CLI DANS L'ENVIRONNEMENT GLOBAL
+    // ============================================
+    Value global_args_val;
+    global_args_val.type = 8; // Type tableau
+    global_args_val.array_val.count = goscript_argc;
+    
+    if (goscript_argc > 0) {
+        ASTNodeList* args_list = create_node_list();
+        for (int i = 0; i < goscript_argc; i++) {
+            ASTNode* arg_node = create_string_node(goscript_argv[i]);
+            add_to_node_list(args_list, arg_node);
+        }
+        global_args_val.array_val.elements = args_list;
+    } else {
+        global_args_val.array_val.elements = NULL;
+    }
+    env_set(global, "args", global_args_val);
+    
+    // ============================================
     // ENREGISTREMENT DES STRUCTURES ET FONCTIONS
     // ============================================
     
@@ -2689,6 +2708,10 @@ void interpret_program(ASTNode* program) {
         }
     }
     
+    // ============================================
+    // EXÉCUTION DU PROGRAMME
+    // ============================================
+    
     // 5. Chercher la fonction main
     ASTNode* main_func = NULL;
     for (int i = 0; i < program->program.statements->count; i++) {
@@ -2702,6 +2725,9 @@ void interpret_program(ASTNode* program) {
     // 6. Exécuter le programme
     if (main_func) {
         Environment* main_env = create_env(global);
+        
+        // Les arguments 'args' sont déjà dans global, donc accessibles via main_env
+        
         for (int i = 0; i < main_func->function.body->count; i++) {
             int ret = evaluate_statement(main_func->function.body->nodes[i], main_env, NULL);
             if (ret) break;
@@ -2709,24 +2735,23 @@ void interpret_program(ASTNode* program) {
         free(main_env);
     } else {
         // ============================================
-        // CORRECTION : Exécuter TOUS les statements du niveau global
+        // Exécuter TOUS les statements du niveau global
         // ============================================
         for (int i = 0; i < program->program.statements->count; i++) {
             ASTNode* stmt = program->program.statements->nodes[i];
             
-            // Ignorer les déclarations déjà traitées (fonctions, structs, impls)
-            // et exécuter tout le reste
+            // Ignorer les déclarations déjà traitées (fonctions, structs, impls, imports)
             switch (stmt->type) {
                 case NODE_FUNCTION:
                 case NODE_PUBLIC_FUNCTION:
                 case NODE_STRUCT:
                 case NODE_IMPL:
                 case NODE_IMPORT:
-                    // Déjà traités, on ignore
+                    // Déjà traités lors de la phase d'enregistrement
                     break;
                     
                 default:
-                    // Exécuter : LET, CONST, EXPR_STMT, IF, FOR, etc.
+                    // Exécuter : LET, CONST, MUTS, EXPR_STMT, IF, FOR, etc.
                     evaluate_statement(stmt, global, NULL);
                     break;
             }

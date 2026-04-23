@@ -11,6 +11,8 @@
 extern void register_native_c_functions(Environment* env);
 extern Value evaluate_expr(ASTNode* node, Environment* env);
 extern int evaluate_statement(ASTNode* node, Environment* env, char* current_file);
+extern int goscript_argc;
+extern char** goscript_argv;
 /* static char* current_source_file = NULL; */
 // ======================== GESTION DES IMPLÉMENTATIONS ====================
 

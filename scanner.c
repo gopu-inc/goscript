@@ -1350,6 +1350,23 @@ YY_RULE_SETUP
                 case '\'': raw[j++] = '\''; break;
                 case '{': raw[j++] = '{'; break;
                 case '}': raw[j++] = '}'; break;
+                /* Support ANSI Escape \033 ou \x1b */
+                case '0':
+                    if (i+2 < len-1 && yytext[i+1] == '3' && yytext[i+2] == '3') {
+                        raw[j++] = '\033';
+                        i += 2;
+                    } else {
+                        raw[j++] = '0';
+                    }
+                    break;
+                case 'x':
+                    if (i+2 < len-1 && yytext[i+1] == '1' && yytext[i+2] == 'b') {
+                        raw[j++] = '\033';
+                        i += 2;
+                    } else {
+                        raw[j++] = 'x';
+                    }
+                    break;
                 default: raw[j++] = yytext[i]; break;
             }
         } else {
@@ -1364,7 +1381,7 @@ YY_RULE_SETUP
 case 67:
 /* rule 67 can match eol */
 YY_RULE_SETUP
-#line 155 "src/lexer/scanner.l"
+#line 172 "src/lexer/scanner.l"
 {
     int len = strlen(yytext);
     char* raw = malloc(len - 2);
@@ -1381,6 +1398,23 @@ YY_RULE_SETUP
                 case '"': raw[j++] = '"'; break;
                 case '{': raw[j++] = '{'; break;
                 case '}': raw[j++] = '}'; break;
+                /* Support ANSI Escape */
+                case '0':
+                    if (i+2 < len-1 && yytext[i+1] == '3' && yytext[i+2] == '3') {
+                        raw[j++] = '\033';
+                        i += 2;
+                    } else {
+                        raw[j++] = '0';
+                    }
+                    break;
+                case 'x':
+                    if (i+2 < len-1 && yytext[i+1] == '1' && yytext[i+2] == 'b') {
+                        raw[j++] = '\033';
+                        i += 2;
+                    } else {
+                        raw[j++] = 'x';
+                    }
+                    break;
                 default: raw[j++] = yytext[i]; break;
             }
         } else {
@@ -1398,7 +1432,7 @@ YY_RULE_SETUP
 case 68:
 /* rule 68 can match eol */
 YY_RULE_SETUP
-#line 186 "src/lexer/scanner.l"
+#line 220 "src/lexer/scanner.l"
 {
     int len = strlen(yytext);
     char* str = malloc(len - 1);
@@ -1413,6 +1447,23 @@ YY_RULE_SETUP
                 case '\\': str[j++] = '\\'; break;
                 case '"': str[j++] = '"'; break;
                 case '\'': str[j++] = '\''; break;
+                /* Support ANSI Escape */
+                case '0':
+                    if (i+2 < len-1 && yytext[i+1] == '3' && yytext[i+2] == '3') {
+                        str[j++] = '\033';
+                        i += 2;
+                    } else {
+                        str[j++] = '0';
+                    }
+                    break;
+                case 'x':
+                    if (i+2 < len-1 && yytext[i+1] == '1' && yytext[i+2] == 'b') {
+                        str[j++] = '\033';
+                        i += 2;
+                    } else {
+                        str[j++] = 'x';
+                    }
+                    break;
                 default: str[j++] = yytext[i]; break;
             }
         } else {
@@ -1427,7 +1478,7 @@ YY_RULE_SETUP
 case 69:
 /* rule 69 can match eol */
 YY_RULE_SETUP
-#line 211 "src/lexer/scanner.l"
+#line 262 "src/lexer/scanner.l"
 {
     int len = strlen(yytext);
     char* str = malloc(len - 1);
@@ -1442,6 +1493,23 @@ YY_RULE_SETUP
                 case '\\': str[j++] = '\\'; break;
                 case '\'': str[j++] = '\''; break;
                 case '"': str[j++] = '"'; break;
+                /* Support ANSI Escape */
+                case '0':
+                    if (i+2 < len-1 && yytext[i+1] == '3' && yytext[i+2] == '3') {
+                        str[j++] = '\033';
+                        i += 2;
+                    } else {
+                        str[j++] = '0';
+                    }
+                    break;
+                case 'x':
+                    if (i+2 < len-1 && yytext[i+1] == '1' && yytext[i+2] == 'b') {
+                        str[j++] = '\033';
+                        i += 2;
+                    } else {
+                        str[j++] = 'x';
+                    }
+                    break;
                 default: str[j++] = yytext[i]; break;
             }
         } else {
@@ -1457,7 +1525,7 @@ YY_RULE_SETUP
 case 70:
 /* rule 70 can match eol */
 YY_RULE_SETUP
-#line 237 "src/lexer/scanner.l"
+#line 305 "src/lexer/scanner.l"
 {
     int len = strlen(yytext);
     char* str = malloc(len - 5);
@@ -1471,6 +1539,23 @@ YY_RULE_SETUP
                 case 'r': str[j++] = '\r'; break;
                 case '\\': str[j++] = '\\'; break;
                 case '"': str[j++] = '"'; break;
+                /* Support ANSI Escape */
+                case '0':
+                    if (i+2 < len-3 && yytext[i+1] == '3' && yytext[i+2] == '3') {
+                        str[j++] = '\033';
+                        i += 2;
+                    } else {
+                        str[j++] = '0';
+                    }
+                    break;
+                case 'x':
+                    if (i+2 < len-3 && yytext[i+1] == '1' && yytext[i+2] == 'b') {
+                        str[j++] = '\033';
+                        i += 2;
+                    } else {
+                        str[j++] = 'x';
+                    }
+                    break;
                 default: str[j++] = yytext[i]; break;
             }
         } else {
@@ -1485,7 +1570,7 @@ YY_RULE_SETUP
 case 71:
 /* rule 71 can match eol */
 YY_RULE_SETUP
-#line 261 "src/lexer/scanner.l"
+#line 346 "src/lexer/scanner.l"
 {
     int len = strlen(yytext);
     char* str = malloc(len - 5);
@@ -1499,6 +1584,23 @@ YY_RULE_SETUP
                 case 'r': str[j++] = '\r'; break;
                 case '\\': str[j++] = '\\'; break;
                 case '\'': str[j++] = '\''; break;
+                /* Support ANSI Escape */
+                case '0':
+                    if (i+2 < len-3 && yytext[i+1] == '3' && yytext[i+2] == '3') {
+                        str[j++] = '\033';
+                        i += 2;
+                    } else {
+                        str[j++] = '0';
+                    }
+                    break;
+                case 'x':
+                    if (i+2 < len-3 && yytext[i+1] == '1' && yytext[i+2] == 'b') {
+                        str[j++] = '\033';
+                        i += 2;
+                    } else {
+                        str[j++] = 'x';
+                    }
+                    break;
                 default: str[j++] = yytext[i]; break;
             }
         } else {
@@ -1515,187 +1617,187 @@ YY_RULE_SETUP
 /* ============================================ */
 case 72:
 YY_RULE_SETUP
-#line 289 "src/lexer/scanner.l"
+#line 391 "src/lexer/scanner.l"
 { return TOKEN_PLUS; }
 	YY_BREAK
 case 73:
 YY_RULE_SETUP
-#line 290 "src/lexer/scanner.l"
+#line 392 "src/lexer/scanner.l"
 { return TOKEN_MINUS; }
 	YY_BREAK
 case 74:
 YY_RULE_SETUP
-#line 291 "src/lexer/scanner.l"
+#line 393 "src/lexer/scanner.l"
 { return TOKEN_MULTIPLY; }
 	YY_BREAK
 case 75:
 YY_RULE_SETUP
-#line 292 "src/lexer/scanner.l"
+#line 394 "src/lexer/scanner.l"
 { return TOKEN_DIVIDE; }
 	YY_BREAK
 case 76:
 YY_RULE_SETUP
-#line 293 "src/lexer/scanner.l"
+#line 395 "src/lexer/scanner.l"
 { return TOKEN_MODULO; }
 	YY_BREAK
 case 77:
 YY_RULE_SETUP
-#line 294 "src/lexer/scanner.l"
+#line 396 "src/lexer/scanner.l"
 { return TOKEN_ASSIGN; }
 	YY_BREAK
 case 78:
 YY_RULE_SETUP
-#line 295 "src/lexer/scanner.l"
+#line 397 "src/lexer/scanner.l"
 { return TOKEN_PLUS_ASSIGN; }
 	YY_BREAK
 case 79:
 YY_RULE_SETUP
-#line 296 "src/lexer/scanner.l"
+#line 398 "src/lexer/scanner.l"
 { return TOKEN_MINUS_ASSIGN; }
 	YY_BREAK
 case 80:
 YY_RULE_SETUP
-#line 297 "src/lexer/scanner.l"
+#line 399 "src/lexer/scanner.l"
 { return TOKEN_MULTIPLY_ASSIGN; }
 	YY_BREAK
 case 81:
 YY_RULE_SETUP
-#line 298 "src/lexer/scanner.l"
+#line 400 "src/lexer/scanner.l"
 { return TOKEN_DIVIDE_ASSIGN; }
 	YY_BREAK
 case 82:
 YY_RULE_SETUP
-#line 299 "src/lexer/scanner.l"
+#line 401 "src/lexer/scanner.l"
 { return TOKEN_MODULO_ASSIGN; }
 	YY_BREAK
 case 83:
 YY_RULE_SETUP
-#line 300 "src/lexer/scanner.l"
+#line 402 "src/lexer/scanner.l"
 { return TOKEN_EQ; }
 	YY_BREAK
 case 84:
 YY_RULE_SETUP
-#line 301 "src/lexer/scanner.l"
+#line 403 "src/lexer/scanner.l"
 { return TOKEN_NEQ; }
 	YY_BREAK
 case 85:
 YY_RULE_SETUP
-#line 302 "src/lexer/scanner.l"
+#line 404 "src/lexer/scanner.l"
 { return TOKEN_LT; }
 	YY_BREAK
 case 86:
 YY_RULE_SETUP
-#line 303 "src/lexer/scanner.l"
+#line 405 "src/lexer/scanner.l"
 { return TOKEN_LTE; }
 	YY_BREAK
 case 87:
 YY_RULE_SETUP
-#line 304 "src/lexer/scanner.l"
+#line 406 "src/lexer/scanner.l"
 { return TOKEN_GT; }
 	YY_BREAK
 case 88:
 YY_RULE_SETUP
-#line 305 "src/lexer/scanner.l"
+#line 407 "src/lexer/scanner.l"
 { return TOKEN_GTE; }
 	YY_BREAK
 case 89:
 YY_RULE_SETUP
-#line 306 "src/lexer/scanner.l"
+#line 408 "src/lexer/scanner.l"
 { return TOKEN_AND; }
 	YY_BREAK
 case 90:
 YY_RULE_SETUP
-#line 307 "src/lexer/scanner.l"
+#line 409 "src/lexer/scanner.l"
 { return TOKEN_OR; }
 	YY_BREAK
 case 91:
 YY_RULE_SETUP
-#line 308 "src/lexer/scanner.l"
+#line 410 "src/lexer/scanner.l"
 { return TOKEN_NOT; }
 	YY_BREAK
 case 92:
 YY_RULE_SETUP
-#line 309 "src/lexer/scanner.l"
+#line 411 "src/lexer/scanner.l"
 { return TOKEN_AMP; }
 	YY_BREAK
 case 93:
 YY_RULE_SETUP
-#line 310 "src/lexer/scanner.l"
+#line 412 "src/lexer/scanner.l"
 { return TOKEN_PIPE; }
 	YY_BREAK
 case 94:
 YY_RULE_SETUP
-#line 311 "src/lexer/scanner.l"
+#line 413 "src/lexer/scanner.l"
 { return TOKEN_XOR; }
 	YY_BREAK
 case 95:
 YY_RULE_SETUP
-#line 312 "src/lexer/scanner.l"
+#line 414 "src/lexer/scanner.l"
 { return TOKEN_LSHIFT; }
 	YY_BREAK
 case 96:
 YY_RULE_SETUP
-#line 313 "src/lexer/scanner.l"
+#line 415 "src/lexer/scanner.l"
 { return TOKEN_RSHIFT; }
 	YY_BREAK
 case 97:
 YY_RULE_SETUP
-#line 314 "src/lexer/scanner.l"
+#line 416 "src/lexer/scanner.l"
 { return TOKEN_DOUBLE_COLON; }
 	YY_BREAK
 case 98:
 YY_RULE_SETUP
-#line 315 "src/lexer/scanner.l"
+#line 417 "src/lexer/scanner.l"
 { return TOKEN_DOT; }
 	YY_BREAK
 case 99:
 YY_RULE_SETUP
-#line 316 "src/lexer/scanner.l"
+#line 418 "src/lexer/scanner.l"
 { return TOKEN_COLON; }
 	YY_BREAK
 case 100:
 YY_RULE_SETUP
-#line 317 "src/lexer/scanner.l"
+#line 419 "src/lexer/scanner.l"
 { return TOKEN_SEMICOLON; }
 	YY_BREAK
 case 101:
 YY_RULE_SETUP
-#line 318 "src/lexer/scanner.l"
+#line 420 "src/lexer/scanner.l"
 { return TOKEN_COMMA; }
 	YY_BREAK
 case 102:
 YY_RULE_SETUP
-#line 319 "src/lexer/scanner.l"
+#line 421 "src/lexer/scanner.l"
 { return TOKEN_ARROW; }
 	YY_BREAK
 case 103:
 YY_RULE_SETUP
-#line 320 "src/lexer/scanner.l"
+#line 422 "src/lexer/scanner.l"
 { return TOKEN_FAT_ARROW; }
 	YY_BREAK
 case 104:
 YY_RULE_SETUP
-#line 321 "src/lexer/scanner.l"
+#line 423 "src/lexer/scanner.l"
 { return TOKEN_PIPE_FORWARD; }
 	YY_BREAK
 case 105:
 YY_RULE_SETUP
-#line 322 "src/lexer/scanner.l"
+#line 424 "src/lexer/scanner.l"
 { return TOKEN_OPTIONAL; }
 	YY_BREAK
 case 106:
 YY_RULE_SETUP
-#line 323 "src/lexer/scanner.l"
+#line 425 "src/lexer/scanner.l"
 { return TOKEN_COALESCE; }
 	YY_BREAK
 case 107:
 YY_RULE_SETUP
-#line 324 "src/lexer/scanner.l"
+#line 426 "src/lexer/scanner.l"
 { return TOKEN_RANGE; }
 	YY_BREAK
 case 108:
 YY_RULE_SETUP
-#line 325 "src/lexer/scanner.l"
+#line 427 "src/lexer/scanner.l"
 { return TOKEN_RANGE_INC; }
 	YY_BREAK
 /* ============================================ */
@@ -1703,32 +1805,32 @@ YY_RULE_SETUP
 /* ============================================ */
 case 109:
 YY_RULE_SETUP
-#line 331 "src/lexer/scanner.l"
+#line 433 "src/lexer/scanner.l"
 { return TOKEN_LPAREN; }
 	YY_BREAK
 case 110:
 YY_RULE_SETUP
-#line 332 "src/lexer/scanner.l"
+#line 434 "src/lexer/scanner.l"
 { return TOKEN_RPAREN; }
 	YY_BREAK
 case 111:
 YY_RULE_SETUP
-#line 333 "src/lexer/scanner.l"
+#line 435 "src/lexer/scanner.l"
 { return TOKEN_LBRACE; }
 	YY_BREAK
 case 112:
 YY_RULE_SETUP
-#line 334 "src/lexer/scanner.l"
+#line 436 "src/lexer/scanner.l"
 { return TOKEN_RBRACE; }
 	YY_BREAK
 case 113:
 YY_RULE_SETUP
-#line 335 "src/lexer/scanner.l"
+#line 437 "src/lexer/scanner.l"
 { return TOKEN_LBRACKET; }
 	YY_BREAK
 case 114:
 YY_RULE_SETUP
-#line 336 "src/lexer/scanner.l"
+#line 438 "src/lexer/scanner.l"
 { return TOKEN_RBRACKET; }
 	YY_BREAK
 /* ============================================ */
@@ -1736,13 +1838,13 @@ YY_RULE_SETUP
 /* ============================================ */
 case 115:
 YY_RULE_SETUP
-#line 342 "src/lexer/scanner.l"
+#line 444 "src/lexer/scanner.l"
 { /* Ignorer */ }
 	YY_BREAK
 case 116:
 /* rule 116 can match eol */
 YY_RULE_SETUP
-#line 343 "src/lexer/scanner.l"
+#line 445 "src/lexer/scanner.l"
 { /* Ignorer */ }
 	YY_BREAK
 /* ============================================ */
@@ -1751,7 +1853,7 @@ YY_RULE_SETUP
 case 117:
 /* rule 117 can match eol */
 YY_RULE_SETUP
-#line 349 "src/lexer/scanner.l"
+#line 451 "src/lexer/scanner.l"
 { /* Ignorer */ }
 	YY_BREAK
 /* ============================================ */
@@ -1759,7 +1861,7 @@ YY_RULE_SETUP
 /* ============================================ */
 case 118:
 YY_RULE_SETUP
-#line 355 "src/lexer/scanner.l"
+#line 457 "src/lexer/scanner.l"
 { 
     fprintf(stderr, "Error at line %d: Invalid character '%c' (ASCII %d)\n", 
             yylineno, yytext[0], yytext[0]);
@@ -1768,10 +1870,10 @@ YY_RULE_SETUP
 	YY_BREAK
 case 119:
 YY_RULE_SETUP
-#line 361 "src/lexer/scanner.l"
+#line 463 "src/lexer/scanner.l"
 ECHO;
 	YY_BREAK
-#line 1774 "scanner.c"
+#line 1876 "scanner.c"
 case YY_STATE_EOF(INITIAL):
 	yyterminate();
 
@@ -2788,14 +2890,12 @@ void yyfree (void * ptr )
 
 #define YYTABLES_NAME "yytables"
 
-#line 361 "src/lexer/scanner.l"
+#line 463 "src/lexer/scanner.l"
 
 
 /* ============================================ */
 /*              FONCTIONS                       */
 /* ============================================ */
-
-
 
 void cleanup_scanner(void) {
     /* Rien à faire pour l'instant */

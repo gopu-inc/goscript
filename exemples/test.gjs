@@ -1,5 +1,8 @@
-// ============================================
-// TEST GOSCRIPT - Script de test corrigé
+// Ce qui marchera enfin :
+lt text = "Hello"
+println(text::len()) // Affiche 5
+
+t corrigé
 // ============================================
 
 // 1. Variables et types de base

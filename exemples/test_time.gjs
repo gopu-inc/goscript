@@ -1,25 +1,29 @@
-// test_time.gjs
-// Test du module time avec use
-
 import time
-import time.ft
-
-// Utilisation de use pour importer des fonctions spécifiques
-use time::now
-use time::timestamp
-use time::ft::sleep_ms
-use time::ft::sleep
 
 fn main() {
-    println("=== TEST MODULE TIME ===\n")
-    
-    // Test 1: Utilisation directe avec namespace complet
-    println("1. Time::now(): " + time::now())
-    println("   Timestamp: " + time::timestamp())
-    println("")
-    
-    // Test 2: Utilisation avec use (fonctions importées directement)
-    println("2. Fonctions importées via use:")
+    println("--- Testing Native Time (Bash) ---")
+
+    // 1. Test de l'heure
+    lt heure = time::now()
+    println("Il est actuellement : " + heure)
+
+    // 2. Test du Timestamp
+    lt ts = time::timestamp()
+    println("Timestamp Unix : " + ts)
+
+    // 3. Test du formateur personnalisé (pour tes backups)
+    lt jour = time::format("%A %d %B")
+    println("Aujourd'hui : " + jour)
+
+    // 4. Test du sleep
+    println("Dodo pour 1 seconde...")
+    time::sleep(1)
+    println("Réveil !")
+
+    ret 0
+}
+
+ntln("2. Fonctions importées via use:")
     println("   now(): " + now())
     println("   timestamp(): " + timestamp())
     println("")

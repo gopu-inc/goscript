@@ -1,18 +1,27 @@
-// === Test des appels système ===
+import sys
 
-println("--- 1. Test de 'sh' ---")
-// sh exécute la commande et retourne un int (le code de sortie)
-lt status = sh("echo 'Ceci est affiché directement par sh !'")
-println("Code de retour de sh (devrait être 0) :")
-println(status)
+fn main() {
+    println("--- GoScript System Information ---")
 
-println("\n--- 2. Test de 'sysf' ---")
-// sysf exécute la commande et capture la sortie dans une string
-lt output = sysf("echo 'Ceci a été capturé par sysf !'")
-println("Sortie capturée :")
-println(output)
+    // 1. Platform Info
+    lt os_name = sys::platform()
+    lt py_ver = sys::version()
+    println("OS Platform: " + os_name)
+    println("Backend Version: " + py_ver)
 
-println("\n--- 3. Test d'erreur avec 'sh' ---")
+    // 2. Command Line Arguments
+    println("\nReading arguments...")
+    lt args = sys::argv()
+    println("Arguments received: " + args)
+
+    // 3. Testing exit (optional)
+    // println("Exiting now...")
+    // sys::exit(0)
+
+    ret 0
+}
+
+ln("\n--- 3. Test d'erreur avec 'sh' ---")
 // On teste une commande qui n'existe pas pour vérifier le code de retour
 lt error_status = sh("commande_imaginaire_qui_plante 2>/dev/null")
 println("Code d'erreur de sh (devrait être différent de 0) :")

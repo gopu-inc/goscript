@@ -2113,7 +2113,7 @@ case NODE_METHOD_CALL: {
             }
         }
     }
-    // === NOUVEAU : Cas 2: Module (type 7) ===
+    // Cas 2: Module (type 7)
     else if (obj.type == 7) {
         LoadedModule* module = (LoadedModule*)obj.int_val;
         char* method_name = node->method_call.method;
@@ -2142,8 +2142,62 @@ case NODE_METHOD_CALL: {
                 }
             }
             free(func_env);
+        }
+    }
+    // Cas 3: Fallback (UFCS) pour les types primitifs
+    else {
+        char* method_name = node->method_call.method;
+        Value* func = env_get(env, method_name);
+        
+        if (func && (func->type == 4 || func->type == 5 || func->type == 9)) {
+            Environment* func_env = NULL;
+            if (func->type == 4) {
+                func_env = create_env(func->func_val.closure);
+            } else if (func->type == 9) {
+                func_env = create_env(func->lambda_val.closure);
+            }
+            
+            // Appel de fonction GoScript (type 4 ou 9)
+            if (func_env) {
+                if (func->func_val.node->function.params && func->func_val.node->function.params->count > 0) {
+                    ASTNode* first_param = func->func_val.node->function.params->nodes[0];
+                    env_set(func_env, first_param->identifier.name, obj);
+                    
+                    if (node->method_call.args) {
+                        for (int i = 0; i < node->method_call.args->count && (i + 1) < func->func_val.node->function.params->count; i++) {
+                            Value arg_val = evaluate_expr(node->method_call.args->nodes[i], env);
+                            ASTNode* param = func->func_val.node->function.params->nodes[i + 1];
+                            env_set(func_env, param->identifier.name, arg_val);
+                        }
+                    }
+                }
+                for (int i = 0; i < func->func_val.node->function.body->count; i++) {
+                    ASTNode* stmt = func->func_val.node->function.body->nodes[i];
+                    if (stmt->type == NODE_RETURN) {
+                        result = evaluate_expr(stmt->return_stmt.value, func_env);
+                        break;
+                    } else {
+                        evaluate_statement(stmt, func_env, NULL);
+                    }
+                }
+                free(func_env);
+            } 
+            // Appel de fonction C FFI (type 5)
+            else if (func->type == 5) {
+                int arg_count = (node->method_call.args ? node->method_call.args->count : 0) + 1;
+                Value* args = malloc(arg_count * sizeof(Value));
+                args[0] = obj;
+                
+                if (node->method_call.args) {
+                    for (int i = 0; i < node->method_call.args->count; i++) {
+                        args[i + 1] = evaluate_expr(node->method_call.args->nodes[i], env);
+                    }
+                }
+                result = call_c_function_ffi(func->cfunc_val.func_ptr, args, arg_count, func->cfunc_val.ret_type, func->cfunc_val.arg_types);
+                free(args);
+            }
         } else {
-            fprintf(stderr, "Error: Function '%s' not found in module\n", method_name);
+            fprintf(stderr, "Error: Method '%s' not found for primitive type\n", method_name);
         }
     }
     break;

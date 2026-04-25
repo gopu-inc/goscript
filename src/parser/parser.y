@@ -467,12 +467,10 @@ dict_entry_list:
     ;
 
 /* Accès dictionnaire */
-dict_access:
+/* UNIFIE : un seul type d'accès par crochet */
+bracket_access:
     primary_expr TOKEN_LBRACKET expression TOKEN_RBRACKET {
-        // Détecter si c'est un accès dictionnaire ou tableau
-        // Par défaut, c'est un accès tableau, mais on peut différencier par le type
-        // Pour l'instant, on crée un nœud d'accès dictionnaire
-        $$ = create_dict_access_node($1, $3);
+        $$ = create_array_access_node($1, $3);
     }
     ;
 
@@ -837,11 +835,7 @@ lambda_expr:
     ;
 
 // Array access
-array_access:
-    primary_expr TOKEN_LBRACKET expression TOKEN_RBRACKET {
-        $$ = create_array_access_node($1, $3);
-    }
-    ;
+
 
 primary_expr:
     TOKEN_NUMBER {
@@ -869,7 +863,7 @@ primary_expr:
         $$ = $2;
     }
     | call_expr
-    | dict_access
+    | bracket_access
     | dict_expr
     | array_expr
     | struct_expr

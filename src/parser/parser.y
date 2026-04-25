@@ -83,7 +83,7 @@ ASTNode* program_root;
 /* Non-terminals */
 %type <node> switch_statement ternary_expr
 %type <node> try_statement catch_block finally_block throw_statement
-%type <node> module_decl dict_access
+%type <node> module_decl 
 %type <node> continue_statement
 %type <node> use_statement
 %type <string> import_path use_path
@@ -106,7 +106,7 @@ ASTNode* program_root;
 %type <node_list> statement_list argument_list param_list struct_fields enum_variants array_items match_cases function_decl_list struct_init_fields
 %type <node> break_statement
 %type <node> nnl_statement jmp_statement
-%type <node> lambda_expr array_access
+%type <node> lambda_expr 
 %type <node> async_expr await_expr spawn_expr
 %type <node> async_function_decl
 %type <string> import_path_tail

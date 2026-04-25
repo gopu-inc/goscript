@@ -870,7 +870,6 @@ primary_expr:
     | struct_expr
     | member_access
     | lambda_expr
-    | array_access
     | await_expr
     | sysf_expr  
     | sh_expr   

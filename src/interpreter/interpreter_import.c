@@ -560,12 +560,12 @@ static LoadedModule* load_file_module(const char* full_path, const char* module_
                 case NODE_EXPORT:
                     register_export(mod, stmt->export.name, NULL);
                     break;
-             /*   
+              
                 case NODE_IMPORT:
                     evaluate_statement(stmt, mod->env, full_path);
                     break;
                 // ----------------------------------------------
-                    */
+                    
                 default:
                     break;
             }

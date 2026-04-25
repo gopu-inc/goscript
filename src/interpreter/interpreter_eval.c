@@ -2717,7 +2717,7 @@ void interpret_program(ASTNode* program) {
     } else {
         global_args_val.array_val.elements = NULL;
     }
-    env_set(global, "args", global_args_val);
+    env_set(global, "ARGV", global_args_val);
     
     // ============================================
     // ENREGISTREMENT DES STRUCTURES ET FONCTIONS

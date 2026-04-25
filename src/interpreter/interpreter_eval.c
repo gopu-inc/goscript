@@ -1983,6 +1983,8 @@ case NODE_ARRAY_ACCESS: {
     Value idx = evaluate_expr(node->array_access.index, env);
     
     // Cas 1: Tableau
+    
+    // Cas 1: Tableau
     if (container.type == 8 && idx.type == 0) {
         int index = idx.int_val;
         if (index >= 0 && index < container.array_val.count) {

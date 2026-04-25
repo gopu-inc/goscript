@@ -22,9 +22,3 @@ fn main() {
     ret 0
 }
 
-math::divide(a, b))
-    println("square(" + a + ") = " + math::square(a))
-    
-    println("\n=== TEST RÉUSSI ===")
-    ret 0
-}

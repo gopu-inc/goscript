@@ -21,9 +21,3 @@ fn main() {
     ret 0
 }
 
-ln("\n--- 3. Test d'erreur avec 'sh' ---")
-// On teste une commande qui n'existe pas pour vérifier le code de retour
-lt error_status = sh("commande_imaginaire_qui_plante 2>/dev/null")
-println("Code d'erreur de sh (devrait être différent de 0) :")
-println(error_status)
-

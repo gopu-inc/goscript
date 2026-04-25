@@ -99,3 +99,29 @@ pub fn trim(s: string): string {
     
     ret res
 }
+/*
+for c in s {
+        if !start_found {
+            // On saute les espaces au début
+            if c == " " || c == "\t" || c == "\n" || c == "\r" {
+                continue
+            }
+            start_found = true
+        }
+        
+        if start_found {
+            if c == " " || c == "\t" || c == "\n" || c == "\r" {
+                // On stocke les espaces temporairement
+                // S'il y a d'autres caractères après, on les ajoutera
+                trailing_spaces = trailing_spaces + c
+            } else {
+                // On ajoute les espaces accumulés précédemment + le caractère actuel
+                res = res + trailing_spaces + c
+                trailing_spaces = ""
+            }
+        }
+    }
+    
+    ret res
+}
+*/

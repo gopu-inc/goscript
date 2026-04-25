@@ -2,7 +2,7 @@
                     GOSCRIPT LANGUAGE SPECIFICATION
 ================================================================================
 
-Date: 2026-04-24 14:14:33
+Date: 2026-04-25 09:30:07
 Contient TOUT le code source du langage Goscript
 
 ================================================================================
@@ -6472,6 +6472,10 @@ char* resolve_module_path(char* current_file, char* import_path) {
     const char* search_paths[] = {
         "./modules",
         "./lib",
+        "../lib",
+        "../modules",
+        "../../lib",
+        "../../modules",
         "./lib/std",
         "./src",
         "/usr/local/lib/goscript",
@@ -6791,10 +6795,16 @@ static LoadedModule* load_file_module(const char* full_path, const char* module_
                 case NODE_EXPORT:
                     register_export(mod, stmt->export.name, NULL);
                     break;
-                    
+             /*   
+                case NODE_IMPORT:
+                    evaluate_statement(stmt, mod->env, full_path);
+                    break;
+                // ----------------------------------------------
+                    */
                 default:
                     break;
             }
+
         }
     }
     
@@ -8048,49 +8058,16 @@ pub fn inputln(): string {
     ret sysf("read -r _tmp_var && echo $_tmp_var")
 }
 // Fonction typeod simplifiée - Détection de type fiable
+// Fonction typeod simplifiée
 pub fn typeod(v: any): string {
-    if v == nil {
-        ret "nil"
-    }
+    if v == nil { ret "nil" }
     
-    // Booléens
-    if v == true || v == false {
-        ret "bool"
-    }
-    
-    // Test pour les chaînes (concaténation avec string vide)
-    try {
-        muts s = v + ""
-        // Vérifier si c'est itérable comme une chaîne
-        try {
-            for c in v {
-                // Si on peut itérer ET concaténer, c'est une chaîne
-                ret "string"
-            }
-            // Si c'est concaténable mais pas itérable, c'est un nombre
-            ret "int"
-        } catch (e) {
-            // Pas itérable, donc probablement un nombre
-            ret "int"
-        }
-    } catch (e) {}
-    
-    // Test pour les tableaux/dictionnaires (itérables)
-    try {
-        for item in v {
-            // Si on peut itérer, c'est soit un array, soit un dict
-            // On essaie de concaténer pour voir
-            try {
-                muts arr_test = v + []
-                ret "array"
-            } catch (e) {
-                ret "dict"
-            }
-        }
-    } catch (e) {}
-    
-    // Si rien ne correspond, c'est une structure
-    ret "struct"
+    // Test simple via sysf pour éviter les try/catch imbriqués qui font planter le lexer
+    lt is_bool = sysf("case '" + v + "' in true|false) echo 1;; *) echo 0;; esac")
+    if is_bool == "1" { ret "bool" }
+
+    // Si on peut concaténer avec une chaîne, c'est un type simple (string/int)
+    ret "string" 
 }
 
 pub fn ints(s: string): int {
@@ -8175,6 +8152,32 @@ pub fn trim(s: string): string {
     
     ret res
 }
+/*
+for c in s {
+        if !start_found {
+            // On saute les espaces au début
+            if c == " " || c == "\t" || c == "\n" || c == "\r" {
+                continue
+            }
+            start_found = true
+        }
+        
+        if start_found {
+            if c == " " || c == "\t" || c == "\n" || c == "\r" {
+                // On stocke les espaces temporairement
+                // S'il y a d'autres caractères après, on les ajoutera
+                trailing_spaces = trailing_spaces + c
+            } else {
+                // On ajoute les espaces accumulés précédemment + le caractère actuel
+                res = res + trailing_spaces + c
+                trailing_spaces = ""
+            }
+        }
+    }
+    
+    ret res
+}
+*/
 
 
 ----------------------------------------
@@ -8653,6 +8656,7 @@ pub fn remove(path: string) {
 
 
 
+
 ----------------------------------------
 MODULE: lib/groq.gjs
 ----------------------------------------
@@ -9126,43 +9130,34 @@ module system
 lt CONFIG_FILE = "system.conf"
 lt LOG_FILE = "activity.log"
 
-// Initialiser l'application
 pub fn init(app_name: string) {
     ui::clear()
-    ui::banner(ui::bold(ui::blue(app_name + " BOOTING...")))
+    ui::banner(app_name + " BOOTING...")
     
-    // Log le démarrage
-    system::log("INFO", "Application " + app_name + " started.")
+    log("INFO", "Application " + app_name + " started.")
     
-    // Vérifier/Créer la config par défaut si elle n'existe pas
     if (fs::exists(CONFIG_FILE) == "False") {
-        system::log("WARN", "Config missing. Creating default...")
+        log("WARN", "Config missing. Creating default...")
         db::set(CONFIG_FILE, "boot_count", "0")
         db::set(CONFIG_FILE, "last_user", "none")
     }
 
-    // Incrémenter le compteur de boot
     lt count = db::get(CONFIG_FILE, "boot_count")
-    // On utilise un petit hack bash pour l'addition simple
     lt new_count = sysf("echo $((" + count + " + 1))")
     db::set(CONFIG_FILE, "boot_count", new_count)
 }
 
-// Système de Log pro avec Time et Couleurs
 pub fn log(level: string, message: string) {
     lt timestamp = time::now()
     lt entry = "[" + timestamp + "] [" + level + "] " + message
     
-    // Écriture disque via fs
     fs::append(LOG_FILE, entry)
     
-    // Affichage console via ui
     if (level == "ERROR") { println(ui::red(entry)) }
     if (level == "WARN")  { println(ui::yellow(entry)) }
     if (level == "INFO")  { println(ui::green(entry)) }
 }
 
-// Récupérer un paramètre
 pub fn get_param(key: string): string {
     ret db::get(CONFIG_FILE, key)
 }
@@ -9188,6 +9183,605 @@ pub fn unpack(archive: string, destination: string) {
     sysf("mkdir -p " + destination + " && tar -xzf " + archive + " -C " + destination)
 }
 
+
+
+----------------------------------------
+MODULE: lib/test.gjs
+----------------------------------------
+// Import des sous-modules (le parseur lira "http.client" et chargera "lib/http/client.gjs")
+import http
+import http.client
+import http.transport
+
+fn main() {
+    println("=== TEST DU PACKAGE HTTP ===")
+    
+    // Accès au module racine (via __self__.gjs)
+    println("Version HTTP : " + http::VERSION)
+    
+    // Accès aux sous-modules avec ::
+    lt config = transport::new_config(60)
+    println("Timeout configuré : " + config.timeout)
+    
+    println("\nExécution d'une requête GET...")
+    lt response = client::get("https://httpbin.org/get")
+    
+    // Affichage natif
+    println(response)
+    
+    ret 0
+}
+
+
+
+----------------------------------------
+MODULE: lib/test_.gjs
+----------------------------------------
+import http.__self__
+import http.client
+
+fn main() {
+    println("=== TEST DU PACKAGE HTTP ===")
+    
+    // Accès au module racine (via __self__.gjs)
+    println("Version HTTP : " + __self__::VERSION)
+    
+    // Accès aux sous-modules avec ::
+    println("\nExécution d'une requête GET...")
+
+    lt response = client::get("https://www.google.com/url?q=https://httpbin.org/&sa=U&sqi=2&ved=2ahUKEwjAh92GwoGUAxXRXkEAHcvmHNAQFnoECBAQAQ&usg=AOvVaw3K5N0e-erjTFd-w6Beo-zn")    
+    lt res = client::post("https://www.google.com/url?q=https://httpbin.org/&sa=U&sqi=2&ved=2ahUKEwjAh92GwoGUAxXRXkEAHcvmHNAQFnoECBAQAQ&usg=AOvVaw3K5N0e-erjTFd-w6Beo-zn", "meta")
+    println("POST exec ")
+   
+   // Affichage natif
+    println(response)
+    println(res)
+    ret 0
+}
+
+
+
+----------------------------------------
+MODULE: lib/test_dd.gjs
+----------------------------------------
+import deepseek
+
+fn main() {
+    println("=== TEST DEEPSEEK ===\n")
+    
+    lt key = "sk-c21ef26edc184fcfa5124a171fbd6f49"
+    lt response = deepseek::ask(key, "Bonjour")
+    
+    println("Réponse: " + response)
+    
+    ret 0
+}
+
+
+----------------------------------------
+MODULE: lib/test_deep.gjs
+----------------------------------------
+// test_deepseek.gjs
+import deepseek
+
+fn main() {
+    println("=== TEST DEEPSEEK API ===\n")
+    
+    // Votre clé API
+    lt api_key = "votre-cle-api-ici"
+    
+    // Configuration
+    lt cfg = deepseek::new_config(api_key)
+    cfg = deepseek::set_temperature(cfg, 0.8)
+    
+    // Requête simple
+    lt response = deepseek::chat(cfg, "Qu'est-ce que le langage Goscript?")
+    
+    if response.success {
+        println("Réponse: " + response.content)
+        println("Tokens utilisés: " + response.usage_tokens)
+    } else {
+        println("Erreur: " + response.error)
+    }
+    
+    // Version simplifiée
+    lt answer = deepseek::ask(api_key, "Bonjour, qui es-tu?")
+    println(answer)
+    
+    ret 0
+}
+
+
+----------------------------------------
+MODULE: lib/test_deeps.gjs
+----------------------------------------
+import deepseek
+
+fn main() {
+    println("=== TEST DEEPSEEK API ===\n")
+    
+    // Remplace par ta vraie clé API
+    lt api_key = "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    
+    // Test avec ask (simple)
+    println("--- Test ask ---")
+    lt reponse1 = deepseek::ask(api_key, "Bonjour, qui es-tu?")
+    println(reponse1)
+    println("")
+    
+    // Test avec chat (configuration complète)
+    println("--- Test chat ---")
+    lt cfg = deepseek::new_config(api_key)
+    cfg = deepseek::set_temperature(cfg, 0.8)
+    cfg = deepseek::set_max_tokens(cfg, 500)
+    
+    lt resp = deepseek::chat(cfg, "Explique ce qu'est Goscript en une phrase.")
+    
+    if resp.success {
+        println("Reponse: " + resp.content)
+        println("Tokens: " + resp.usage_tokens)
+    } else {
+        println("Erreur: " + resp.error)
+    }
+    
+    ret 0
+}
+
+
+----------------------------------------
+MODULE: lib/test_file.gjs
+----------------------------------------
+// test_gg.gjs - Test du module fs sans f-strings
+import fs
+
+println("=== TEST FS SIMPLE ===\n")
+
+lt test_dir = "/tmp/fs_test"
+lt test_file = test_dir + "/test.txt"
+
+// mkdir
+println("Création: " + test_dir)
+fs::mkdir(test_dir)
+
+// write
+lt content = "Hello from Goscript!"
+println("Écriture: " + test_file)
+fs::write(test_file, content)
+
+// exists
+println("Exists dir: " + fs::is_dir(test_dir))
+println("Exists file: " + fs::is_file(test_file))
+
+// read
+lt read_content = fs::read(test_file)
+println("Contenu: " + read_content)
+
+// size
+lt sz = fs::size(test_file)
+println("Taille: " + sz + " octets")
+
+// ls
+println("\nContenu du dossier:")
+println(fs::ls(test_dir))
+
+// pwd
+lt current = fs::pwd()
+println("\nPWD: " + current)
+
+// basename/dirname
+println("Basename: " + fs::basename(test_file))
+println("Dirname: " + fs::dirname(test_file))
+
+// realpath
+println("Realpath: " + fs::realpath(test_file))
+
+// touch
+fs::touch(test_dir + "/touched.txt")
+println("Touché: " + fs::exists(test_dir + "/touched.txt"))
+
+// cp
+fs::cp(test_file, test_dir + "/copy.txt")
+println("Copié: " + fs::exists(test_dir + "/copy.txt"))
+
+// mv
+fs::mv(test_dir + "/copy.txt", test_dir + "/renamed.txt")
+println("Renommé: " + fs::exists(test_dir + "/renamed.txt"))
+
+// nettoyage
+println("\nNettoyage...")
+fs::rm(test_dir)
+println("Supprimé: " + (!fs::exists(test_dir)))
+
+println("\n=== TEST OK ===")
+
+
+----------------------------------------
+MODULE: lib/test_fs.gjs
+----------------------------------------
+// test_fs.gjs - Test du module fs
+import fs
+
+println("=== TEST DU MODULE FS ===\n")
+
+// Test pwd
+lt current = fs::pwd()
+println("Répertoire courant: " + current)
+
+// Test mkdir
+lt test_dir = "/tmp/fs_test"
+println("\nCréation du dossier: " + test_dir)
+fs::mkdir(test_dir)
+println("Dossier créé: " + fs::is_dir(test_dir))
+
+// Test cd
+println("Changement de répertoire vers: " + test_dir)
+fs::cd(test_dir)
+println("Nouveau répertoire: " + fs::pwd())
+
+// Test write
+lt test_file = "test.txt"
+lt content = "Hello from Goscript!"
+println("\nÉcriture du fichier: " + test_file)
+fs::write(test_file, content)
+println("Fichier créé: " + fs::is_file(test_file))
+
+// Test read
+lt read_content = fs::read(test_file)
+println("Contenu lu: " + read_content)
+
+// Test size
+lt file_size = fs::size(test_file)
+println("Taille: " + file_size + " octets")
+
+// Test append
+fs::append(test_file, "\nDeuxième ligne")
+lt appended = fs::read(test_file)
+println("Après append: " + appended)
+
+// Test basename/dirname
+println("\nBasename: " + fs::basename(test_file))
+println("Dirname: " + fs::dirname(test_file))
+
+// Test realpath
+lt real = fs::realpath(test_file)
+println("Realpath: " + real)
+
+// Test ls
+println("\nListe des fichiers:")
+println(fs::ls("."))
+
+// Test cp
+fs::cp(test_file, "test_copy.txt")
+println("\nCopie créée: " + fs::exists("test_copy.txt"))
+
+// Test mv
+fs::mv("test_copy.txt", "test_renamed.txt")
+println("Renommé: " + fs::exists("test_renamed.txt"))
+
+// Retour au répertoire précédent
+fs::cd(current)
+
+// Test rm (nettoyage)
+println("\nNettoyage...")
+fs::rm(test_dir)
+println("Dossier supprimé: " + !fs::exists(test_dir))
+
+println("\n=== TEST TERMINÉ ===")
+
+
+----------------------------------------
+MODULE: lib/test_fs2.gjs
+----------------------------------------
+// test_fs.gjs - Test ultra simple
+import fs
+
+println("=== TEST FS SIMPLE ===\n")
+
+lt test_dir = "/tmp/fs_test_simple"
+
+// Test mkdir
+println("Création dossier: " + test_dir)
+lt r1 = fs::mkdir(test_dir)
+println("  mkdir: " + r1)
+
+// Test exists
+lt r2 = fs::exists(test_dir)
+println("  exists: " + r2)
+
+// Test is_dir
+lt r3 = fs::is_dir(test_dir)
+println("  is_dir: " + r3)
+
+// Test write
+lt test_file = test_dir + "/test.txt"
+println("\nÉcriture fichier: " + test_file)
+lt r4 = fs::write(test_file, "Hello")
+println("  write: " + r4)
+
+// Test is_file
+lt r5 = fs::is_file(test_file)
+println("  is_file: " + r5)
+
+// Test read
+lt content = fs::read(test_file)
+println("  read: " + content)
+
+// Test ls
+println("\nListe fichiers:")
+lt files = fs::ls(test_dir)
+println(files)
+
+// Test rm
+println("Nettoyage...")
+lt r6 = fs::rm(test_dir)
+println("  rm: " + r6)
+
+println("\n=== TEST TERMINÉ ===")
+
+
+----------------------------------------
+MODULE: lib/test_fs_system.gjs
+----------------------------------------
+// test_fs_system.gjs - Test du module fs avec system_c
+import fs
+
+println("=== TEST FS AVEC SYSTEM_C ===\n")
+
+lt test_dir = "/tmp/fs_system_test"
+lt test_file = test_dir + "/test.txt"
+
+// mkdir
+println("1. Création dossier: " + test_dir)
+lt r1 = fs::mkdir(test_dir)
+println("   mkdir retour: " + r1)
+
+// exists
+println("2. Exists dossier: " + fs::exists(test_dir))
+
+// is_dir
+println("3. Is dir: " + fs::is_dir(test_dir))
+
+// write
+println("\n4. Écriture fichier: " + test_file)
+lt r2 = fs::write(test_file, "Hello from system_c")
+println("   write retour: " + r2)
+
+// is_file
+println("5. Is file: " + fs::is_file(test_file))
+
+// exists file
+println("6. Exists fichier: " + fs::exists(test_file))
+
+// ls
+println("\n7. Liste du dossier:")
+lt r3 = fs::ls(test_dir)
+println("   ls retour: " + r3)
+
+// pwd
+println("\n8. PWD:")
+lt r4 = fs::pwd()
+println("   pwd retour: " + r4)
+
+// touch
+println("\n9. Touch:")
+lt test_file2 = test_dir + "/touched.txt"
+fs::touch(test_file2)
+println("   Touched exists: " + fs::exists(test_file2))
+
+// cp
+println("\n10. Copie:")
+fs::cp(test_file, test_dir + "/copy.txt")
+println("    Copie exists: " + fs::exists(test_dir + "/copy.txt"))
+
+// mv
+println("\n11. Déplacement:")
+fs::mv(test_dir + "/copy.txt", test_dir + "/renamed.txt")
+println("    Renamed exists: " + fs::exists(test_dir + "/renamed.txt"))
+println("    Copy exists: " + fs::exists(test_dir + "/copy.txt"))
+
+// rm
+println("\n12. Nettoyage:")
+fs::rm(test_dir)
+println("    Dossier supprimé: " + (!fs::exists(test_dir)))
+
+println("\n=== TEST TERMINÉ ===")
+
+
+----------------------------------------
+MODULE: lib/test_gg.gjs
+----------------------------------------
+// test_fs.gjs - Test du module fs avec f-strings
+import fs
+
+println(f"=== TEST FS AVEC F-STRINGS ===\n")
+
+lt test_dir = "/tmp/fs_test"
+lt test_file = f"{test_dir}/test.txt"
+
+// mkdir
+println(f"Création: {test_dir}")
+fs::mkdir(test_dir)
+
+// write
+lt content = "Hello from Goscript!"
+println(f"Écriture: {test_file}")
+fs::write(test_file, content)
+
+// exists
+println(f"Exists dir: {fs::is_dir(test_dir)}")
+println(f"Exists file: {fs::is_file(test_file)}")
+
+// read
+lt read_content = fs::read(test_file)
+println(f"Contenu: {read_content}")
+
+// size
+lt sz = fs::size(test_file)
+println(f"Taille: {sz} octets")
+
+// ls
+println(f"\nContenu du dossier:")
+println(fs::ls(test_dir))
+
+// head/tail
+fs::write_lines(test_file, ["ligne1", "ligne2", "ligne3", "ligne4", "ligne5"])
+println(f"\nHead 3: {fs::head(test_file, 3)}")
+println(f"Lines: {fs::count_lines(test_file)}")
+
+// file info
+println(f"\nType: {fs::file_type(test_file)}")
+println(f"Owner: {fs::owner(test_file)}")
+println(f"Perms: {fs::perms(test_file)}")
+
+// pwd
+lt current = fs::pwd()
+println(f"\nPWD: {current}")
+
+// temp file
+lt tmp = fs::mktemp("gs")
+println(f"Temp file: {tmp}")
+fs::write(tmp, "temp content")
+fs::rm(tmp)
+
+// nettoyage
+println(f"\nNettoyage...")
+fs::rm(test_dir)
+println(f"Supprimé: {!fs::exists(test_dir)}")
+
+println(f"\n=== TEST OK ===")
+
+
+----------------------------------------
+MODULE: lib/test_groq.gjs
+----------------------------------------
+import groq
+
+fn main() {
+    println("=== TEST GROQ ===\n")
+    
+    // Remplace par ta clé API Groq
+    lt key = "VOTRE_CLE_API_GROQ"
+    lt response = groq::ask(key, "Bonjour")
+    
+    println("Réponse: " + response)
+    
+    ret 0
+}
+
+
+----------------------------------------
+MODULE: lib/test_json.gjs
+----------------------------------------
+import json
+
+fn main() {
+    println("=== TEST JSON MODULE ===\n")
+    
+    // Exemple de réponse API
+    lt response = "{\"id\":\"chatcmpl-123\",\"model\":\"llama3\",\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"Bonjour! Je suis une IA.\"}}],\"usage\":{\"total_tokens\":42}}"
+    
+    println("1. Parser une réponse complète:")
+    lt content = json::parse_response(response)
+    println("   Content: " + content)
+    println("")
+    
+    println("2. Extraire des valeurs spécifiques:")
+    lt model = json::get(response, "model")
+    lt tokens = json::get(response, "total_tokens")
+    println("   Model: " + model)
+    println("   Tokens: " + tokens)
+    println("")
+    
+    println("3. Vérifier les types:")
+    match json::type_of(response, "choices") {
+        "array" => println("   choices est un array")
+        "object" => println("   choices est un object")
+        "string" => println("   choices est un string")
+        _ => println("   type inconnu")
+    }
+    println("")
+    
+    println("4. Vérifier si une clé existe:")
+    if json::has_key(response, "model") {
+        println("   'model' existe")
+    }
+    if !json::has_key(response, "nonexistent") {
+        println("   'nonexistent' n'existe pas")
+    }
+    println("")
+    
+    println("5. Toutes les clés:")
+    lt keys = json::keys(response)
+    println("   " + keys)
+    
+    ret 0
+}
+
+
+----------------------------------------
+MODULE: lib/test_strlen.gjs
+----------------------------------------
+fn main() {
+    println("=== TEST STRLEN ===\n")
+    
+    lt s = "hello"
+    println("String: " + s)
+    
+    lt l = strlen_c(s)
+    println("Longueur: " + l)
+    
+    ret 0
+}
+
+
+----------------------------------------
+MODULE: lib/test_sysf.gjs
+----------------------------------------
+import ft from "time/ft"
+
+fn main() {
+    println("=== TEST SYSF ===\n")
+    
+    lt result = sysf("echo 'hello world'")
+    ft::sleep(5)
+    println("Resultat: " + result)
+    
+    ret 0
+}
+
+
+----------------------------------------
+MODULE: lib/tet.gjs
+----------------------------------------
+struct P {
+   nom: string,
+   ages: int
+}
+
+fn test() {
+   pri = new p{
+           nom: "paul",
+           ages: 16
+   }
+   ret pri.nom 
+}
+
+fn main() {
+   println(test())
+}
+
+
+----------------------------------------
+MODULE: lib/tewt.gjs
+----------------------------------------
+fn fs(path) {
+   ret system_c(f"ls -la {path}")
+}
+
+fn main() {
+   f = fs(".")
+   println(f)
+}
 
 
 ----------------------------------------
@@ -10239,6 +10833,57 @@ fn main() {
 
 
 ----------------------------------------
+EXEMPLE: exemples/style.gjs
+----------------------------------------
+import system
+import ui
+import fs
+import time
+import db
+
+fn main() {
+    // 1. Initialisation du framework
+    // Cela va effacer l'écran, afficher la bannière et incrémenter le boot_count
+    system::init("MAURICIO-OS V1")
+
+    // 2. Test du système de Logging
+    println("\n" + ui::bold("--- Test des Logs ---"))
+    system::log("INFO", "Démarrage des tests unitaires...")
+    system::log("WARN", "Ceci est un avertissement de test.")
+    
+    // 3. Test de la persistance (Database + Config)
+    println("\n" + ui::bold("--- Test de Configuration ---"))
+    
+    // On enregistre une info personnalisée
+    system::log("INFO", "Sauvegarde du profil utilisateur...")
+    sysf("touch system.conf") // Sécurité pour s'assurer que le fichier existe
+    
+    lt current_boots = system::get_param("boot_count")
+    println("Nombre de démarrages enregistrés : " + ui::green(current_boots))
+
+    // 4. Test du File System (via les logs)
+    println("\n" + ui::bold("--- Vérification du fichier Log ---"))
+    if (fs::exists("activity.log") == "True") {
+        lt log_size = fs::size("activity.log")
+        println("Fichier activity.log détecté (" + log_size + " octets)")
+    } else {
+        system::log("ERROR", "Échec critique : activity.log introuvable !")
+    }
+
+    // 5. Affichage final des dernières activités
+    println("\n" + ui::blue("Dernières entrées du journal :"))
+    println("----------------------------------------")
+    sysf("tail -n 5 activity.log")
+    println("----------------------------------------")
+
+    println("\n" + ui::green("✅ Test terminé avec succès !"))
+    
+    ret 0
+}
+
+
+
+----------------------------------------
 EXEMPLE: exemples/swit.gjs
 ----------------------------------------
 switch value {
@@ -10692,280 +11337,6 @@ EXEMPLE: exemples/test.gjs
 lt text = "Hello"
 println(text::len()) // Affiche 5
 
-t corrigé
-// ============================================
-
-// 1. Variables et types de base
-lt x = 42
-lt y = 3.14
-lt name = "Goscript"
-lt flag = true
-
-println("=== Test 1: Variables ===")
-println(x)
-println(y)
-println(name)
-println(flag)
-
-// 2. Opérations mathématiques
-lt a = 10
-lt b = 3
-
-println("")
-println("=== Test 2: Opérations ===")
-println(a + b)
-println(a - b)
-println(a * b)
-println(a / b)
-
-// 3. Conditions
-lt score = 85
-
-println("")
-println("=== Test 3: Conditions ===")
-
-if score >= 90 {
-    println("Excellent!")
-} else {
-    if score >= 60 {
-        println("Pass")
-    } else {
-        println("Fail")
-    }
-}
-
-// 4. Boucle while
-println("")
-println("=== Test 4: Boucle while ===")
-lt i = 0
-while i < 5 {
-    println(i)
-    i = i + 1
-}
-
-// 5. Boucle loop avec break
-println("")
-println("=== Test 5: Boucle loop ===")
-lt count = 0
-loop {
-    println(count)
-    count = count + 1
-    if count >= 3 {
-        break
-    }
-}
-
-// 6. Tableaux
-println("")
-println("=== Test 6: Tableaux ===")
-lt arr = [1, 2, 3, 4, 5]
-println(arr)
-
-lt fruits = ["pomme", "banane", "orange"]
-println(fruits)
-
-// 7. Fonctions
-println("")
-println("=== Test 7: Fonctions ===")
-
-fn add(a: int, b: int): int {
-    ret a + b
-}
-
-fn factorial(n: int): int {
-    if n <= 1 {
-        ret 1
-    }
-    ret n * factorial(n - 1)
-}
-
-println(add(5, 3))
-println(factorial(5))
-
-// 8. Structures
-println("")
-println("=== Test 8: Structures ===")
-
-struct Person {
-    name: string,
-    age: int
-}
-
-impl Person {
-    fn greet(self): void {
-        println("Bonjour, je suis " + self.name)
-    }
-    
-    fn birthday(self): void {
-        self.age = self.age + 1
-        println(self.name + " a maintenant " + self.age + " ans")
-    }
-}
-
-lt alice = new Person { name: "Alice", age: 25 }
-alice.greet()
-alice.birthday()
-
-// 9. F-strings (simplifié)
-println("")
-println("=== Test 9: F-strings ===")
-
-lt prenom = "Charlie"
-lt age2 = 28
-println(f"Bonjour {prenom}, tu as {age2} ans")
-
-// 10. Pattern matching
-println("")
-println("=== Test 10: Pattern matching ===")
-
-fn describe(n: int): string {
-    match n {
-        0 => ret "zero"
-        1 => ret "un"
-        2 => ret "deux"
-        _ => ret "beaucoup"
-    }
-}
-
-println(describe(0))
-println(describe(1))
-println(describe(5))
-
-// 11. Lambda
-println("")
-println("=== Test 11: Lambda ===")
-
-lt double = lambda (x) { ret x * 2 }
-lt triple = lambda (x) { ret x * 3 }
-
-println(double(5))
-println(triple(5))
-
-// 12. For-in
-println("")
-println("=== Test 12: For-in ===")
-
-lt numbers = [10, 20, 30, 40]
-for n in numbers {
-    println("Nombre: " + n)
-}
-
-// 13. Mutable variables
-println("")
-println("=== Test 13: Mutable ===")
-
-muts counter = 0
-counter = counter + 1
-counter = counter + 2
-println(counter)
-
-// 14. Constantes
-println("")
-println("=== Test 14: Constantes ===")
-
-cn PI = 3.14159
-cn MAX_SIZE = 100
-println(PI)
-println(MAX_SIZE)
-
-// 15. Opérateurs logiques
-println("")
-println("=== Test 15: Opérateurs logiques ===")
-
-println(true && true)
-println(true || false)
-println(!false)
-
-// 16. Comparaisons
-println("")
-println("=== Test 16: Comparaisons ===")
-
-println(5 > 3)
-println(5 < 3)
-println(5 == 5)
-println(5 != 3)
-
-// 17. Assignations composées
-println("")
-println("=== Test 17: Assignations composées ===")
-
-muts val = 10
-val += 5
-println(val)
-val -= 3
-println(val)
-val *= 2
-println(val)
-
-// 18. Chaînes de caractères
-println("")
-println("=== Test 18: Chaînes ===")
-
-lt s1 = "Hello"
-lt s2 = "World"
-println(s1 + " " + s2)
-
-// 19. NNL et JMP
-println("")
-println("=== Test 19: NNL/JMP ===")
-
-nnl my_label {
-    println("Avant le saut")
-    jmp my_label 42
-    println("Ceci ne sera pas affiché")
-}
-
-// 20. Try/Catch/Throw
-println("")
-println("=== Test 20: Try/Catch ===")
-
-try {
-    println("Dans le bloc try")
-    throw "Une erreur!"
-} catch (e) {
-    println("Erreur attrapee: " + e)
-} finally {
-    println("Finally execute")
-}
-
-// 21. Unsafe block
-println("")
-println("=== Test 21: Unsafe ===")
-
-unsafe {
-    println("Code unsafe execute")
-}
-
-// 22. Fonctions publiques
-println("")
-println("=== Test 22: Fonctions publiques ===")
-
-pub fn public_test(): string {
-    ret "Fonction publique"
-}
-
-println(public_test())
-
-// 23. Struct avec extends
-println("")
-println("=== Test 23: Struct extends ===")
-
-struct Animal {
-    name: string
-}
-
-struct Dog extends Animal {
-    breed: string
-}
-
-lt rex = new Dog { name: "Rex", breed: "Berger" }
-println(rex.name)
-println(rex.breed)
-
-// 24. Test final
-println("")
-println("=== Tous les tests sont termines! ===")
-println("Goscript fonctionne correctement!")	
 
 
 ----------------------------------------
@@ -11766,1388 +12137,9 @@ fn main() {
 }
 
 
-----------------------------------------
-EXEMPLE: exemples/test_args.gjs
-----------------------------------------
-// Test des arguments CLI
-fn main() {
-    println("=== TEST DES ARGUMENTS CLI ===")
-    println("Nombre d'arguments: " + len(args))
-    
-    muts i = 0
-    while i < len(args) {
-        println("  Arg " + i + ": " + args[i])
-        i = i + 1
-    }
-    
-    // Tester des flags spécifiques
-    muts j = 0
-    while j < len(args) {
-        if args[j] == "--server" {
-            if j + 1 < len(args) {
-                println("  -> Mode serveur détecté sur le port " + args[j + 1])
-            }
-        }
-        if args[j] == "--debug" {
-            println("  -> Mode debug activé")
-        }
-        j = j + 1
-    }
-    
-    ret 0
-}
-
-
 ================================================================================
 14. FICHIERS DE TEST
 ================================================================================
-
-----------------------------------------
-TEST: Test_ansii.gjs
-----------------------------------------
-// ============================================
-// TEST ANSI - Toutes les façons d'utiliser les couleurs
-// ============================================
-
-fn main() {
-    println("\n╔══════════════════════════════════════════════════════════════╗")
-    println("║                    TEST ANSI COMPLET                          ║")
-    println("╚══════════════════════════════════════════════════════════════╝\n")
-    
-    // ============================================
-    // 1. COULEURS DE TEXTE (FOREGROUND)
-    // ============================================
-    println("\033[1m=== 1. COULEURS DE TEXTE ===\033[0m\n")
-    
-    println("\033[30mNoir\033[0m")
-    println("\033[31mRouge\033[0m")
-    println("\033[32mVert\033[0m")
-    println("\033[33mJaune\033[0m")
-    println("\033[34mBleu\033[0m")
-    println("\033[35mMagenta\033[0m")
-    println("\033[36mCyan\033[0m")
-    println("\033[37mBlanc\033[0m")
-    
-    // Version avec \\x1b
-    println("\n\x1b[90mGris foncé\x1b[0m")
-    println("\x1b[91mRouge clair\x1b[0m")
-    println("\x1b[92mVert clair\x1b[0m")
-    println("\x1b[93mJaune clair\x1b[0m")
-    println("\x1b[94mBleu clair\x1b[0m")
-    println("\x1b[95mMagenta clair\x1b[0m")
-    println("\x1b[96mCyan clair\x1b[0m")
-    println("\x1b[97mBlanc brillant\x1b[0m")
-    
-    // ============================================
-    // 2. STYLES DE TEXTE
-    // ============================================
-    println("\n\033[1m=== 2. STYLES DE TEXTE ===\033[0m\n")
-    
-    println("\033[1mGras (Bold)\033[0m")
-    println("\033[3mItalique\033[0m")
-    println("\033[4mSouligné\033[0m")
-    println("\033[5mClignotant\033[0m")
-    println("\033[7mInversé\033[0m")
-    println("\033[9mBarré\033[0m")
-    
-    // Combinaisons
-    println("\n\033[1;31;4mGras + Rouge + Souligné\033[0m")
-    println("\033[3;34;7mItalique + Bleu + Inversé\033[0m")
-    
-    // ============================================
-    // 3. COULEURS DE FOND (BACKGROUND)
-    // ============================================
-    println("\n\033[1m=== 3. COULEURS DE FOND ===\033[0m\n")
-    
-    println("\033[40m Fond noir \033[0m")
-    println("\033[41m Fond rouge \033[0m")
-    println("\033[42m Fond vert \033[0m")
-    println("\033[43m Fond jaune \033[0m")
-    println("\033[44m Fond bleu \033[0m")
-    println("\033[45m Fond magenta \033[0m")
-    println("\033[46m Fond cyan \033[0m")
-    println("\033[47m Fond blanc \033[0m")
-    
-    // Fonds clairs
-    println("\n\033[100m Fond gris foncé \033[0m")
-    println("\033[101m Fond rouge clair \033[0m")
-    println("\033[102m Fond vert clair \033[0m")
-    println("\033[103m Fond jaune clair \033[0m")
-    println("\033[104m Fond bleu clair \033[0m")
-    println("\033[105m Fond magenta clair \033[0m")
-    println("\033[106m Fond cyan clair \033[0m")
-    println("\033[107m Fond blanc brillant \033[0m")
-    
-    // ============================================
-    // 4. F-STRINGS AVEC ANSI
-    // ============================================
-    println("\n\033[1m=== 4. F-STRINGS AVEC ANSI ===\033[0m\n")
-    
-    lt name = "Goscript"
-    lt version = "2.0"
-    lt status = "OK"
-    
-    // F-string avec guillemets doubles
-    lt msg1 = f"\033[32m✓ {name} v{version}\033[0m"
-    println(msg1)
-    
-    // F-string avec apostrophes
-    lt msg2 = f'\033[34mℹ Statut: {status}\033[0m'
-    println(msg2)
-    
-    // F-string avec expressions
-    lt score = 95
-    lt color = if score >= 90 { "\033[32m" } else { "\033[33m" }
-    println(f"{color}Score: {score}/100\033[0m")
-    
-    // ============================================
-    // 5. BARRE DE PROGRESSION STYLÉE
-    // ============================================
-    println("\n\033[1m=== 5. BARRE DE PROGRESSION ===\033[0m\n")
-    
-    muts progress = 0
-    while progress <= 100 {
-        lt bar_width = 50
-        lt filled = progress * bar_width / 100
-        lt empty = bar_width - filled
-        
-        // Choisir la couleur selon la progression
-        lt bar_color = "\033[33m"  // Jaune par défaut
-        if progress >= 80 {
-            bar_color = "\033[32m"  // Vert
-        } else if progress >= 50 {
-            bar_color = "\033[36m"  // Cyan
-        }
-        
-        print(f"\r{bar_color}[")
-        muts i = 0
-        while i < filled {
-            print("=")
-            i = i + 1
-        }
-        while i < bar_width {
-            print(" ")
-            i = i + 1
-        }
-        print(f"] {progress}%\033[0m")
-        
-        // Force l'affichage immédiat (simule flush)
-        sysf("")
-        
-        progress = progress + 10
-        // Pause courte
-        muts wait = 0
-        while wait < 5000000 {
-            wait = wait + 1
-        }
-    }
-    println("\n")
-    
-    // ============================================
-    // 6. TABLEAU COLORÉ
-    // ============================================
-    println("\033[1m=== 6. TABLEAU COLORÉ ===\033[0m\n")
-    
-    // En-tête
-    println("\033[1;44;37m ID \033[0m \033[1;44;37m Nom           \033[0m \033[1;44;37m Score \033[0m \033[1;44;37m Statut \033[0m")
-    
-    // Lignes de données
-    lt data = [
-        [1, "Alice", 95, "OK"],
-        [2, "Bob",   67, "WARN"],
-        [3, "Charlie", 42, "FAIL"],
-        [4, "Diana", 88, "OK"]
-    ]
-    
-    muts row = 0
-    while row < 4 {
-        lt id = data[row][0]
-        lt name = data[row][1]
-        lt score_val = data[row][2]
-        lt status_val = data[row][3]
-        
-        // Couleur selon le score
-        lt score_color = "\033[32m"
-        if score_val < 50 {
-            score_color = "\033[31m"
-        } else if score_val < 70 {
-            score_color = "\033[33m"
-        }
-        
-        // Couleur selon le statut
-        lt status_color = "\033[32m"
-        if status_val == "FAIL" {
-            status_color = "\033[31m"
-        } else if status_val == "WARN" {
-            status_color = "\033[33m"
-        }
-        
-        println(f" \033[36m{id}\033[0m  {name}           {score_color}{score_val}\033[0m   {status_color}{status_val}\033[0m")
-        row = row + 1
-    }
-    
-    // ============================================
-    // 7. SPINNER ANIMÉ
-    // ============================================
-    println("\n\033[1m=== 7. SPINNER ANIMÉ ===\033[0m\n")
-    
-    lt spinner_frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
-    lt colors = ["\033[31m", "\033[33m", "\033[32m", "\033[36m", "\033[34m", "\033[35m"]
-    
-    println("Chargement...")
-    
-    muts frame = 0
-    while frame < 20 {
-        lt spin_char = spinner_frames[frame % 10]
-        lt spin_color = colors[frame % 6]
-        
-        print(f"\r  {spin_color}{spin_char}\033[0m Traitement en cours... ")
-        sysf("")
-        
-        muts wait = 0
-        while wait < 10000000 {
-            wait = wait + 1
-        }
-        
-        frame = frame + 1
-    }
-    println("\r  \033[32m✓\033[0m Terminé!               \n")
-    
-    // ============================================
-    // 8. MESSAGES DE LOG STYLÉS
-    // ============================================
-    println("\033[1m=== 8. MESSAGES DE LOG ===\033[0m\n")
-    
-    fn log_info(msg: string) {
-        println(f"\033[34mℹ INFO:\033[0m {msg}")
-    }
-    
-    fn log_success(msg: string) {
-        println(f"\033[32m✓ SUCCESS:\033[0m {msg}")
-    }
-    
-    fn log_warning(msg: string) {
-        println(f"\033[33m⚠ WARNING:\033[0m {msg}")
-    }
-    
-    fn log_error(msg: string) {
-        println(f"\033[1;31m✗ ERROR:\033[0m \033[31m{msg}\033[0m")
-    }
-    
-    fn log_debug(msg: string) {
-        println(f"\033[35m🐛 DEBUG:\033[0m {msg}")
-    }
-    
-    log_info("Application démarrée")
-    log_debug("Variables initialisées")
-    log_success("Connexion établie")
-    log_warning("Mémoire presque pleine")
-    log_error("Fichier introuvable")
-    
-    // ============================================
-    // 9. BOÎTE DE DIALOGUE
-    // ============================================
-    println("\n\033[1m=== 9. BOÎTE DE DIALOGUE ===\033[0m\n")
-    
-    fn box(title: string, content: string, border_color: string) {
-        lt width = 50
-        lt title_len = strlen_c(title)
-        lt content_len = strlen_c(content)
-        
-        // Ligne du haut
-        println(f"{border_color}┌{title}")
-        muts i = title_len
-        while i < width - 2 {
-            print("─")
-            i = i + 1
-        }
-        println("┐\033[0m")
-        
-        // Contenu
-        println(f"{border_color}│\033[0m {content}")
-        muts j = content_len
-        while j < width - 3 {
-            print(" ")
-            j = j + 1
-        }
-        println(f"{border_color}│\033[0m")
-        
-        // Ligne du bas
-        print(f"{border_color}└")
-        muts k = 0
-        while k < width - 2 {
-            print("─")
-            k = k + 1
-        }
-        println("┘\033[0m")
-    }
-    
-    box(" ATTENTION ", "Ceci est un message important!", "\033[33m")
-    println("")
-    box(" SUCCÈS ", "Opération réussie!", "\033[32m")
-    println("")
-    box(" ERREUR ", "Une erreur est survenue!", "\033[31m")
-    
-    // ============================================
-    // 10. DÉGRADÉ DE COULEURS
-    // ============================================
-    println("\n\033[1m=== 10. DÉGRADÉ DE COULEURS ===\033[0m\n")
-    
-    lt gradient_colors = [31, 33, 32, 36, 34, 35]
-    lt text = "GOSCRIPT"
-    
-    muts pos = 0
-    while pos < strlen_c(text) {
-        lt color_code = gradient_colors[pos % 6]
-        lt char = substr(text, pos, 1)
-        print(f"\033[1;{color_code}m{char}\033[0m")
-        pos = pos + 1
-    }
-    println("\n")
-    
-    // ============================================
-    // 11. TEST DES SÉQUENCES D'ÉCHAPPEMENT
-    // ============================================
-    println("\033[1m=== 11. SÉQUENCES D'ÉCHAPPEMENT BRUTES ===\033[0m\n")
-    
-    // Ces séquences doivent être correctement interprétées
-    println("Séquence \\033[31m: \033[31mRouge\033[0m")
-    println("Séquence \\x1b[32m: \x1b[32mVert\x1b[0m")
-    println("Séquence \\033[1;33m: \033[1;33mGras Jaune\033[0m")
-    println("Séquence \\x1b[4;34m: \x1b[4;34mSouligné Bleu\x1b[0m")
-    
-    // ============================================
-    // FIN
-    // ============================================
-    println("\n╔══════════════════════════════════════════════════════════════╗")
-    println("\033[32m║                    TEST ANSI RÉUSSI !                        ║\033[0m")
-    println("╚══════════════════════════════════════════════════════════════╝\n")
-    
-    ret 0
-}
-
-// ============================================
-// FONCTIONS UTILITAIRES
-// ============================================
-
-
-
-fn substr(s: string, start: int, length: int): string {
-    if s == nil || start < 0 {
-        ret ""
-    }
-    
-    muts result = ""
-    muts i = start
-    muts count = 0
-    
-    while count < length {
-        if s[i] == nil {
-            break
-        }
-        // Ajoute le caractère à la chaîne résultat
-        muts char = ""
-        char = char + s[i]
-        result = result + char
-        i = i + 1
-        count = count + 1
-    }
-    
-    ret result
-}
-
-
-----------------------------------------
-TEST: system.gjs
-----------------------------------------
-import system
-import ui
-import os
-
-fn main() {
-    // 1. Initialisation complète via notre nouveau module
-    system::init("MAURICIO OS")
-
-    // 2. Récupération d'infos
-    lt user = os::getenv("USER")
-    lt boots = system::get_param("boot_count")
-
-    system::log("INFO", "Current User: " + user)
-    system::log("INFO", "System has booted " + boots + " times.")
-
-    // 3. Simulation d'une erreur
-    if (user == "root") {
-        system::log("WARN", "Running as root is dangerous!")
-    } else {
-        system::log("ERROR", "Access denied for user: " + user)
-    }
-
-    println("\n" + ui::bold("--- Activity Log (Last 3 lines) ---"))
-    sysf("tail -n 3 activity.log")
-
-    ret 0
-}
-
-
-
-----------------------------------------
-TEST: test.gjs
-----------------------------------------
-// Ce qui marchera enfin :
-lt text = "Hello"
-println(text::len()) // Affiche 5
-
-
-
-----------------------------------------
-TEST: test__.gjs
-----------------------------------------
-pub fn trim(s: string): string {
-    if s == nil || len(s) == 0 { 
-        ret "" 
-    }
-    
-    muts start_found = false
-    muts res = ""
-    muts trailing_spaces = ""
-    
-    // On utilise 'for in' pour éviter le bug du NODE(17) (indexation)
-    for c in s {
-        if !start_found {
-            // On saute les espaces au début
-            if c == " " || c == "\t" || c == "\n" || c == "\r" {
-                continue
-            }
-            start_found = true
-        }
-        
-        if start_found {
-            if c == " " || c == "\t" || c == "\n" || c == "\r" {
-                // On stocke les espaces temporairement
-                // S'il y a d'autres caractères après, on les ajoutera
-                trailing_spaces = trailing_spaces + c
-            } else {
-                // On ajoute les espaces accumulés précédemment + le caractère actuel
-                res = res + trailing_spaces + c
-                trailing_spaces = ""
-            }
-        }
-    }
-    
-    ret res
-}
-
-fn main() {
-   lt local = trim("   bonjour   ")
-   println("[" + local + "]") 
-   
-   lt test2 = trim("\t  Hello World\n")
-   println("[" + test2 + "]")
-}
-
-
-
-----------------------------------------
-TEST: test_args.gjs
-----------------------------------------
-// Test des arguments CLI
-fn main() {
-    println("=== TEST DES ARGUMENTS CLI ===")
-    println("Nombre d'arguments: " + len(args))
-    
-    muts i = 0
-    while i < len(args) {
-        println("  Arg " + i + ": " + args[i])
-        i = i + 1
-    }
-    
-    // Tester des flags spécifiques
-    muts j = 0
-    while j < len(args) {
-        if args[j] == "--server" {
-            if j + 1 < len(args) {
-                println("  -> Mode serveur détecté sur le port " + args[j + 1])
-            }
-        }
-        if args[j] == "--debug" {
-            println("  -> Mode debug activé")
-        }
-        j = j + 1
-    }
-    
-    ret 0
-}
-
-
-----------------------------------------
-TEST: test_b64.gjs
-----------------------------------------
-import b64
-
-fn main() {
-    println("--- Testing Native Base64 (Bash) ---")
-
-    lt original = "Mauricio-Pro 2026"
-    
-    // 1. Encoding
-    lt encoded = b64::encode(original)
-    println("Original: " + original)
-    println("Encoded : " + encoded)
-
-    // 2. Decoding
-    lt decoded = b64::decode(encoded)
-    println("Decoded : " + decoded)
-
-    if (original == decoded) {
-        println("✅ Verification: Success!")
-    } else {
-        println("❌ Verification: Failed!")
-    }
-
-    ret 0
-}
-
-
-
-----------------------------------------
-TEST: test_crypto.gjs
-----------------------------------------
-import crypto
-
-fn main() {
-    println("--- Testing Native Crypto (Bash) ---")
-
-    lt secret = "mauricio_pro_2026"
-    
-    // Test SHA256
-    lt h256 = crypto::sha256(secret)
-    println("SHA256: " + h256)
-
-    // Test MD5
-    lt hmd5 = crypto::md5(secret)
-    println("MD5   : " + hmd5)
-
-    ret 0
-}
-
-
-
-----------------------------------------
-TEST: test_db.gjs
-----------------------------------------
-import db
-import ui
-
-fn main() {
-    lt database = "users.db"
-    ui::banner(ui::bold(ui::blue("NATIVE DATABASE TEST")))
-
-    // 1. Stockage de données
-    println("Saving user data...")
-    db::set(database, "user_1", "Mauricio")
-    db::set(database, "user_2", "Gemini")
-    db::set(database, "version", "0.2.6")
-
-    // 2. Récupération
-    lt name = db::get(database, "user_1")
-    println("User 1: " + ui::green(name))
-
-    // 3. Mise à jour (On change la version)
-    db::set(database, "version", "0.3.0")
-    lt ver = db::get(database, "version")
-    println("Updated Version: " + ui::yellow(ver))
-
-    // 4. Statistiques
-    lt total = db::count(database)
-    println("Total records: " + total)
-
-    // 5. Recherche d'une clé inexistante
-    if (db::exists(database, "admin") == "False") {
-        println(ui::red("Admin not found!"))
-    }
-        // 6. Test Recherche
-    println("\nSearching for 'user':")
-    lt results = db::search(database, "user")
-    println("Found: " + results)
-
-    ret 0
-}
-
-
-
-----------------------------------------
-TEST: test_fs.gjs
-----------------------------------------
-import fs
-import ui
-
-fn main() {
-    lt file = "data.txt"
-    ui::banner(ui::bold(ui::blue("NATIVE FILE SYSTEM TEST")))
-
-    // 1. Write
-    println("Writing to " + file + "...")
-    fs::write(file, "Hello Mauricio!")
-
-    // 2. Append
-    println("Appending data...")
-    fs::append(file, "Version 0.2.6")
-
-    // 3. Read
-    lt content = fs::read(file)
-    println("\nContent of file:")
-    println(ui::green(content))
-
-    // 4. Metadata
-    lt s = fs::size(file)
-    println("File size: " + s + " bytes")
-
-    // 5. Exists
-    if (fs::exists(file) == "True") {
-        println(ui::yellow("File check: OK"))
-    }
-
-    ret 0
-}
-
-
-
-----------------------------------------
-TEST: test_htp.gjs
-----------------------------------------
-import http
-import json
-
-fn main() {
-    println("--- Test HTTP Client (JSON) ---")
-    
-    // Cette API renvoie un vrai objet JSON : {"ip": "xxx.xxx.xxx.xxx"}
-    lt data = http::get("https://api.ipify.org?format=json")
-    
-    println("Données brutes reçues : " + data)
-    println("Données formatées :")
-    println(json::format_json(data))
-
-    // On peut même extraire l'IP spécifiquement si ton module json a get_value
-    // lt my_ip = json::get_value(data, "ip")
-    // println("Ton adresse IP est : " + my_ip)
-
-    ret 0
-}
-
-
-
-----------------------------------------
-TEST: test_io.gjs
-----------------------------------------
-import io
-
-fn main() {
-    println("--- Testing IO Module ---")
-
-    lt filename = "test_data.txt"
-    lt message = "Hello from Goscript 0.2.0!\n"
-
-    // 1. Writing to a file
-    println("Writing to: " + filename)
-    io::write_file(filename, message)
-
-    // 2. Appending data
-    println("Appending data...")
-    io::append_file(filename, "This is an appended line.\n")
-
-    // 3. Reading back
-    println("Reading file content:")
-    lt content = io::read_file(filename)
-    println("-----------------------")
-    println(content)
-    println("-----------------------")
-
-    ret 0
-}
-
-
-
-----------------------------------------
-TEST: test_iteral.gjs
-----------------------------------------
-pub fn trim(s: string): string {
-    // 1. Vérification de sécurité
-    if s == nil || len(s) == 0 { 
-        ret "" 
-    }
-    
-    muts l = len(s)
-    muts st = 0
-    muts en = l - 1
-    
-    // 2. Trouver le premier caractère non-espace (en avançant)
-    while st < l {
-        muts c = s[st]
-        // On vérifie les espaces, tabulations, sauts de ligne et retours chariot
-        if c == " " || c == "\t" || c == "\n" || c == "\r" {
-            st = st + 1
-        } else { 
-            break 
-        }
-    }
-    
-    // 3. Trouver le premier caractère non-espace (en reculant)
-    while en >= 0 {
-        muts c = s[en]
-        if c == " " || c == "\t" || c == "\n" || c == "\r" {
-            en = en - 1
-        } else { 
-            break 
-        }
-    }
-    
-    // Si la chaîne n'était composée que de caractères blancs
-    if st > en { 
-        ret "" 
-    }
-    
-    // 4. Reconstruire la sous-chaîne nettoyée
-    muts res = ""
-    muts i = st
-    while i <= en {
-        res = res + s[i]
-        i = i + 1
-    }
-    
-    ret res
-}
-
-
-fn main() {
-   lt local = trim(" bonjour")
-   println(local)
-}
-
-
-----------------------------------------
-TEST: test_jso.gjs
-----------------------------------------
-import json
-
-fn main() {
-    println("--- Testing Native JSON (Bash/Sed) ---")
-
-    lt raw_json = "{\"name\": \"Mauricio\", \"role\": \"Admin\", \"id\": 2026}"
-    
-    // 1. Formatage (Pretty Print)
-    println("Formatted JSON:")
-    println(json::format(raw_json))
-
-    // 2. Extraction de valeurs
-    lt user = json::get(raw_json, "name")
-    lt year = json::get(raw_json, "id")
-
-    println("Extracted Name : " + user)
-    println("Extracted Year : " + year)
-
-    // 3. Validation
-    if (json::is_json(raw_json) == "True") {
-        println("✅ Valid JSON structure.")
-    }
-
-    ret 0
-}
-
-
-
-----------------------------------------
-TEST: test_json.gjs
-----------------------------------------
-import json
-
-fn main() {
-    println("=== TEST JSON PARSER VIA PYTHON ===")
-
-    // Données JSON brutes
-    lt raw_json = '{"name": "Goscript", "version": 2.0, "status": "active"}'
-
-    // 1. Extraire des données
-    println("Extraction des données :")
-    lt name = json::get_value(raw_json, "name")
-    lt version = json::get_value(raw_json, "version")
-    
-    println("Nom : " + name)
-    println("Version : " + version)
-
-    // 2. Formater le JSON
-    println("\nJSON Formaté :")
-    lt pretty = json::format_json(raw_json)
-    println(pretty)
-
-    ret 0
-}
-
-
-
-----------------------------------------
-TEST: test_len.gjs
-----------------------------------------
-// Fonction len universelle pour Goscript
-fn len(obj) {
-    if obj == nil {
-        ret 0
-    }
-
-    // Le langage supporte l'itération sur les chaînes, tableaux et dictionnaires
-    // On utilise une boucle while avec un compteur pour déterminer la taille
-    muts count = 0
-    
-    // En Goscript, l'accès par index fonctionne pour les chaînes et les tableaux
-    // Pour les dictionnaires, l'itération 'for in' est généralement utilisée
-    // Mais voici une approche générique par parcours :
-    
-    try {
-        // Tentative de parcours pour les types itérables
-        for item in obj {
-            count = count + 1
-        }
-    } catch (e) {
-        // Si l'objet n'est pas itérable (ex: int, bool), on retourne 0 ou on gère l'erreur
-        ret 0
-    }
-    
-    ret count
-}
-
-// Exemple d'utilisation
-fn main() {
-    lt ma_chaine = "Goscript"
-    lt mon_tableau = [10, 20, 30, 40]
-    lt mon_dict = "pourquoi ça ?"
-    println("Taille chaîne : " + len(ma_chaine))   // Affiche 8
-    println("Taille tableau : " + len(mon_tableau)) // Affiche 4
-    println("Taille dictionnaire : " + len(mon_dict)) // Affiche 2
-}
-
-
-
-----------------------------------------
-TEST: test_match.gjs
-----------------------------------------
-fn test_cli(args) {
-    match args {
-        ["server", "start", lt port] => {
-            println("Action: Démarrage du serveur")
-            println("Port détecté: " + port)
-        }
-        ["server", "stop"] => {
-            println("Action: Arrêt du serveur")
-        }
-        ["help"] => {
-            println("Usage: server [start|stop] [port]")
-        }
-        _ => {
-            println("Commande inconnue")
-        }
-    }
-}
-
-fn main() {
-    // Test 1: Capture de variable
-    println("--- Test 1 ---")
-    test_cli(["server", "start", "8080"])
-
-    // Test 2: Match exact
-    println("\n--- Test 2 ---")
-    test_cli(["server", "stop"])
-
-    // Test 3: Défaut
-    println("\n--- Test 3 ---")
-    test_cli(["random", "cmd"])
-}
-
-
-
-----------------------------------------
-TEST: test_math.gjs
-----------------------------------------
-import math
-
-fn main() {
-    println("--- Testing Native Math (Bash/Awk) ---")
-
-    // 1. Racine carrée de 144
-    lt s = math::sqrt(144)
-    println("Square root of 144: " + s)
-
-    // 2. Puissance (2^10)
-    lt p = math::pow(2, 10)
-    println("2 power 10: " + p)
-
-    // 3. Arrondi
-    lt r = math::round(15.7)
-    println("Round 15.7: " + r)
-
-    // 4. Random (0-100)
-    lt rd = math::random(100)
-    println("Random number: " + rd)
-
-    ret 0
-}
-
-
-
-----------------------------------------
-TEST: test_menu.gjs
-----------------------------------------
-import ui
-import os
-import net
-
-fn main() {
-    println(ui::blue("option: 1 = network"))     
-    println(ui::blue("option: 2 = list dir"))    
-    println(ui::blue("option: 3 = system info")) 
-    println(ui::blue("option: 4 = exiting... "))
-    lt choice = ui::menu("GOSCRIPT CONTROL CENTER", "Check Network,List Files,System Info,Exit")
-     
-    if (choice == "1") {
-        println(ui::blue("\nChecking Network..."))
-        println("Status: " + net::ping("8.8.8.8"))
-    }
-    
-    if (choice == "2") {
-        println(ui::blue("\nCurrent Directory Content:"))
-        println(os::list_dir("."))
-    }
-
-    if (choice == "3") {
-        println(ui::blue("\nSystem Information:"))
-        println("User: " + os::getenv("USER"))
-        println("Path: " + os::getcwd())
-    }
-
-    if (choice == "4") {
-        println(ui::red("Exiting..."))
-    }
-
-    ret 0
-}
-
-
-
-----------------------------------------
-TEST: test_net_json.gjs
-----------------------------------------
-import net
-import json
-
-fn main() {
-    println("--- Testing Native Network (BusyBox) ---")
-
-    // 1. Test Ping
-    println("Checking Google Connectivity...")
-    lt status = net::ping("8.8.8.8")
-    println("Status: " + status)
-
-    // 2. HTTP GET (JSON API)
-    println("\nFetching IP Info...")
-    lt response = net::get("http://ip-api.com/json")
-    
-    // On utilise notre nouveau module JSON pour extraire le pays
-    lt country = json::get(response, "country")
-    println("Server Location: " + country)
-    println("Full JSON: " + response)
-
-    ret 0
-}
-
-
-
-----------------------------------------
-TEST: test_os.gjs
-----------------------------------------
-import os
-
-fn main() {
-    println("--- Testing OS Module ---")
-
-    // 1. Get Current Directory
-    lt cwd = os::getcwd()
-    println("Current Directory: " + cwd)
-
-    // 2. List files
-    println("Files in current directory:")
-    lt files = os::list_dir(".")
-    println(files)
-
-    // 3. Check for a specific file (the one we created with IO)
-    lt target = "test_data.txt"
-    if (os::exists(target) == "True") {
-        println("File '" + target + "' exists. Deleting it...")
-        os::remove(target)
-        println("File deleted.")
-    } else {
-        println("File '" + target + "' not found.")
-    }
-
-    // 4. Check environment variable
-    lt user = os::getenv("USER")
-    println("System User: " + user)
-
-    ret 0
-}
-
-
-
-----------------------------------------
-TEST: test_os2.gjs
-----------------------------------------
-import os
-
-fn main() {
-    println("--- Testing Native OS (Bash) ---")
-
-    // 1. Infos de base
-    println("Working Dir: " + os::getcwd())
-    println("User: " + os::getenv("USER"))
-
-    // 2. Gestion de dossiers
-    lt tmp_dir = "goscript_tmp"
-    println("Creating: " + tmp_dir)
-    os::mkdir(tmp_dir)
-
-    // 3. Vérification
-    if (os::exists(tmp_dir) == "True") {
-        println("✅ Folder exists.")
-        println("Listing current directory:")
-        println(os::list_dir("."))
-        
-        println("Deleting: " + tmp_dir)
-        os::remove(tmp_dir)
-        println("✅ Folder deleted.")
-    } else {
-        println("❌ Failed to create folder.")
-    }
-
-    ret 0
-}
-
-
-
-----------------------------------------
-TEST: test_post.gjs
-----------------------------------------
-import urllib.request
-import json
-
-fn main() {
-    println("--- Testing HTTP POST ---")
-    lt my_data = "{\"name\": \"Mauricio\", \"project\": \"GoScript\"}"
-    
-    lt response = urllib::request::post("https://httpbin.org/post", my_data)
-    println("Server Response: " + json::format_json(response))
-    
-    ret 0
-}
-
-
-
-----------------------------------------
-TEST: test_random.gjs
-----------------------------------------
-import random
-import ui
-
-fn main() {
-    ui::banner(ui::bold(ui::blue("RANDOM GENERATOR TEST")))
-
-    // 1. Test Nombre Aléatoire
-    lt num = random::int(1000)
-    println("Nombre chanceux (0-1000) : " + ui::green(num))
-
-    // 2. Test Mot de Passe / Token
-    lt pass = random::string(12)
-    println("Token généré (12 chars)  : " + ui::yellow(pass))
-
-    // 3. Test UUID
-    lt id = random::uuid()
-    println("UUID Unique du système   : " + ui::blue(id))
-
-    ret 0
-}
-
-
-
-----------------------------------------
-TEST: test_serv.gjs
-----------------------------------------
-import http
-
-fn main() {
-    println("--- GoScript HTTP Server ---")
-    println("Press Ctrl+C to shutdown the server")
-    
-    // Starting the server on port 8080
-    http::serve(8080)
-    
-    ret 0
-}
-
-
-
-----------------------------------------
-TEST: test_sys.gjs
-----------------------------------------
-import sys
-
-fn main() {
-    println("--- GoScript System Information ---")
-
-    // 1. Platform Info
-    lt os_name = sys::platform()
-    lt py_ver = sys::version()
-    println("OS Platform: " + os_name)
-    println("Backend Version: " + py_ver)
-
-    // 2. Command Line Arguments
-    println("\nReading arguments...")
-    lt args = sys::argv()
-    println("Arguments received: " + args)
-
-    // 3. Testing exit (optional)
-    // println("Exiting now...")
-    // sys::exit(0)
-
-    ret 0
-}
-
-
-
-----------------------------------------
-TEST: test_tar.gjs
-----------------------------------------
-import tar
-import os
-
-fn main() {
-    println("--- Testing TarZip Module ---")
-
-    lt source_folder = "lib"
-    lt archive_name = "backup_lib.tar.gz"
-
-    // 1. Pack the lib folder
-    tar::pack(source_folder, archive_name)
-
-    // 2. Check if it exists using our OS module
-    if (os::exists(archive_name) == "True") {
-        println("✅ Success: Archive created!")
-    } else {
-        println("❌ Error: Archive not found.")
-    }
-
-    // 3. Optional: Test extraction
-    // println("Testing extraction...")
-    // tar::unpack(archive_name, "extracted_backup")
-
-    ret 0
-}
-
-
-
-----------------------------------------
-TEST: test_time.gjs
-----------------------------------------
-import time
-
-fn main() {
-    println("--- Testing Native Time (Bash) ---")
-
-    // 1. Test de l'heure
-    lt heure = time::now()
-    println("Il est actuellement : " + heure)
-
-    // 2. Test du Timestamp
-    lt ts = time::timestamp()
-    println("Timestamp Unix : " + ts)
-
-    // 3. Test du formateur personnalisé (pour tes backups)
-    lt jour = time::format("%A %d %B")
-    println("Aujourd'hui : " + jour)
-
-    // 4. Test du sleep
-    println("Dodo pour 1 seconde...")
-    time::sleep(1)
-    println("Réveil !")
-
-    ret 0
-}
-
-
-
-----------------------------------------
-TEST: test_typeod.gjs
-----------------------------------------
-// test_typeod.gjs - Test de la fonction typeod
-
-fn main() {
-    println("=== TEST TYPEOD ===\n")
-    
-    // Test 1: nil
-    lt v1 = nil
-    println("typeod(nil)    = " + typeod(v1) + " (attendu: nil)")
-    
-    // Test 2: booléens
-    lt v2 = true
-    lt v3 = false
-    println("typeod(true)   = " + typeod(v2) + " (attendu: bool)")
-    println("typeod(false)  = " + typeod(v3) + " (attendu: bool)")
-    
-    // Test 3: entiers
-    lt v4 = 42
-    lt v5 = 0
-    lt v6 = -10
-    println("typeod(42)     = " + typeod(v4) + " (attendu: int)")
-    println("typeod(0)      = " + typeod(v5) + " (attendu: int)")
-    println("typeod(-10)    = " + typeod(v6) + " (attendu: int)")
-    
-    // Test 4: chaînes
-    lt v7 = "hello"
-    lt v8 = ""
-    lt v9 = "Goscript 2026"
-    println("typeod('hello') = " + typeod(v7) + " (attendu: string)")
-    println("typeod('')      = " + typeod(v8) + " (attendu: string)")
-    println("typeod('Goscript 2026') = " + typeod(v9) + " (attendu: string)")
-    
-    // Test 5: tableaux
-    lt v10 = [1, 2, 3]
-    lt v11 = []
-    lt v12 = ["pomme", "banane", "orange"]
-    println("typeod([1,2,3]) = " + typeod(v10) + " (attendu: array)")
-    println("typeod([])      = " + typeod(v11) + " (attendu: array)")
-    println("typeod(['pomme','banane']) = " + typeod(v12) + " (attendu: array)")
-    
-    // Test 6: dictionnaires
-    lt v13 = dict{"cle": "valeur"}
-    println("typeod(dict)    = " + typeod(v13) + " (attendu: dict)")
-    
-    // Test 7: structures
-    struct Person {
-        name: string,
-        age: int
-    }
-    
-    lt v14 = new Person{
-        name: "Alice",
-        age: 30
-    }
-    println("typeod(struct)  = " + typeod(v14) + " (attendu: struct)")
-    
-    println("\n=== TEST TYPEOD RÉUSSI ===")
-    
-    ret 0
-}
-
-// Fonction typeod simplifiée - Détection de type fiable
-pub fn typeod(v: any): string {
-    if v == nil {
-        ret "nil"
-    }
-    
-    // Booléens
-    if v == true || v == false {
-        ret "bool"
-    }
-    
-    // Test pour les chaînes (concaténation avec string vide)
-    try {
-        muts s = v + ""
-        // Vérifier si c'est itérable comme une chaîne
-        try {
-            for c in v {
-                // Si on peut itérer ET concaténer, c'est une chaîne
-                ret "string"
-            }
-            // Si c'est concaténable mais pas itérable, c'est un nombre
-            ret "int"
-        } catch (e) {
-            // Pas itérable, donc probablement un nombre
-            ret "int"
-        }
-    } catch (e) {}
-    
-    // Test pour les tableaux/dictionnaires (itérables)
-    try {
-        for item in v {
-            // Si on peut itérer, c'est soit un array, soit un dict
-            // On essaie de concaténer pour voir
-            try {
-                muts arr_test = v + []
-                ret "array"
-            } catch (e) {
-                ret "dict"
-            }
-        }
-    } catch (e) {}
-    
-    // Si rien ne correspond, c'est une structure
-    ret "struct"
-}
-
-
-----------------------------------------
-TEST: test_ui.gjs
-----------------------------------------
-import ui
-import time
-
-fn main() {
-    ui::clear()
-    ui::banner(ui::bold(ui::blue("GOSCRIPT OS TERMINAL")))
-
-    println(ui::yellow("Starting system diagnostic..."))
-    time::sleep(1)
-
-    println(ui::green("✅ Network: Online"))
-    println(ui::green("✅ Database: Connected"))
-    println(ui::red("⚠️  Storage: 85% full"))
-
-    println("\nDownloading updates:")
-    
-    // Simple Loop simulation
-    ui::progress_bar(10)
-    time::sleep(1)
-    ui::progress_bar(40)
-    time::sleep(1)
-    ui::progress_bar(75)
-    time::sleep(1)
-    ui::progress_bar(100)
-
-    println("\n\n" + ui::bold(ui::green("System update complete!")))
-    
-    ret 0
-}
-
-
-
-----------------------------------------
-TEST: test_urlib.gjs
-----------------------------------------
-import urllib.request
-import urllib.server
-import json
-
-fn main() {
-    println("--- Testing urllib structure ---")
-
-    // 1. Test Request
-    lt data = urllib::request::get("https://api.ipify.org?format=json")
-    println("IP Data: " + json::format_json(data))
-
-    // 2. Test Server (optional)
-    // println("\nStarting server...")
-    // urllib::server::start(8080)
-
-    ret 0
-}
-
-
 
 ================================================================================
 15. RÉSUMÉ DES MOTS-CLÉS
@@ -13160,8 +12152,8 @@ Mots-clés du langage:
 STATISTIQUES
 ================================================================================
 
-Modules lib/: 29
-Exemples: 159
-Tests: 33
+Modules lib/: 45
+Exemples: 160
+Tests: 0
 
-Taille totale du fichier: 395,313 octets
+Taille totale du fichier: 370,616 octets

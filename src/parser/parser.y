@@ -89,6 +89,7 @@ ASTNode* program_root;
 %type <string> import_path use_path
 %type <node_list> array_patterns
 %type <node> sysf_expr sh_expr
+%type <node> bracket_access
 %type <node> import_constraints import_options
 %type <node_list> name_list
 %type <node> dict_expr dict_type

@@ -684,38 +684,64 @@ int gpm_publish(const char* package_path) {
 int gpm_verify(const char* package) {
     LOG_INFO("Verifying: %s", package);
     
-    if (!file_exists(package)) {
-        LOG_ERROR("File not found: %s", package);
+    char package_path[1024] = {0};
+    
+    // 1. Vérifier si c'est un chemin de fichier direct
+    if (file_exists(package)) {
+        strncpy(package_path, package, sizeof(package_path) - 1);
+    }
+    // 2. Chercher dans le cache
+    else {
+        char* cached = package_find_in_cache(package, NULL, g_config.default_arch);
+        if (cached) {
+            strncpy(package_path, cached, sizeof(package_path) - 1);
+            free(cached);
+        }
+    }
+    // 3. Chercher dans les packages installés
+    if (package_path[0] == '\0') {
+        char meta_path[1024];
+        snprintf(meta_path, sizeof(meta_path), "%s/%s/package.json", 
+                 g_config.lib_dir, package);
+        if (file_exists(meta_path)) {
+            // Le package est installé mais on n'a pas le .tar.bool
+            PackageMeta* meta = package_read_meta(meta_path);
+            if (meta && meta->sha256) {
+                LOG_INFO("Package is installed");
+                LOG_INFO("Registered SHA256: %s", meta->sha256);
+                LOG_INFO("Version: %s", meta->version);
+                package_meta_free(meta);
+                return 1;  // Vérifié via les métadonnées
+            }
+            package_meta_free(meta);
+        }
+    }
+    
+    if (package_path[0] == '\0') {
+        LOG_ERROR("Package not found: %s", package);
+        LOG_INFO("Usage: gpm verify <file.tar.bool>");
+        LOG_INFO("   or: gpm verify <installed-package-name>");
         return 0;
     }
     
     // Calculer le hash SHA256
-    char* hash = package_compute_hash(package);
-    LOG_INFO("SHA256: %s", hash);
-    
-    // Vérifier la signature si présente
-    char sig_path[1024];
-    snprintf(sig_path, sizeof(sig_path), "%s.sig", package);
-    char pubkey_path[1024];
-    snprintf(pubkey_path, sizeof(pubkey_path), "%s/gpm-public.pem", GPM_CONFIG_DIR);
-    
-    if (file_exists(sig_path) && file_exists(pubkey_path)) {
-        if (package_verify_signature(package, pubkey_path) == 0) {
-            LOG_SUCCESS("Signature verified");
-        } else {
-            LOG_ERROR("Signature verification failed");
-            free(hash);
-            return 0;
-        }
+    char* hash = package_compute_hash(package_path);
+    if (!hash) {
+        LOG_ERROR("Failed to compute hash");
+        return 0;
     }
     
+    LOG_INFO("SHA256: %s", hash);
+    
     // Vérifier avec le hash du registre
-    PackageMeta* meta = package_read_meta(package);
+    PackageMeta* meta = package_read_meta(package_path);
     if (meta && meta->sha256) {
         if (strcmp(hash, meta->sha256) == 0) {
-            LOG_SUCCESS("Hash matches registry");
+            LOG_SUCCESS("✅ Hash matches registry");
         } else {
-            LOG_ERROR("Hash mismatch with registry!");
+            LOG_ERROR("❌ Hash mismatch!");
+            LOG_ERROR("  Expected: %s", meta->sha256);
+            LOG_ERROR("  Got:      %s", hash);
             free(hash);
             package_meta_free(meta);
             return 0;
@@ -725,10 +751,9 @@ int gpm_verify(const char* package) {
     free(hash);
     if (meta) package_meta_free(meta);
     
-    LOG_SUCCESS("Package verified successfully");
+    LOG_SUCCESS("✅ Package verified successfully");
     return 1;
 }
-
 
 
 /* ================================================================

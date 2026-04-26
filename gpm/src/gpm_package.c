@@ -1,5 +1,5 @@
 #include "gpm.h"
-
+#include <limits.h>
 #include <signal.h> 
 // Déclarations forward des fonctions utilisées
 extern int gpm_install(const char* package, const char* version);

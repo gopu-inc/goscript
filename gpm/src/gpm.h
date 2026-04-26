@@ -31,7 +31,21 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>
+#include <limits.h>
 
+#ifndef PATH_MAX
+#define PATH_MAX 4096
+#endif
+
+// Pour DT_DIR sur musl (Alpine)
+#ifndef DT_DIR
+#define DT_DIR 4
+#endif
+
+// Pour PR_SET_NAME sur musl
+#ifndef PR_SET_NAME
+#define PR_SET_NAME 15
+#endif
 /* ================================================================
  * CONSTANTES
  * ================================================================ */

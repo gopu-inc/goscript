@@ -89,60 +89,104 @@ int gpm_init(void) {
  * ================================================================ */
 
 int gpm_install(const char* package, const char* version) {
-    LOG_INFO("Installing %s%s%s...", 
-             package, version ? "@" : "", version ? version : "");
+    char clean_package[256] = {0};
+    char specified_version[64] = {0};
     
-    // Résoudre la version si non spécifiée
-    char resolved_version[64] = "latest";
-    if (!version) {
-        // Chercher la dernière version
+    // 1. PARSER LE FORMAT "package@version"
+    char* at_sign = strchr(package, '@');
+    if (at_sign) {
+        // Format: package@version
+        size_t name_len = at_sign - package;
+        strncpy(clean_package, package, name_len);
+        clean_package[name_len] = '\0';
+        strncpy(specified_version, at_sign + 1, 63);
+        specified_version[63] = '\0';
+    } else {
+        // Format: package (sans version)
+        strncpy(clean_package, package, 255);
+        clean_package[255] = '\0';
+        if (version) {
+            strncpy(specified_version, version, 63);
+            specified_version[63] = '\0';
+        }
+    }
+    
+    // 2. RÉSOUDRE LA VERSION (si non spécifiée)
+    char resolved_version[64] = {0};
+    
+    if (specified_version[0] != '\0') {
+        // Version déjà spécifiée par l'utilisateur
+        strncpy(resolved_version, specified_version, 63);
+        LOG_INFO("Installing %s@%s...", clean_package, resolved_version);
+    } else {
+        // Chercher la dernière version via l'API
+        LOG_INFO("Resolving latest version for %s...", clean_package);
+        
         char url[1024];
-        snprintf(url, sizeof(url), "%s/%s/package/%s/latest", 
-                 g_config.registry_url, GPM_API_VERSION, package);
+        snprintf(url, sizeof(url), "%s/%s/package/%s",
+                 g_config.registry_url, GPM_API_VERSION, clean_package);
         
         long status = 0;
         char* response = network_get(url, &status);
+        
         if (status == 200 && response) {
             json_error_t error;
             json_t* root = json_loads(response, 0, &error);
             if (root) {
-                json_t* ver = json_object_get(root, "version");
-                if (ver && json_is_string(ver)) {
-                    strncpy(resolved_version, json_string_value(ver), 63);
-                    resolved_version[63] = '\0';
+                json_t* pkg_obj = json_object_get(root, "package");
+                if (pkg_obj) {
+                    json_t* ver = json_object_get(pkg_obj, "version");
+                    if (ver && json_is_string(ver)) {
+                        strncpy(resolved_version, json_string_value(ver), 63);
+                        resolved_version[63] = '\0';
+                        LOG_INFO("Latest version: %s", resolved_version);
+                    }
                 }
                 json_decref(root);
             }
             free(response);
+        } else {
+            LOG_WARN("Could not resolve version (HTTP %ld), trying 'latest'", status);
+            free(response);
         }
-    } else {
-        strncpy(resolved_version, version, 63);
-        resolved_version[63] = '\0';
+        
+        // Fallback si version non trouvée
+        if (resolved_version[0] == '\0') {
+            strcpy(resolved_version, "latest");
+            LOG_WARN("Using default: %s", resolved_version);
+        }
+        
+        LOG_INFO("Installing %s@%s...", clean_package, resolved_version);
     }
     
-    // Vérifier si déjà installé
-    if (package_is_installed(package, resolved_version)) {
-        LOG_WARN("%s@%s is already installed", package, resolved_version);
+    // 3. VÉRIFIER SI DÉJÀ INSTALLÉ
+    if (package_is_installed(clean_package, resolved_version)) {
+        LOG_WARN("%s@%s is already installed", clean_package, resolved_version);
         if (!g_config.force) return 0;
     }
     
-    // Construire l'URL de téléchargement
+    // 4. CONSTRUIRE L'URL DE TÉLÉCHARGEMENT (CORRIGÉE)
+    // Format: /package/download/{scope}/{name}/{version}/{release}/{arch}.tar.bool
     char download_url[1024];
     snprintf(download_url, sizeof(download_url), 
              "%s/package/download/%s/%s/%s/r0/%s" GPM_PACKAGE_EXT,
              g_config.registry_url,
              g_config.default_scope,
-             package,
-             resolved_version,
+             clean_package,      // Nom SANS le @version
+             resolved_version,    // Version extraite
              g_config.default_arch);
     
     char temp_path[1024];
     snprintf(temp_path, sizeof(temp_path), "%s/%s-%s-%s" GPM_PACKAGE_EXT,
-             g_config.cache_dir, package, resolved_version, g_config.default_arch);
+             g_config.cache_dir, clean_package, resolved_version, g_config.default_arch);
     
-    LOG_INFO("Downloading from %s", download_url);
-    if (network_download(download_url, temp_path) != 0) {
-        // Essayer les architectures de fallback
+    // 5. TÉLÉCHARGER
+    LOG_INFO("Downloading: %s", download_url);
+    
+    int download_result = network_download(download_url, temp_path);
+    
+    // 6. ESSAYER LES ARCHITECTURES ALTERNATIVES
+    if (download_result != 0) {
         const char* fallback_archs[] = {"x86_64", "i686", "aarch64", "armv7l", NULL};
         bool downloaded = false;
         
@@ -153,11 +197,14 @@ int gpm_install(const char* package, const char* version) {
                      "%s/package/download/%s/%s/%s/r0/%s" GPM_PACKAGE_EXT,
                      g_config.registry_url,
                      g_config.default_scope,
-                     package,
+                     clean_package,
                      resolved_version,
                      fallback_archs[j]);
             
-            LOG_INFO("Trying fallback architecture: %s", fallback_archs[j]);
+            snprintf(temp_path, sizeof(temp_path), "%s/%s-%s-%s" GPM_PACKAGE_EXT,
+                     g_config.cache_dir, clean_package, resolved_version, fallback_archs[j]);
+            
+            LOG_INFO("Trying %s: %s", fallback_archs[j], download_url);
             if (network_download(download_url, temp_path) == 0) {
                 downloaded = true;
                 break;
@@ -165,33 +212,29 @@ int gpm_install(const char* package, const char* version) {
         }
         
         if (!downloaded) {
-            LOG_ERROR("Failed to download package: %s", package);
+            LOG_ERROR("Failed to download package: %s", clean_package);
+            LOG_ERROR("Tried architectures: %s", g_config.default_arch);
             return 1;
         }
     }
     
-    // Vérifier l'intégrité
+    // 7. VÉRIFIER L'INTÉGRITÉ
+    LOG_INFO("Verifying package integrity...");
     if (!gpm_verify(temp_path)) {
         LOG_ERROR("Package integrity check failed");
         unlink(temp_path);
         return 1;
     }
     
-    // Extraire et installer
+    // 8. EXTRAIRE
+    LOG_INFO("Extracting package...");
     if (package_extract(temp_path, g_config.lib_dir) != 0) {
         LOG_ERROR("Failed to extract package");
         unlink(temp_path);
         return 1;
     }
     
-    // Installer les fichiers
-    if (package_install_file(temp_path) != 0) {
-        LOG_ERROR("Failed to install package files");
-        unlink(temp_path);
-        return 1;
-    }
-    
-    // Résoudre les dépendances
+    // 9. RÉSOUDRE LES DÉPENDANCES
     PackageMeta* meta = package_read_meta(temp_path);
     if (meta) {
         if (meta->dep_count > 0) {
@@ -201,10 +244,17 @@ int gpm_install(const char* package, const char* version) {
         package_meta_free(meta);
     }
     
-    // Nettoyer le fichier temporaire
-    unlink(temp_path);
+    // 10. NETTOYER
+    // Garder le fichier en cache, ne pas le supprimer
+    // unlink(temp_path);
     
-    LOG_SUCCESS("Successfully installed %s@%s", package, resolved_version);
+    LOG_SUCCESS("✅ Successfully installed %s@%s", clean_package, resolved_version);
+    
+    // Afficher où le package est installé
+    char install_path[1024];
+    snprintf(install_path, sizeof(install_path), "%s/%s", g_config.lib_dir, clean_package);
+    LOG_INFO("Location: %s", install_path);
+    
     return 0;
 }
 

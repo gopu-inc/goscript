@@ -529,6 +529,7 @@ bool network_check_connectivity(void) {
 /* ================================================================
  * AUTHENTIFICATION
  * ================================================================ */
+// Dans gpm_network.c, fonction network_auth_login()
 
 int network_auth_login(const char* username, const char* password) {
     char url[1024];
@@ -543,24 +544,30 @@ int network_auth_login(const char* username, const char* password) {
     char* json_str = json_dumps(data, 0);
     json_decref(data);
     
-    LOG_DEBUG("Login request to %s", url);
+    LOG_DEBUG("Login URL: %s", url);
+    LOG_DEBUG("Login data: %s", json_str);
     
     char* response = network_post(url, json_str, "application/json");
     free(json_str);
     
     if (!response) {
-        LOG_ERROR("No response from server");
+        LOG_ERROR("No response from server (timeout or connection error)");
         return 1;
     }
+    
+    LOG_DEBUG("Server response: %s", response);
     
     json_error_t error;
     json_t* root = json_loads(response, 0, &error);
-    free(response);
     
     if (!root) {
-        LOG_ERROR("Failed to parse server response");
+        LOG_ERROR("Failed to parse server response:");
+        LOG_ERROR("  Line %d: %s", error.line, error.text);
+        LOG_ERROR("  Response was: %.200s", response);
+        free(response);
         return 1;
     }
+    free(response);
     
     // Vérifier le succès
     json_t* success = json_object_get(root, "success");
@@ -568,7 +575,6 @@ int network_auth_login(const char* username, const char* password) {
     json_t* err = json_object_get(root, "error");
     
     if (json_is_true(success) && token && json_is_string(token)) {
-        // Stocker le token
         free(g_auth.token);
         g_auth.token = strdup(json_string_value(token));
         
@@ -577,7 +583,7 @@ int network_auth_login(const char* username, const char* password) {
         
         g_auth.authenticated = true;
         g_auth.auth_method = AUTH_TOKEN;
-        g_auth.token_expiry = time(NULL) + 604800;  // 7 jours
+        g_auth.token_expiry = time(NULL) + 604800;
         
         LOG_SUCCESS("Authenticated as %s", username);
         json_decref(root);
@@ -587,7 +593,9 @@ int network_auth_login(const char* username, const char* password) {
     if (err && json_is_string(err)) {
         LOG_ERROR("Login failed: %s", json_string_value(err));
     } else {
-        LOG_ERROR("Login failed: unknown error");
+        LOG_ERROR("Login failed: unexpected response format");
+        LOG_ERROR("Response was: %.200s", 
+                  response ? response : "(already freed)");
     }
     
     json_decref(root);

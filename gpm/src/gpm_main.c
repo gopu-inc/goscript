@@ -8,6 +8,25 @@ GPMConfig g_config = {0};
 AuthContext g_auth = {0};
 
 /* ================================================================
+ * DÉCLARATIONS FORWARD DES FONCTIONS UTILITAIRES
+ * ================================================================ */
+
+// Fonctions de gpm_package.c
+extern void package_meta_free(PackageMeta* meta);
+extern void package_list_free(PackageList* list);
+
+// Fonctions de gpm_network.c
+extern int network_check_connectivity(void);
+extern int network_auth_verify(void);
+extern int network_auth_login(const char* username, const char* password);
+extern int network_download(const char* url, const char* output_path);
+extern int network_get(char* url, long* status_code);  // Note: url n'est pas const ici
+extern int network_upload(const char* url, const char* file_path);
+
+// Fonctions système
+extern char* strdup(const char* s);
+
+/* ================================================================
  * INITIALISATION DE LA CONFIGURATION
  * ================================================================ */
 
@@ -66,8 +85,12 @@ void init_config(void) {
 
 void load_config(void) {
     char config_path[1024];
-    snprintf(config_path, sizeof(config_path), "%s/%s", 
-             getenv("HOME") ? getenv("HOME") : "/root", ".gpmrc");
+    const char* home = getenv("HOME");
+    if (home) {
+        snprintf(config_path, sizeof(config_path), "%s/.gpmrc", home);
+    } else {
+        snprintf(config_path, sizeof(config_path), "/root/.gpmrc");
+    }
     
     if (!file_exists(config_path)) {
         snprintf(config_path, sizeof(config_path), "%s/%s", 
@@ -92,8 +115,9 @@ void load_config(void) {
         char* value = str_trim(equals + 1);
         
         // Enlever les guillemets si présents
-        if (value[0] == '"' || value[0] == '\'') {
-            value[strlen(value) - 1] = '\0';
+        size_t vlen = strlen(value);
+        if (vlen >= 2 && (value[0] == '"' || value[0] == '\'')) {
+            value[vlen - 1] = '\0';
             value++;
         }
         
@@ -127,14 +151,19 @@ void load_config(void) {
 
 void save_config(void) {
     char config_path[1024];
-    snprintf(config_path, sizeof(config_path), "%s/%s", 
-             getenv("HOME") ? getenv("HOME") : "/root", ".gpmrc");
+    const char* home = getenv("HOME");
+    if (home) {
+        snprintf(config_path, sizeof(config_path), "%s/.gpmrc", home);
+    } else {
+        snprintf(config_path, sizeof(config_path), "/root/.gpmrc");
+    }
     
     FILE* f = fopen(config_path, "w");
     if (!f) return;
     
+    time_t now = time(NULL);
     fprintf(f, "# GPM Configuration\n");
-    fprintf(f, "# Generated: %s\n\n", ctime(&(time_t){time(NULL)}));
+    fprintf(f, "# Generated: %s\n\n", ctime(&now));
     
     if (g_config.registry_url) 
         fprintf(f, "registry = \"%s\"\n", g_config.registry_url);
@@ -203,7 +232,7 @@ void print_help(void) {
     printf(COLOR_BOLD "OPTIONS:\n" COLOR_RESET);
     printf("  --registry <url>    Set registry URL\n");
     printf("  --arch <arch>       Set target architecture\n");
-    printf("  "--scope <scope>     Set package scope (public/private)\n");
+    printf("  --scope <scope>     Set package scope (public/private)\n");
     printf("  --force, -f         Force operation\n");
     printf("  --yes, -y           Auto-confirm\n");
     printf("  --debug, -d         Enable debug mode\n");
@@ -222,18 +251,17 @@ void print_help(void) {
     printf("  gpm login myuser mypassword\n");
     printf("  gpm daemon start --config /etc/gpm/nginx.conf\n\n");
     
-    printf(COLOR_BOLD "REGISTRY API: " COLOR_RESET GPM_INDEX_URL "/" GPM_API_VERSION "/\n\n");
+    printf(COLOR_BOLD "REGISTRY API: " COLOR_RESET "%s/%s/\n\n", GPM_INDEX_URL, GPM_API_VERSION);
 }
 
 void print_version(void) {
     printf("GPM v%s - Goscript Package Manager\n", GPM_VERSION);
     printf("Build: %s\n", GPM_BUILD_DATE);
-    printf("Registry: %s\n", g_config.registry_url);
+    printf("Registry: %s\n", g_config.registry_url ? g_config.registry_url : GPM_DEFAULT_REGISTRY);
     printf("User-Agent: %s\n", GPM_USER_AGENT);
     printf("Libcurl: %s\n", curl_version());
     printf("OpenSSL: %s\n", OpenSSL_version(OPENSSL_VERSION));
     printf("Jansson: %s\n", JANSSON_VERSION);
-    printf("LibArchive: %s\n", archive_version_string());
 }
 
 /* ================================================================
@@ -264,10 +292,13 @@ int parse_command_line(int argc, char** argv) {
         } else if (strcmp(argv[i], "--no-verify") == 0) {
             g_config.verify_ssl = false;
         } else if (strcmp(argv[i], "--registry") == 0 && i + 1 < argc) {
+            free(g_config.registry_url);
             g_config.registry_url = strdup(argv[++i]);
         } else if (strcmp(argv[i], "--arch") == 0 && i + 1 < argc) {
+            free(g_config.default_arch);
             g_config.default_arch = strdup(argv[++i]);
         } else if (strcmp(argv[i], "--scope") == 0 && i + 1 < argc) {
+            free(g_config.default_scope);
             g_config.default_scope = strdup(argv[++i]);
         }
         i++;

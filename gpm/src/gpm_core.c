@@ -1,28 +1,52 @@
-
-
-
 #include "gpm.h"
+#include <signal.h>
+#include <unistd.h>
+#include <sys/wait.h>
 
 /* ================================================================
- * DÉCLARATIONS FORWARD
+ * DÉCLARATIONS FORWARD DES FONCTIONS EXTERNES
  * ================================================================ */
 
+// Fonctions de gpm_package.c
 extern void package_meta_free(PackageMeta* meta);
 extern void package_list_free(PackageList* list);
-extern int network_download(const char* url, const char* output_path);
+extern int package_extract(const char* package_path, const char* dest_dir);
+extern int package_create(const char* source_dir, const char* output_path);
+extern int package_install_file(const char* package_path);
+extern int package_uninstall_files(PackageMeta* meta);
+extern int package_resolve_deps(PackageMeta* meta);
+extern int package_check_conflicts(PackageMeta* meta);
+extern int package_verify(const char* package_path, const char* expected_hash);
+extern int package_sign(const char* package_path, const char* key_path);
+extern int package_verify_signature(const char* package_path, const char* pubkey_path);
+extern char* package_compute_hash(const char* file_path);
+extern PackageMeta* package_read_meta(const char* package_path);
+extern int package_write_meta(const char* package_path, PackageMeta* meta);
+extern PackageList* package_get_installed(void);
+extern bool package_is_installed(const char* name, const char* version);
+extern char* package_find_in_cache(const char* name, const char* version, const char* arch);
+extern void package_meta_free(PackageMeta* meta);
+extern void package_list_free(PackageList* list);
+
+// Fonctions de gpm_network.c
+extern int network_init(void);
+extern void network_cleanup(void);
 extern char* network_get(const char* url, long* status_code);
 extern char* network_post(const char* url, const char* data, const char* content_type);
+extern int network_download(const char* url, const char* output_path);
 extern int network_upload(const char* url, const char* file_path);
+extern bool network_check_connectivity(void);
 extern int network_auth_login(const char* username, const char* password);
 extern int network_auth_verify(void);
-extern bool network_check_connectivity(void);
+extern int network_auth_refresh(void);
+extern char* network_get_user_agent(void);
+extern char* network_get_system_info(void);
+
+// Fonctions utilitaires
+extern char* strdup(const char* s);
 extern char* url_encode(const char* str);
-
-// Pour gpm_daemon_start (warning unused parameter)
-(void)config;
-
-// Pour gpm_daemon_stop (warning unused parameter)
-(void)name;
+extern char* path_basename(const char* path);
+extern int run_command(const char* cmd, char** output, int* exit_code);
 
 /* ================================================================
  * INITIALISATION GPM
@@ -69,14 +93,14 @@ int gpm_install(const char* package, const char* version) {
              package, version ? "@" : "", version ? version : "");
     
     // Résoudre la version si non spécifiée
-    char resolved_version[64] = {0};
+    char resolved_version[64] = "latest";
     if (!version) {
         // Chercher la dernière version
         char url[1024];
         snprintf(url, sizeof(url), "%s/%s/package/%s/latest", 
                  g_config.registry_url, GPM_API_VERSION, package);
         
-        long status;
+        long status = 0;
         char* response = network_get(url, &status);
         if (status == 200 && response) {
             json_error_t error;
@@ -85,17 +109,15 @@ int gpm_install(const char* package, const char* version) {
                 json_t* ver = json_object_get(root, "version");
                 if (ver && json_is_string(ver)) {
                     strncpy(resolved_version, json_string_value(ver), 63);
+                    resolved_version[63] = '\0';
                 }
                 json_decref(root);
             }
             free(response);
         }
-        
-        if (resolved_version[0] == '\0') {
-            strcpy(resolved_version, "latest");
-        }
     } else {
         strncpy(resolved_version, version, 63);
+        resolved_version[63] = '\0';
     }
     
     // Vérifier si déjà installé
@@ -104,10 +126,10 @@ int gpm_install(const char* package, const char* version) {
         if (!g_config.force) return 0;
     }
     
-    // Télécharger le package
+    // Construire l'URL de téléchargement
     char download_url[1024];
     snprintf(download_url, sizeof(download_url), 
-             "%s/package/download/%s/%s/%s/%s/r0/%s" GPM_PACKAGE_EXT,
+             "%s/package/download/%s/%s/%s/r0/%s" GPM_PACKAGE_EXT,
              g_config.registry_url,
              g_config.default_scope,
              package,
@@ -120,22 +142,22 @@ int gpm_install(const char* package, const char* version) {
     
     LOG_INFO("Downloading from %s", download_url);
     if (network_download(download_url, temp_path) != 0) {
-        // Essayer l'architecture de fallback
+        // Essayer les architectures de fallback
         const char* fallback_archs[] = {"x86_64", "i686", "aarch64", "armv7l", NULL};
         bool downloaded = false;
         
-        for (int i = 0; fallback_archs[i]; i++) {
-            if (strcmp(fallback_archs[i], g_config.default_arch) == 0) continue;
+        for (int j = 0; fallback_archs[j]; j++) {
+            if (strcmp(fallback_archs[j], g_config.default_arch) == 0) continue;
             
             snprintf(download_url, sizeof(download_url),
-                     "%s/package/download/%s/%s/%s/%s/r0/%s" GPM_PACKAGE_EXT,
+                     "%s/package/download/%s/%s/%s/r0/%s" GPM_PACKAGE_EXT,
                      g_config.registry_url,
                      g_config.default_scope,
                      package,
                      resolved_version,
-                     fallback_archs[i]);
+                     fallback_archs[j]);
             
-            LOG_INFO("Trying fallback architecture: %s", fallback_archs[i]);
+            LOG_INFO("Trying fallback architecture: %s", fallback_archs[j]);
             if (network_download(download_url, temp_path) == 0) {
                 downloaded = true;
                 break;
@@ -219,7 +241,7 @@ int gpm_uninstall(const char* package) {
         PackageMeta* dep_meta = package_read_meta(dep_meta_path);
         if (dep_meta) {
             for (int j = 0; j < dep_meta->dep_count; j++) {
-                if (strcmp(dep_meta->dependencies[j], package) == 0) {
+                if (dep_meta->dependencies[j] && strcmp(dep_meta->dependencies[j], package) == 0) {
                     LOG_WARN("%s depends on %s", installed->packages[i], package);
                     if (!g_config.force) {
                         LOG_ERROR("Use --force to uninstall anyway");
@@ -277,7 +299,7 @@ int gpm_update(const char* package) {
         snprintf(url, sizeof(url), "%s/%s/package/%s/latest",
                  g_config.registry_url, GPM_API_VERSION, installed->packages[i]);
         
-        long status;
+        long status = 0;
         char* response = network_get(url, &status);
         if (status == 200 && response) {
             json_error_t error;
@@ -291,7 +313,7 @@ int gpm_update(const char* package) {
                              g_config.lib_dir, installed->packages[i]);
                     
                     PackageMeta* meta = package_read_meta(meta_path);
-                    if (meta) {
+                    if (meta && meta->version) {
                         current_ver = strdup(meta->version);
                         package_meta_free(meta);
                     }
@@ -352,8 +374,8 @@ int gpm_list(const char* filter) {
         
         PackageMeta* meta = package_read_meta(meta_path);
         if (meta) {
-            printf(COLOR_GREEN "  %-20s" COLOR_RESET, meta->name);
-            printf(COLOR_YELLOW " v%-10s" COLOR_RESET, meta->version);
+            printf(COLOR_GREEN "  %-20s" COLOR_RESET, meta->name ? meta->name : "unknown");
+            printf(COLOR_YELLOW " v%-10s" COLOR_RESET, meta->version ? meta->version : "?");
             printf(COLOR_DIM " • %s" COLOR_RESET, meta->description ? meta->description : "");
             printf("\n");
             package_meta_free(meta);
@@ -373,15 +395,17 @@ int gpm_list(const char* filter) {
 int gpm_search(const char* query) {
     LOG_INFO("Searching for: %s", query);
     
+    char* encoded_query = url_encode(query);
     char url[1024];
     snprintf(url, sizeof(url), "%s/%s/package/search?q=%s",
-             g_config.registry_url, GPM_API_VERSION, url_encode(query));
+             g_config.registry_url, GPM_API_VERSION, encoded_query);
+    free(encoded_query);
     
-    long status;
+    long status = 0;
     char* response = network_get(url, &status);
     
     if (status != 200 || !response) {
-        LOG_ERROR("Search failed");
+        LOG_ERROR("Search failed (HTTP %ld)", status);
         free(response);
         return 1;
     }
@@ -409,13 +433,13 @@ int gpm_search(const char* query) {
     for (size_t i = 0; i < count; i++) {
         json_t* pkg = json_array_get(results, i);
         const char* name = json_string_value(json_object_get(pkg, "name"));
-        const char* version = json_string_value(json_object_get(pkg, "version"));
+        const char* pkg_version = json_string_value(json_object_get(pkg, "version"));
         const char* author = json_string_value(json_object_get(pkg, "author"));
-        int downloads = json_integer_value(json_object_get(pkg, "downloads"));
+        int downloads = (int)json_integer_value(json_object_get(pkg, "downloads"));
         
-        printf("  " COLOR_GREEN "%-25s" COLOR_RESET, name);
-        printf(COLOR_YELLOW " v%-10s" COLOR_RESET, version);
-        printf(COLOR_DIM " by %-15s" COLOR_RESET, author);
+        printf("  " COLOR_GREEN "%-25s" COLOR_RESET, name ? name : "?");
+        printf(COLOR_YELLOW " v%-10s" COLOR_RESET, pkg_version ? pkg_version : "?");
+        printf(COLOR_DIM " by %-15s" COLOR_RESET, author ? author : "?");
         printf(COLOR_BLUE " ⬇ %d" COLOR_RESET "\n", downloads);
     }
     
@@ -434,7 +458,7 @@ int gpm_info(const char* package) {
     snprintf(url, sizeof(url), "%s/%s/package/%s",
              g_config.registry_url, GPM_API_VERSION, package);
     
-    long status;
+    long status = 0;
     char* response = network_get(url, &status);
     
     if (status != 200 || !response) {
@@ -465,8 +489,8 @@ int gpm_info(const char* package) {
     printf("  Version:    %s\n", json_string_value(json_object_get(pkg, "version")));
     printf("  Author:     %s\n", json_string_value(json_object_get(pkg, "author")));
     printf("  Scope:      %s\n", json_string_value(json_object_get(pkg, "scope")));
-    printf("  Size:       %lld bytes\n", json_integer_value(json_object_get(pkg, "size")));
-    printf("  Downloads:  %lld\n", json_integer_value(json_object_get(pkg, "downloads")));
+    printf("  Size:       %lld bytes\n", (long long)json_integer_value(json_object_get(pkg, "size")));
+    printf("  Downloads:  %lld\n", (long long)json_integer_value(json_object_get(pkg, "downloads")));
     printf("  SHA256:     %s\n", json_string_value(json_object_get(pkg, "sha256")));
     printf("  Created:    %s\n", json_string_value(json_object_get(pkg, "created_at")));
     
@@ -498,11 +522,12 @@ int gpm_build(const char* source_dir, const char* output) {
     char output_path[1024];
     if (output) {
         strncpy(output_path, output, sizeof(output_path) - 1);
+        output_path[sizeof(output_path) - 1] = '\0';
     } else {
         char* dir_name = path_basename((char*)source_dir);
         snprintf(output_path, sizeof(output_path), 
-                 "%s-%s-r0-%s" GPM_PACKAGE_EXT,
-                 dir_name, "1.0.0", g_config.default_arch);
+                 "%s-1.0.0-r0-%s" GPM_PACKAGE_EXT,
+                 dir_name, g_config.default_arch);
     }
     
     if (package_create(source_dir, output_path) != 0) {
@@ -551,10 +576,9 @@ int gpm_publish(const char* package_path) {
     
     // Upload
     char url[1024];
+    const char* scope_str = (meta->scope == PKG_SCOPE_PUBLIC) ? "public" : "private";
     snprintf(url, sizeof(url), "%s/%s/package/upload/%s/%s",
-             g_config.registry_url, GPM_API_VERSION, 
-             meta->scope == PKG_SCOPE_PUBLIC ? "public" : "private",
-             meta->name);
+             g_config.registry_url, GPM_API_VERSION, scope_str, meta->name);
     
     if (network_upload(url, package_path) != 0) {
         LOG_ERROR("Upload failed");
@@ -634,7 +658,7 @@ int gpm_rollback(const char* package, const char* version) {
     if (!file_exists(cached_path)) {
         LOG_INFO("Version not in cache, downloading...");
         char url[1024];
-        snprintf(url, sizeof(url), "%s/package/download/%s/%s/%s/%s/r0/%s" GPM_PACKAGE_EXT,
+        snprintf(url, sizeof(url), "%s/package/download/%s/%s/%s/r0/%s" GPM_PACKAGE_EXT,
                  g_config.registry_url,
                  g_config.default_scope,
                  package,
@@ -725,7 +749,7 @@ int gpm_cache_clean(void) {
         struct stat st;
         if (stat(full_path, &st) == 0) {
             if (now - st.st_mtime > ttl) {
-                size_t sz = st.st_size;
+                size_t sz = (size_t)st.st_size;
                 if (unlink(full_path) == 0) {
                     cleaned++;
                     freed += sz;
@@ -801,13 +825,13 @@ int gpm_config_set(const char* key, const char* value) {
 
 int gpm_config_get(const char* key) {
     if (strcmp(key, "registry") == 0) {
-        printf("%s\n", g_config.registry_url);
+        printf("%s\n", g_config.registry_url ? g_config.registry_url : "not set");
     } else if (strcmp(key, "token") == 0) {
         printf("%s\n", g_config.token ? "********" : "not set");
     } else if (strcmp(key, "scope") == 0) {
-        printf("%s\n", g_config.default_scope);
+        printf("%s\n", g_config.default_scope ? g_config.default_scope : "public");
     } else if (strcmp(key, "arch") == 0) {
-        printf("%s\n", g_config.default_arch);
+        printf("%s\n", g_config.default_arch ? g_config.default_arch : "x86_64");
     } else if (strcmp(key, "proxy") == 0) {
         printf("%s\n", g_config.proxy ? g_config.proxy : "not set");
     } else {
@@ -820,8 +844,9 @@ int gpm_config_get(const char* key) {
 /* ================================================================
  * DAEMON
  * ================================================================ */
+
 int gpm_daemon_start(const char* config) {
-    (void)config;  // Supprime le warning unused parameter
+    (void)config;  // Supprime le warning - paramètre pour usage futur
     
     LOG_INFO("Starting GPM daemon...");
     
@@ -864,11 +889,9 @@ int gpm_daemon_start(const char* config) {
     
     // Boucle principale du daemon
     while (1) {
-        // Vérifier les mises à jour périodiquement
         if (g_config.use_cache) {
             gpm_cache_verify();
         }
-        
         sleep(g_config.ttl);
     }
     
@@ -876,11 +899,10 @@ int gpm_daemon_start(const char* config) {
 }
 
 int gpm_daemon_stop(const char* name) {
-    (void)name;  // Supprime le warning unused parameter
+    (void)name;  // Supprime le warning - paramètre pour usage futur
     
     LOG_INFO("Stopping daemon...");
     
-    // Lire le PID du fichier
     char pid_path[1024];
     snprintf(pid_path, sizeof(pid_path), "%s/gpm-daemon.pid", GPM_CONFIG_DIR);
     
@@ -896,7 +918,7 @@ int gpm_daemon_stop(const char* name) {
     free(pid_str);
     
     if (kill(pid, SIGTERM) != 0) {
-        LOG_ERROR("Failed to stop daemon");
+        LOG_ERROR("Failed to stop daemon (PID %d): %s", pid, strerror(errno));
         return 1;
     }
     

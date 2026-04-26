@@ -88,6 +88,7 @@ int gpm_init(void) {
  * INSTALLATION D'UN PACKAGE
  * ================================================================ */
 
+
 int gpm_install(const char* package, const char* version) {
     char clean_package[256] = {0};
     char specified_version[64] = {0};
@@ -95,14 +96,12 @@ int gpm_install(const char* package, const char* version) {
     // 1. PARSER LE FORMAT "package@version"
     char* at_sign = strchr(package, '@');
     if (at_sign) {
-        // Format: package@version
         size_t name_len = at_sign - package;
         strncpy(clean_package, package, name_len);
         clean_package[name_len] = '\0';
         strncpy(specified_version, at_sign + 1, 63);
         specified_version[63] = '\0';
     } else {
-        // Format: package (sans version)
         strncpy(clean_package, package, 255);
         clean_package[255] = '\0';
         if (version) {
@@ -115,11 +114,9 @@ int gpm_install(const char* package, const char* version) {
     char resolved_version[64] = {0};
     
     if (specified_version[0] != '\0') {
-        // Version déjà spécifiée par l'utilisateur
         strncpy(resolved_version, specified_version, 63);
         LOG_INFO("Installing %s@%s...", clean_package, resolved_version);
     } else {
-        // Chercher la dernière version via l'API
         LOG_INFO("Resolving latest version for %s...", clean_package);
         
         char url[1024];
@@ -150,7 +147,6 @@ int gpm_install(const char* package, const char* version) {
             free(response);
         }
         
-        // Fallback si version non trouvée
         if (resolved_version[0] == '\0') {
             strcpy(resolved_version, "latest");
             LOG_WARN("Using default: %s", resolved_version);
@@ -165,27 +161,28 @@ int gpm_install(const char* package, const char* version) {
         if (!g_config.force) return 0;
     }
     
-    // 4. CONSTRUIRE L'URL DE TÉLÉCHARGEMENT (CORRIGÉE)
-    // Format: /package/download/{scope}/{name}/{version}/{release}/{arch}.tar.bool
+    // 4. CONSTRUIRE L'URL DE TÉLÉCHARGEMENT
+    // ⚠️ IMPORTANT : PAS de .tar.bool dans l'URL !
+    // Format API: /package/download/{scope}/{name}/{version}/r0/{arch}
     char download_url[1024];
     snprintf(download_url, sizeof(download_url), 
-             "%s/package/download/%s/%s/%s/r0/%s" GPM_PACKAGE_EXT,
+             "%s/package/download/%s/%s/%s/r0/%s",
              g_config.registry_url,
              g_config.default_scope,
-             clean_package,      // Nom SANS le @version
-             resolved_version,    // Version extraite
+             clean_package,
+             resolved_version,
              g_config.default_arch);
     
+    // Le fichier temporaire, lui, garde l'extension .tar.bool
     char temp_path[1024];
     snprintf(temp_path, sizeof(temp_path), "%s/%s-%s-%s" GPM_PACKAGE_EXT,
              g_config.cache_dir, clean_package, resolved_version, g_config.default_arch);
     
-    // 5. TÉLÉCHARGER
     LOG_INFO("Downloading: %s", download_url);
     
     int download_result = network_download(download_url, temp_path);
     
-    // 6. ESSAYER LES ARCHITECTURES ALTERNATIVES
+    // 5. ESSAYER LES ARCHITECTURES ALTERNATIVES
     if (download_result != 0) {
         const char* fallback_archs[] = {"x86_64", "i686", "aarch64", "armv7l", NULL};
         bool downloaded = false;
@@ -193,8 +190,9 @@ int gpm_install(const char* package, const char* version) {
         for (int j = 0; fallback_archs[j]; j++) {
             if (strcmp(fallback_archs[j], g_config.default_arch) == 0) continue;
             
+            // URL sans .tar.bool
             snprintf(download_url, sizeof(download_url),
-                     "%s/package/download/%s/%s/%s/r0/%s" GPM_PACKAGE_EXT,
+                     "%s/package/download/%s/%s/%s/r0/%s",
                      g_config.registry_url,
                      g_config.default_scope,
                      clean_package,
@@ -218,7 +216,7 @@ int gpm_install(const char* package, const char* version) {
         }
     }
     
-    // 7. VÉRIFIER L'INTÉGRITÉ
+    // 6. VÉRIFIER L'INTÉGRITÉ
     LOG_INFO("Verifying package integrity...");
     if (!gpm_verify(temp_path)) {
         LOG_ERROR("Package integrity check failed");
@@ -226,7 +224,7 @@ int gpm_install(const char* package, const char* version) {
         return 1;
     }
     
-    // 8. EXTRAIRE
+    // 7. EXTRAIRE
     LOG_INFO("Extracting package...");
     if (package_extract(temp_path, g_config.lib_dir) != 0) {
         LOG_ERROR("Failed to extract package");
@@ -234,7 +232,7 @@ int gpm_install(const char* package, const char* version) {
         return 1;
     }
     
-    // 9. RÉSOUDRE LES DÉPENDANCES
+    // 8. RÉSOUDRE LES DÉPENDANCES
     PackageMeta* meta = package_read_meta(temp_path);
     if (meta) {
         if (meta->dep_count > 0) {
@@ -244,17 +242,55 @@ int gpm_install(const char* package, const char* version) {
         package_meta_free(meta);
     }
     
-    // 10. NETTOYER
-    // Garder le fichier en cache, ne pas le supprimer
-    // unlink(temp_path);
+    // 9. SUCCÈS
+    LOG_SUCCESS("Successfully installed %s@%s", clean_package, resolved_version);
     
-    LOG_SUCCESS("✅ Successfully installed %s@%s", clean_package, resolved_version);
-    
-    // Afficher où le package est installé
     char install_path[1024];
     snprintf(install_path, sizeof(install_path), "%s/%s", g_config.lib_dir, clean_package);
     LOG_INFO("Location: %s", install_path);
     
+    return 0;
+}
+
+/* ================================================================
+ * ROLLBACK - CORRIGÉ (SANS .tar.bool DANS L'URL)
+ * ================================================================ */
+
+int gpm_rollback(const char* package, const char* version) {
+    LOG_INFO("Rolling back %s to version %s...", package, version);
+    
+    char cached_path[1024];
+    snprintf(cached_path, sizeof(cached_path), "%s/%s-%s-%s" GPM_PACKAGE_EXT,
+             g_config.cache_dir, package, version, g_config.default_arch);
+    
+    if (!file_exists(cached_path)) {
+        LOG_INFO("Version not in cache, downloading...");
+        
+        // URL sans .tar.bool
+        char url[1024];
+        snprintf(url, sizeof(url), "%s/package/download/%s/%s/%s/r0/%s",
+                 g_config.registry_url,
+                 g_config.default_scope,
+                 package,
+                 version,
+                 g_config.default_arch);
+        
+        LOG_INFO("Downloading: %s", url);
+        
+        if (network_download(url, cached_path) != 0) {
+            LOG_ERROR("Failed to download version %s", version);
+            return 1;
+        }
+    }
+    
+    gpm_uninstall(package);
+    
+    if (gpm_install(package, version) != 0) {
+        LOG_ERROR("Rollback failed");
+        return 1;
+    }
+    
+    LOG_SUCCESS("Rolled back %s to version %s", package, version);
     return 0;
 }
 
@@ -693,46 +729,7 @@ int gpm_verify(const char* package) {
     return 1;
 }
 
-/* ================================================================
- * ROLLBACK
- * ================================================================ */
 
-int gpm_rollback(const char* package, const char* version) {
-    LOG_INFO("Rolling back %s to version %s...", package, version);
-    
-    // Vérifier que la version cible existe dans le cache
-    char cached_path[1024];
-    snprintf(cached_path, sizeof(cached_path), "%s/%s-%s-%s" GPM_PACKAGE_EXT,
-             g_config.cache_dir, package, version, g_config.default_arch);
-    
-    if (!file_exists(cached_path)) {
-        LOG_INFO("Version not in cache, downloading...");
-        char url[1024];
-        snprintf(url, sizeof(url), "%s/package/download/%s/%s/%s/r0/%s" GPM_PACKAGE_EXT,
-                 g_config.registry_url,
-                 g_config.default_scope,
-                 package,
-                 version,
-                 g_config.default_arch);
-        
-        if (network_download(url, cached_path) != 0) {
-            LOG_ERROR("Failed to download version %s", version);
-            return 1;
-        }
-    }
-    
-    // Désinstaller la version actuelle
-    gpm_uninstall(package);
-    
-    // Installer l'ancienne version
-    if (gpm_install(package, version) != 0) {
-        LOG_ERROR("Rollback failed");
-        return 1;
-    }
-    
-    LOG_SUCCESS("Rolled back %s to version %s", package, version);
-    return 0;
-}
 
 /* ================================================================
  * LOGIN / LOGOUT

@@ -85,6 +85,7 @@ char* network_get_user_agent(void) {
     return ua;
 }
 
+// Dans network_get_system_info(), changer %ld en %lld pour boot_time
 char* network_get_system_info(void) {
     static char info[2048];
     struct utsname sys_info;
@@ -99,7 +100,7 @@ char* network_get_system_info(void) {
     char* username = get_username();
     char* os_name = get_os_name();
     char* os_version = get_os_version();
-    char* kernel = get_kernel_version();
+    char* kernel = sys_info.release;
     
     snprintf(info, sizeof(info),
              "{\n"
@@ -111,23 +112,26 @@ char* network_get_system_info(void) {
              "  \"username\": \"%s\",\n"
              "  \"cpus\": %d,\n"
              "  \"ram_mb\": %ld,\n"
-             "  \"boot_time\": %ld,\n"
+             "  \"boot_time\": %lld,\n"
              "  \"gpm_version\": \"%s\"\n"
              "}",
              os_name ? os_name : sys_info.sysname,
              os_version ? os_version : sys_info.release,
-             kernel ? kernel : sys_info.release,
+             kernel,
              sys_info.machine,
              hostname,
              username ? username : "unknown",
              get_nprocs(),
              mem_info.totalram / (1024 * 1024),
-             get_boot_time(),
+             (long long)get_boot_time(),
              GPM_VERSION);
+    
+    free(os_name);
+    free(os_version);
+    free(username);
     
     return info;
 }
-
 /* ================================================================
  * CALLBACK POUR CURL
  * ================================================================ */

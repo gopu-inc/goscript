@@ -1,5 +1,29 @@
 #include "gpm.h"
 
+
+#include "gpm.h"
+
+/* ================================================================
+ * DÉCLARATIONS FORWARD
+ * ================================================================ */
+
+extern void package_meta_free(PackageMeta* meta);
+extern void package_list_free(PackageList* list);
+extern int network_download(const char* url, const char* output_path);
+extern char* network_get(const char* url, long* status_code);
+extern char* network_post(const char* url, const char* data, const char* content_type);
+extern int network_upload(const char* url, const char* file_path);
+extern int network_auth_login(const char* username, const char* password);
+extern int network_auth_verify(void);
+extern bool network_check_connectivity(void);
+extern char* url_encode(const char* str);
+
+// Pour gpm_daemon_start (warning unused parameter)
+(void)config;
+
+// Pour gpm_daemon_stop (warning unused parameter)
+(void)name;
+
 /* ================================================================
  * INITIALISATION GPM
  * ================================================================ */
@@ -796,8 +820,9 @@ int gpm_config_get(const char* key) {
 /* ================================================================
  * DAEMON
  * ================================================================ */
-
 int gpm_daemon_start(const char* config) {
+    (void)config;  // Supprime le warning unused parameter
+    
     LOG_INFO("Starting GPM daemon...");
     
     pid_t pid = fork();
@@ -817,7 +842,7 @@ int gpm_daemon_start(const char* config) {
     signal(SIGHUP, SIG_IGN);
     
     pid = fork();
-    if (pid > 0) exit(0);
+    if (pid > 0) _exit(0);
     
     // Changer le répertoire de travail
     chdir("/");
@@ -830,10 +855,12 @@ int gpm_daemon_start(const char* config) {
     
     // Rediriger vers /dev/null
     int devnull = open("/dev/null", O_RDWR);
-    dup2(devnull, STDIN_FILENO);
-    dup2(devnull, STDOUT_FILENO);
-    dup2(devnull, STDERR_FILENO);
-    close(devnull);
+    if (devnull >= 0) {
+        dup2(devnull, STDIN_FILENO);
+        dup2(devnull, STDOUT_FILENO);
+        dup2(devnull, STDERR_FILENO);
+        close(devnull);
+    }
     
     // Boucle principale du daemon
     while (1) {
@@ -849,6 +876,8 @@ int gpm_daemon_start(const char* config) {
 }
 
 int gpm_daemon_stop(const char* name) {
+    (void)name;  // Supprime le warning unused parameter
+    
     LOG_INFO("Stopping daemon...");
     
     // Lire le PID du fichier
@@ -863,7 +892,7 @@ int gpm_daemon_stop(const char* name) {
     char* pid_str = file_read(pid_path);
     if (!pid_str) return 1;
     
-    pid_t pid = atoi(pid_str);
+    pid_t pid = (pid_t)atoi(pid_str);
     free(pid_str);
     
     if (kill(pid, SIGTERM) != 0) {

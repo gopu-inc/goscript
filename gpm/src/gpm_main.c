@@ -1,3 +1,7 @@
+/* ================================================================
+ * gpm_main.c - Point d'entrée principal de GPM
+ * ================================================================ */
+
 #include "gpm.h"
 
 /* ================================================================
@@ -8,18 +12,11 @@ GPMConfig g_config = {0};
 AuthContext g_auth = {0};
 
 /* ================================================================
- * DÉCLARATIONS FORWARD - CORRIGÉES POUR CORRESPONDRE À gpm.h
+ * DÉCLARATIONS FORWARD
  * ================================================================ */
 
-// Fonctions de gpm_package.c
 extern void package_meta_free(PackageMeta* meta);
 extern void package_list_free(PackageList* list);
-
-// Fonctions de gpm_network.c  
-// ATTENTION: ces fonctions sont déjà déclarées dans gpm.h avec leurs bons types
-// NE PAS les redéclarer ici, utiliser les prototypes de gpm.h directement
-
-// Fonctions système
 extern char* strdup(const char* s);
 
 /* ================================================================
@@ -261,7 +258,7 @@ void print_version(void) {
 }
 
 /* ================================================================
- * PARSING DES ARGUMENTS
+ * PARSING DES ARGUMENTS - CORRIGÉ
  * ================================================================ */
 
 int parse_command_line(int argc, char** argv) {
@@ -272,154 +269,223 @@ int parse_command_line(int argc, char** argv) {
     
     char* command = argv[1];
     
-    // Parser les options globales
-    int i = 2;
-    while (i < argc && argv[i][0] == '-') {
-        if (strcmp(argv[i], "--force") == 0 || strcmp(argv[i], "-f") == 0) {
-            g_config.force = true;
-        } else if (strcmp(argv[i], "--yes") == 0 || strcmp(argv[i], "-y") == 0) {
-            g_config.yes = true;
-        } else if (strcmp(argv[i], "--debug") == 0 || strcmp(argv[i], "-d") == 0) {
-            g_config.debug = true;
-        } else if (strcmp(argv[i], "--offline") == 0) {
-            g_config.offline = true;
-        } else if (strcmp(argv[i], "--no-cache") == 0) {
-            g_config.use_cache = false;
-        } else if (strcmp(argv[i], "--no-verify") == 0) {
-            g_config.verify_ssl = false;
-        } else if (strcmp(argv[i], "--registry") == 0 && i + 1 < argc) {
-            free(g_config.registry_url);
-            g_config.registry_url = strdup(argv[++i]);
-        } else if (strcmp(argv[i], "--arch") == 0 && i + 1 < argc) {
-            free(g_config.default_arch);
-            g_config.default_arch = strdup(argv[++i]);
-        } else if (strcmp(argv[i], "--scope") == 0 && i + 1 < argc) {
-            free(g_config.default_scope);
-            g_config.default_scope = strdup(argv[++i]);
-        }
-        i++;
-    }
-    
-    // Exécuter la commande
-    if (strcmp(command, "install") == 0 || strcmp(command, "i") == 0) {
-        if (i >= argc) {
-            LOG_ERROR("Package name required");
-            return 1;
-        }
-        char* package = argv[i];
-        char* version = (i + 1 < argc && argv[i+1][0] != '-') ? argv[i+1] : NULL;
-        return gpm_install(package, version);
-    }
-    else if (strcmp(command, "uninstall") == 0 || strcmp(command, "rm") == 0) {
-        if (i >= argc) {
-            LOG_ERROR("Package name required");
-            return 1;
-        }
-        return gpm_uninstall(argv[i]);
-    }
-    else if (strcmp(command, "update") == 0 || strcmp(command, "up") == 0) {
-        char* package = (i < argc) ? argv[i] : NULL;
-        return gpm_update(package);
-    }
-    else if (strcmp(command, "search") == 0 || strcmp(command, "s") == 0) {
-        if (i >= argc) {
-            LOG_ERROR("Search query required");
-            return 1;
-        }
-        return gpm_search(argv[i]);
-    }
-    else if (strcmp(command, "list") == 0 || strcmp(command, "ls") == 0) {
-        char* filter = (i < argc) ? argv[i] : NULL;
-        return gpm_list(filter);
-    }
-    else if (strcmp(command, "info") == 0 || strcmp(command, "show") == 0) {
-        if (i >= argc) {
-            LOG_ERROR("Package name required");
-            return 1;
-        }
-        return gpm_info(argv[i]);
-    }
-    else if (strcmp(command, "build") == 0 || strcmp(command, "b") == 0) {
-        if (i >= argc) {
-            LOG_ERROR("Source directory required");
-            return 1;
-        }
-        char* output = (i + 1 < argc) ? argv[i+1] : NULL;
-        return gpm_build(argv[i], output);
-    }
-    else if (strcmp(command, "publish") == 0 || strcmp(command, "p") == 0) {
-        if (i >= argc) {
-            LOG_ERROR("Package path required");
-            return 1;
-        }
-        return gpm_publish(argv[i]);
-    }
-    else if (strcmp(command, "login") == 0) {
-        if (i + 1 >= argc) {
-            LOG_ERROR("Username and password required");
-            return 1;
-        }
-        return gpm_login(argv[i], argv[i+1]);
-    }
-    else if (strcmp(command, "logout") == 0) {
-        return gpm_logout();
-    }
-    else if (strcmp(command, "verify") == 0) {
-        if (i >= argc) {
-            LOG_ERROR("Package path required");
-            return 1;
-        }
-        return gpm_verify(argv[i]);
-    }
-    else if (strcmp(command, "rollback") == 0) {
-        if (i + 1 >= argc) {
-            LOG_ERROR("Package and version required");
-            return 1;
-        }
-        return gpm_rollback(argv[i], argv[i+1]);
-    }
-    else if (strcmp(command, "cache") == 0) {
-        if (i >= argc) {
-            return gpm_cache_verify();
-        }
-        if (strcmp(argv[i], "clean") == 0) {
-            return gpm_cache_clean();
-        } else if (strcmp(argv[i], "verify") == 0) {
-            return gpm_cache_verify();
-        }
-    }
-    else if (strcmp(command, "config") == 0) {
-        if (i + 1 >= argc) {
-            LOG_ERROR("Subcommand required (set/get)");
-            return 1;
-        }
-        if (strcmp(argv[i], "set") == 0 && i + 2 < argc) {
-            return gpm_config_set(argv[i+1], argv[i+2]);
-        } else if (strcmp(argv[i], "get") == 0 && i + 1 < argc) {
-            return gpm_config_get(argv[i+1]);
-        }
-    }
-    else if (strcmp(command, "daemon") == 0) {
-        if (i >= argc) {
-            LOG_ERROR("Subcommand required (start/stop)");
-            return 1;
-        }
-        if (strcmp(argv[i], "start") == 0) {
-            char* config = (i + 1 < argc) ? argv[i+1] : NULL;
-            return gpm_daemon_start(config);
-        } else if (strcmp(argv[i], "stop") == 0) {
-            char* name = (i + 1 < argc) ? argv[i+1] : NULL;
-            return gpm_daemon_stop(name);
-        }
-    }
-    else if (strcmp(command, "--version") == 0 || strcmp(command, "-v") == 0) {
+    // Vérifier les commandes spéciales sans arguments
+    if (strcmp(command, "--version") == 0 || strcmp(command, "-v") == 0) {
         print_version();
         return 0;
     }
-    else if (strcmp(command, "--help") == 0 || strcmp(command, "-h") == 0) {
+    if (strcmp(command, "--help") == 0 || strcmp(command, "-h") == 0) {
         print_help();
         return 0;
     }
+    
+    // PARSER LES FLAGS GLOBAUX AVANT TOUT
+    int arg_idx = 2;
+    while (arg_idx < argc) {
+        if (strcmp(argv[arg_idx], "--force") == 0 || strcmp(argv[arg_idx], "-f") == 0) {
+            g_config.force = true;
+            arg_idx++;
+        }
+        else if (strcmp(argv[arg_idx], "--yes") == 0 || strcmp(argv[arg_idx], "-y") == 0) {
+            g_config.yes = true;
+            arg_idx++;
+        }
+        else if (strcmp(argv[arg_idx], "--debug") == 0 || strcmp(argv[arg_idx], "-d") == 0) {
+            g_config.debug = true;
+            arg_idx++;
+        }
+        else if (strcmp(argv[arg_idx], "--offline") == 0) {
+            g_config.offline = true;
+            arg_idx++;
+        }
+        else if (strcmp(argv[arg_idx], "--no-cache") == 0) {
+            g_config.use_cache = false;
+            arg_idx++;
+        }
+        else if (strcmp(argv[arg_idx], "--no-verify") == 0) {
+            g_config.verify_ssl = false;
+            arg_idx++;
+        }
+        else if (strcmp(argv[arg_idx], "--registry") == 0 && arg_idx + 1 < argc) {
+            free(g_config.registry_url);
+            g_config.registry_url = strdup(argv[arg_idx + 1]);
+            arg_idx += 2;
+        }
+        else if (strcmp(argv[arg_idx], "--arch") == 0 && arg_idx + 1 < argc) {
+            free(g_config.default_arch);
+            g_config.default_arch = strdup(argv[arg_idx + 1]);
+            arg_idx += 2;
+        }
+        else if (strcmp(argv[arg_idx], "--scope") == 0 && arg_idx + 1 < argc) {
+            free(g_config.default_scope);
+            g_config.default_scope = strdup(argv[arg_idx + 1]);
+            arg_idx += 2;
+        }
+        else if (strcmp(argv[arg_idx], "--timeout") == 0 && arg_idx + 1 < argc) {
+            g_config.timeout = atoi(argv[arg_idx + 1]);
+            arg_idx += 2;
+        }
+        else {
+            // Ce n'est pas un flag connu, c'est un argument de commande
+            break;
+        }
+    }
+    
+    // Maintenant arg_idx pointe sur le premier argument de commande
+    
+    // === INSTALL ===
+    if (strcmp(command, "install") == 0 || strcmp(command, "i") == 0) {
+        if (arg_idx >= argc) {
+            LOG_ERROR("Package name required");
+            return 1;
+        }
+        char* package = argv[arg_idx];
+        char* version = NULL;
+        // Vérifier si l'argument suivant n'est pas un flag
+        if (arg_idx + 1 < argc && argv[arg_idx + 1][0] != '-') {
+            version = argv[arg_idx + 1];
+        }
+        return gpm_install(package, version);
+    }
+    
+    // === UNINSTALL ===
+    else if (strcmp(command, "uninstall") == 0 || strcmp(command, "rm") == 0) {
+        if (arg_idx >= argc) {
+            LOG_ERROR("Package name required");
+            return 1;
+        }
+        return gpm_uninstall(argv[arg_idx]);
+    }
+    
+    // === UPDATE ===
+    else if (strcmp(command, "update") == 0 || strcmp(command, "up") == 0) {
+        char* package = (arg_idx < argc && argv[arg_idx][0] != '-') ? argv[arg_idx] : NULL;
+        return gpm_update(package);
+    }
+    
+    // === SEARCH ===
+    else if (strcmp(command, "search") == 0 || strcmp(command, "s") == 0) {
+        if (arg_idx >= argc) {
+            LOG_ERROR("Search query required");
+            return 1;
+        }
+        return gpm_search(argv[arg_idx]);
+    }
+    
+    // === LIST ===
+    else if (strcmp(command, "list") == 0 || strcmp(command, "ls") == 0) {
+        char* filter = (arg_idx < argc && argv[arg_idx][0] != '-') ? argv[arg_idx] : NULL;
+        return gpm_list(filter);
+    }
+    
+    // === INFO ===
+    else if (strcmp(command, "info") == 0 || strcmp(command, "show") == 0) {
+        if (arg_idx >= argc) {
+            LOG_ERROR("Package name required");
+            return 1;
+        }
+        return gpm_info(argv[arg_idx]);
+    }
+    
+    // === BUILD ===
+    else if (strcmp(command, "build") == 0 || strcmp(command, "b") == 0) {
+        if (arg_idx >= argc) {
+            LOG_ERROR("Source directory required");
+            return 1;
+        }
+        char* source = argv[arg_idx];
+        char* output = (arg_idx + 1 < argc && argv[arg_idx + 1][0] != '-') ? argv[arg_idx + 1] : NULL;
+        return gpm_build(source, output);
+    }
+    
+    // === PUBLISH ===
+    else if (strcmp(command, "publish") == 0 || strcmp(command, "p") == 0) {
+        if (arg_idx >= argc) {
+            LOG_ERROR("Package path required");
+            return 1;
+        }
+        return gpm_publish(argv[arg_idx]);
+    }
+    
+    // === LOGIN ===
+    else if (strcmp(command, "login") == 0) {
+        if (arg_idx + 1 >= argc) {
+            LOG_ERROR("Username and password required");
+            return 1;
+        }
+        return gpm_login(argv[arg_idx], argv[arg_idx + 1]);
+    }
+    
+    // === LOGOUT ===
+    else if (strcmp(command, "logout") == 0) {
+        return gpm_logout();
+    }
+    
+    // === VERIFY ===
+    else if (strcmp(command, "verify") == 0) {
+        if (arg_idx >= argc) {
+            LOG_ERROR("Package path required");
+            return 1;
+        }
+        return gpm_verify(argv[arg_idx]);
+    }
+    
+    // === ROLLBACK ===
+    else if (strcmp(command, "rollback") == 0) {
+        if (arg_idx + 1 >= argc) {
+            LOG_ERROR("Package and version required");
+            return 1;
+        }
+        return gpm_rollback(argv[arg_idx], argv[arg_idx + 1]);
+    }
+    
+    // === CACHE ===
+    else if (strcmp(command, "cache") == 0) {
+        if (arg_idx >= argc) {
+            return gpm_cache_verify();
+        }
+        if (strcmp(argv[arg_idx], "clean") == 0) {
+            return gpm_cache_clean();
+        } else if (strcmp(argv[arg_idx], "verify") == 0) {
+            return gpm_cache_verify();
+        }
+        LOG_ERROR("Unknown cache subcommand: %s", argv[arg_idx]);
+        return 1;
+    }
+    
+    // === CONFIG ===
+    else if (strcmp(command, "config") == 0) {
+        if (arg_idx + 1 >= argc) {
+            LOG_ERROR("Subcommand required (set/get)");
+            return 1;
+        }
+        if (strcmp(argv[arg_idx], "set") == 0 && arg_idx + 2 < argc) {
+            return gpm_config_set(argv[arg_idx + 1], argv[arg_idx + 2]);
+        } else if (strcmp(argv[arg_idx], "get") == 0 && arg_idx + 1 < argc) {
+            return gpm_config_get(argv[arg_idx + 1]);
+        }
+        LOG_ERROR("Unknown config subcommand");
+        return 1;
+    }
+    
+    // === DAEMON ===
+    else if (strcmp(command, "daemon") == 0) {
+        if (arg_idx >= argc) {
+            LOG_ERROR("Subcommand required (start/stop)");
+            return 1;
+        }
+        if (strcmp(argv[arg_idx], "start") == 0) {
+            char* config = (arg_idx + 1 < argc && argv[arg_idx + 1][0] != '-') ? argv[arg_idx + 1] : NULL;
+            return gpm_daemon_start(config);
+        } else if (strcmp(argv[arg_idx], "stop") == 0) {
+            char* name = (arg_idx + 1 < argc && argv[arg_idx + 1][0] != '-') ? argv[arg_idx + 1] : NULL;
+            return gpm_daemon_stop(name);
+        }
+        LOG_ERROR("Unknown daemon subcommand: %s", argv[arg_idx]);
+        return 1;
+    }
+    
+    // === COMMANDE INCONNUE ===
     else {
         LOG_ERROR("Unknown command: %s", command);
         print_help();
@@ -437,6 +503,11 @@ int main(int argc, char** argv) {
     // Initialisation
     init_config();
     load_config();
+    
+    // Créer les dossiers nécessaires
+    dir_create(GPM_CACHE_DIR);
+    dir_create(GPM_LIB_DIR);
+    dir_create(GPM_CONFIG_DIR);
     
     // Initialisation réseau
     if (curl_global_init(CURL_GLOBAL_ALL) != 0) {

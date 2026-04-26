@@ -1,5 +1,11 @@
 #include "gpm.h"
 
+#include <signal.h> 
+// Déclarations forward des fonctions utilisées
+extern int gpm_install(const char* package, const char* version);
+extern int gpm_uninstall(const char* package);
+
+
 /* ================================================================
  * CRÉATION D'UN PACKAGE .tar.bool
  * ================================================================ */

@@ -8,20 +8,16 @@ GPMConfig g_config = {0};
 AuthContext g_auth = {0};
 
 /* ================================================================
- * DÉCLARATIONS FORWARD DES FONCTIONS UTILITAIRES
+ * DÉCLARATIONS FORWARD - CORRIGÉES POUR CORRESPONDRE À gpm.h
  * ================================================================ */
 
 // Fonctions de gpm_package.c
 extern void package_meta_free(PackageMeta* meta);
 extern void package_list_free(PackageList* list);
 
-// Fonctions de gpm_network.c
-extern int network_check_connectivity(void);
-extern int network_auth_verify(void);
-extern int network_auth_login(const char* username, const char* password);
-extern int network_download(const char* url, const char* output_path);
-extern int network_get(char* url, long* status_code);  // Note: url n'est pas const ici
-extern int network_upload(const char* url, const char* file_path);
+// Fonctions de gpm_network.c  
+// ATTENTION: ces fonctions sont déjà déclarées dans gpm.h avec leurs bons types
+// NE PAS les redéclarer ici, utiliser les prototypes de gpm.h directement
 
 // Fonctions système
 extern char* strdup(const char* s);

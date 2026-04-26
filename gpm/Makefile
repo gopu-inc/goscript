@@ -1,83 +1,89 @@
-CC = gcc
-CFLAGS = -Wall -Wextra -O2 -std=c11 -D_GNU_SOURCE
-LDFLAGS = -lcurl -lssl -lcrypto -ljansson -larchive -lm -lpthread -ldl
+# =========================================================================
+# GPM (Goscript Package Manager) Makefile
+# =========================================================================
 
-# Architecture detection
+CC = gcc
+CFLAGS = -std=c11 -Wall -Wextra -O2 -march=native
+LDFLAGS = -lcurl -larchive -lssl -lcrypto -ljansson -lpthread
+
 UNAME_S := $(shell uname -s)
-UNAME_M := $(shell uname -m)
 
 ifeq ($(UNAME_S),Linux)
-    ifeq ($(UNAME_M),x86_64)
-        MARCH = -march=x86-64-v2
-    else ifeq ($(UNAME_M),aarch64)
-        MARCH = -march=armv8-a
-    else
-        MARCH =
-    endif
+    CFLAGS += -DPLATFORM_LINUX
 else ifeq ($(UNAME_S),Darwin)
-    ifeq ($(UNAME_M),arm64)
-        MARCH = -arch arm64
-    else
-        MARCH = -arch x86_64
-    endif
-else
-    MARCH =
+    CFLAGS += -DPLATFORM_MACOS -I/usr/local/opt/openssl/include
+    LDFLAGS += -L/usr/local/opt/openssl/lib
 endif
 
-ifneq ($(MARCH),)
-    CFLAGS += $(MARCH)
-endif
+SRC_DIR = src
+BUILD_DIR = build
+BIN_DIR = /usr/local/bin
+INCLUDE_DIRS = -I$(SRC_DIR)
 
-PREFIX ?= /usr/local
-BINDIR = $(PREFIX)/bin
-LIBDIR = $(PREFIX)/lib/goscript
+SOURCES = $(wildcard $(SRC_DIR)/*.c)
+OBJECTS = $(SOURCES:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o)
+DEPS = $(OBJECTS:.o=.d)
 
-SRCDIR = src
-OBJDIR = obj
-BINDIR_LOCAL = bin
+TARGET = $(BUILD_DIR)/gpm
+INSTALL_TARGET = $(BIN_DIR)/gpm
 
-SOURCES = $(wildcard $(SRCDIR)/*.c)
-OBJECTS = $(patsubst $(SRCDIR)/%.c,$(OBJDIR)/%.o,$(SOURCES))
-TARGET = $(BINDIR_LOCAL)/gpm
+.PHONY: all clean install uninstall test debug release help
 
-.PHONY: all clean install uninstall debug release
+all: $(TARGET)
 
-all: dirs $(TARGET)
-
-dirs:
-	@mkdir -p $(OBJDIR) $(BINDIR_LOCAL)
-
-$(OBJDIR)/%.o: $(SRCDIR)/%.c gpm.h
-	$(CC) $(CFLAGS) -c $< -o $@
+$(BUILD_DIR)/%.o: $(SRC_DIR)/%.c
+	@mkdir -p $(BUILD_DIR)
+	@$(CC) $(CFLAGS) $(INCLUDE_DIRS) -MMD -c $< -o $@
+	@echo "  CC  $<"
 
 $(TARGET): $(OBJECTS)
-	$(CC) $(CFLAGS) $(OBJECTS) -o $(TARGET) $(LDFLAGS)
-	@echo "$(COLOR_GREEN)✓ GPM compiled successfully!$(COLOR_RESET)"
+	@$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
+	@echo "  LD  $@"
+	@echo ""
+	@echo "$(COLOR_GREEN)✓ Build successful!$(COLOR_RESET)"
+	@echo "  Binary: $(TARGET)"
+	@echo ""
 
-debug: CFLAGS += -g -O0 -DDEBUG
-debug: clean all
-
-release: CFLAGS += -O3 -DNDEBUG
-release: clean all
-
-install: all
-	install -d $(DESTDIR)$(BINDIR)
-	install -m 755 $(TARGET) $(DESTDIR)$(BINDIR)/gpm
-	install -d $(DESTDIR)$(LIBDIR)
-	install -d $(DESTDIR)$(LIBDIR)/modules
-	install -d $(DESTDIR)$(LIBDIR)/cache
-	install -d $(DESTDIR)$(LIBDIR)/config
-	install -d $(DESTDIR)$(LIBDIR)/packages
-	@echo "$(COLOR_GREEN)✓ GPM installed to $(BINDIR)/gpm$(COLOR_RESET)"
+install: $(TARGET)
+	@mkdir -p $(BIN_DIR)
+	@cp $(TARGET) $(INSTALL_TARGET)
+	@chmod 755 $(INSTALL_TARGET)
+	@mkdir -p /usr/local/lib/goscript/modules
+	@mkdir -p /usr/local/lib/goscript/std
+	@mkdir -p /usr/local/lib/goscript/builtin
+	@mkdir -p /var/cache/gpm
+	@mkdir -p /etc/gpm
+	@echo "$(COLOR_GREEN)✓ GPM installed to $(INSTALL_TARGET)$(COLOR_RESET)"
 
 uninstall:
-	rm -f $(DESTDIR)$(BINDIR)/gpm
+	@rm -f $(INSTALL_TARGET)
 	@echo "$(COLOR_YELLOW)GPM uninstalled$(COLOR_RESET)"
 
-clean:
-	rm -rf $(OBJDIR) $(BINDIR_LOCAL)
-	@echo "$(COLOR_YELLOW)Cleaned build files$(COLOR_RESET)"
+test: $(TARGET)
+	@./$(TARGET) --version
+	@./$(TARGET) --help
 
-distclean: clean
-	rm -f $(DESTDIR)$(BINDIR)/gpm
-	@echo "$(COLOR_YELLOW)Full clean done$(COLOR_RESET)"
+clean:
+	@rm -rf $(BUILD_DIR)
+	@echo "$(COLOR_YELLOW)Cleaned$(COLOR_RESET)"
+
+debug: CFLAGS += -g -O0 -DDEBUG
+debug: all
+
+release: CFLAGS += -O3 -DNDEBUG -flto
+release: LDFLAGS += -flto
+release: all
+
+help:
+	@echo "GPM Build System"
+	@echo "Targets:"
+	@echo "  all      - Build GPM"
+	@echo "  install  - Install to /usr/local/bin"
+	@echo "  uninstall- Remove installation"
+	@echo "  clean    - Clean build files"
+	@echo "  debug    - Debug build"
+	@echo "  release  - Optimized release build"
+	@echo "  test     - Run tests"
+	@echo "  help     - Show this help"
+
+-include $(DEPS)

@@ -1,92 +1,43 @@
 #include "gpm.h"
-#include <limits.h>
-#include <signal.h> 
-// Déclarations forward des fonctions utilisées
-extern int gpm_install(const char* package, const char* version);
-extern int gpm_uninstall(const char* package);
-
+#include <signal.h>
+#include <ctype.h>
+#include <limits.h>  // Pour PATH_MAX
 
 /* ================================================================
- * CRÉATION D'UN PACKAGE .tar.bool
+ * DÉCLARATIONS FORWARD
+ * ================================================================ */
+
+extern int gpm_install(const char* package, const char* version);
+extern int gpm_uninstall(const char* package);
+extern int gpm_verify(const char* package);
+
+/* ================================================================
+ * CRÉATION D'UN PACKAGE .tar.bool (version system tar)
  * ================================================================ */
 
 int package_create(const char* source_dir, const char* output_path) {
     LOG_INFO("Creating package: %s", output_path);
     
-    struct archive* a = archive_write_new();
-    if (!a) {
-        LOG_ERROR("Failed to create archive");
+    char cmd[4096];
+    snprintf(cmd, sizeof(cmd), 
+             "cd '%s' && tar -czf '%s' . 2>/dev/null",
+             source_dir, output_path);
+    
+    int exit_code;
+    char* output;
+    if (run_command(cmd, &output, &exit_code) != 0 || exit_code != 0) {
+        LOG_ERROR("Failed to create archive: %s", output ? output : "unknown error");
+        free(output);
+        return 1;
+    }
+    free(output);
+    
+    if (!file_exists(output_path)) {
+        LOG_ERROR("Archive not created");
         return 1;
     }
     
-    // Configuration du format
-    archive_write_set_format_pax_restricted(a);
-    archive_write_add_filter_gzip(a);
-    
-    // Ouvrir le fichier de sortie
-    if (archive_write_open_filename(a, output_path) != ARCHIVE_OK) {
-        LOG_ERROR("Cannot open output file: %s", archive_error_string(a));
-        archive_write_free(a);
-        return 1;
-    }
-    
-    // Parcourir le répertoire source
-    DIR* dir = opendir(source_dir);
-    if (!dir) {
-        LOG_ERROR("Cannot open source directory: %s", source_dir);
-        archive_write_close(a);
-        archive_write_free(a);
-        return 1;
-    }
-    
-    // Ajouter les fichiers
-    char base_path[PATH_MAX];
-    realpath(source_dir, base_path);
-    size_t base_len = strlen(base_path);
-    
-    struct dirent* entry;
-    while ((entry = readdir(dir)) != NULL) {
-        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
-            continue;
-        
-        char full_path[PATH_MAX];
-        snprintf(full_path, sizeof(full_path), "%s/%s", source_dir, entry->d_name);
-        
-        struct stat st;
-        if (stat(full_path, &st) != 0) continue;
-        
-        struct archive_entry* ae = archive_entry_new();
-        
-        // Chemin relatif dans l'archive
-        char* relative_path = full_path + base_len + 1;
-        archive_entry_set_pathname(ae, relative_path);
-        archive_entry_set_size(ae, st.st_size);
-        archive_entry_set_filetype(ae, AE_IFREG);
-        archive_entry_set_perm(ae, st.st_mode);
-        archive_entry_set_mtime(ae, st.st_mtime, 0);
-        
-        archive_write_header(a, ae);
-        
-        // Écrire le contenu
-        FILE* f = fopen(full_path, "rb");
-        if (f) {
-            char buf[8192];
-            size_t n;
-            while ((n = fread(buf, 1, sizeof(buf), f)) > 0) {
-                archive_write_data(a, buf, n);
-            }
-            fclose(f);
-        }
-        
-        archive_entry_free(ae);
-    }
-    closedir(dir);
-    
-    // Finaliser
-    archive_write_close(a);
-    archive_write_free(a);
-    
-    LOG_SUCCESS("Package created: %s", output_path);
+    LOG_SUCCESS("Package created: %s (%zu bytes)", output_path, file_size(output_path));
     return 0;
 }
 
@@ -97,69 +48,55 @@ int package_create(const char* source_dir, const char* output_path) {
 int package_extract(const char* package_path, const char* dest_dir) {
     LOG_INFO("Extracting: %s -> %s", package_path, dest_dir);
     
-    struct archive* a = archive_read_new();
-    archive_read_support_format_all(a);
-    archive_read_support_filter_all(a);
-    
-    if (archive_read_open_filename(a, package_path, 10240) != ARCHIVE_OK) {
-        LOG_ERROR("Cannot open package: %s", archive_error_string(a));
-        archive_read_free(a);
+    if (!file_exists(package_path)) {
+        LOG_ERROR("Package not found: %s", package_path);
         return 1;
     }
     
-    // Créer le répertoire de destination
     dir_create(dest_dir);
     
-    struct archive_entry* entry;
-    while (archive_read_next_header(a, &entry) == ARCHIVE_OK) {
-        const char* pathname = archive_entry_pathname(entry);
-        char full_path[PATH_MAX];
-        snprintf(full_path, sizeof(full_path), "%s/%s", dest_dir, pathname);
-        
-        // Créer les répertoires parents
-        char* parent = path_dirname(full_path);
-        dir_create(parent);
-        free(parent);
-        
-        // Extraire le fichier
-        if (archive_entry_filetype(entry) == AE_IFREG) {
-            FILE* f = fopen(full_path, "wb");
-            if (f) {
-                const void* buff;
-                size_t size;
-                la_int64_t offset;
-                
-                while (archive_read_data_block(a, &buff, &size, &offset) == ARCHIVE_OK) {
-                    fwrite(buff, 1, size, f);
-                }
-                fclose(f);
-            }
-        }
-        
-        // Restaurer les permissions
-        chmod(full_path, archive_entry_perm(entry));
+    char cmd[4096];
+    snprintf(cmd, sizeof(cmd), 
+             "mkdir -p '%s' && cd '%s' && tar -xzf '%s' 2>/dev/null",
+             dest_dir, dest_dir, package_path);
+    
+    int exit_code;
+    char* output;
+    if (run_command(cmd, &output, &exit_code) != 0 || exit_code != 0) {
+        LOG_ERROR("Failed to extract archive: %s", output ? output : "unknown error");
+        free(output);
+        return 1;
     }
+    free(output);
     
-    archive_read_close(a);
-    archive_read_free(a);
-    
-    LOG_SUCCESS("Package extracted");
+    LOG_SUCCESS("Package extracted to %s", dest_dir);
     return 0;
 }
 
 /* ================================================================
- * VÉRIFICATION DE L'INTÉGRITÉ
+ * VÉRIFICATION
  * ================================================================ */
 
 int package_verify(const char* package_path, const char* expected_hash) {
-    char* hash = package_compute_hash(package_path);
-    
-    if (expected_hash && strcmp(hash, expected_hash) != 0) {
-        LOG_ERROR("Hash mismatch!");
-        LOG_ERROR("  Expected: %s", expected_hash);
-        LOG_ERROR("  Got:      %s", hash);
-        free(hash);
+    if (!file_exists(package_path)) {
+        LOG_ERROR("File not found: %s", package_path);
         return 0;
+    }
+    
+    char* hash = package_compute_hash(package_path);
+    if (!hash) return 0;
+    
+    LOG_INFO("SHA256: %s", hash);
+    
+    if (expected_hash) {
+        if (strcmp(hash, expected_hash) != 0) {
+            LOG_ERROR("Hash mismatch!");
+            LOG_ERROR("  Expected: %s", expected_hash);
+            LOG_ERROR("  Got:      %s", hash);
+            free(hash);
+            return 0;
+        }
+        LOG_SUCCESS("Hash verified");
     }
     
     free(hash);
@@ -167,168 +104,112 @@ int package_verify(const char* package_path, const char* expected_hash) {
 }
 
 /* ================================================================
- * CALCUL DU HASH SHA256
+ * CALCUL DU HASH
  * ================================================================ */
 
 char* package_compute_hash(const char* file_path) {
-    FILE* f = fopen(file_path, "rb");
-    if (!f) return NULL;
+    if (!file_exists(file_path)) return NULL;
     
-    SHA256_CTX ctx;
-    SHA256_Init(&ctx);
+    char cmd[4096];
+    snprintf(cmd, sizeof(cmd), "sha256sum '%s' 2>/dev/null | awk '{print $1}'", file_path);
     
-    unsigned char buf[GPM_BUFFER_SIZE];
-    size_t n;
-    while ((n = fread(buf, 1, sizeof(buf), f)) > 0) {
-        SHA256_Update(&ctx, buf, n);
+    char* output;
+    int exit_code;
+    if (run_command(cmd, &output, &exit_code) != 0 || exit_code != 0 || !output) {
+        return NULL;
     }
-    fclose(f);
     
-    unsigned char hash[SHA256_DIGEST_LENGTH];
-    SHA256_Final(hash, &ctx);
+    char* trimmed = str_trim(output);
+    char* result = strdup(trimmed);
+    free(output);
     
-    char* hex = malloc(SHA256_DIGEST_LENGTH * 2 + 1);
-    for (int i = 0; i < SHA256_DIGEST_LENGTH; i++) {
-        sprintf(hex + i * 2, "%02x", hash[i]);
-    }
-    hex[SHA256_DIGEST_LENGTH * 2] = '\0';
-    
-    return hex;
+    return result;
 }
 
 /* ================================================================
- * SIGNATURE DU PACKAGE
+ * SIGNATURE
  * ================================================================ */
 
 int package_sign(const char* package_path, const char* key_path) {
-    // Lire la clé privée
-    FILE* key_file = fopen(key_path, "r");
-    if (!key_file) {
-        LOG_ERROR("Cannot open private key: %s", key_path);
-        return 1;
-    }
+    if (!file_exists(package_path) || !file_exists(key_path)) return 1;
     
-    EVP_PKEY* pkey = PEM_read_PrivateKey(key_file, NULL, NULL, NULL);
-    fclose(key_file);
-    
-    if (!pkey) {
-        LOG_ERROR("Failed to read private key");
-        return 1;
-    }
-    
-    // Calculer le hash du fichier
-    char* hash_str = package_compute_hash(package_path);
-    if (!hash_str) {
-        EVP_PKEY_free(pkey);
-        return 1;
-    }
-    
-    unsigned char hash[SHA256_DIGEST_LENGTH];
-    for (int i = 0; i < SHA256_DIGEST_LENGTH; i++) {
-        sscanf(hash_str + i * 2, "%02hhx", &hash[i]);
-    }
-    
-    // Signer
-    EVP_MD_CTX* md_ctx = EVP_MD_CTX_new();
-    EVP_SignInit(md_ctx, EVP_sha256());
-    EVP_SignUpdate(md_ctx, hash, SHA256_DIGEST_LENGTH);
-    
-    unsigned char* sig = malloc(EVP_PKEY_size(pkey));
-    unsigned int sig_len;
-    EVP_SignFinal(md_ctx, sig, &sig_len, pkey);
-    
-    // Écrire la signature
     char sig_path[1024];
     snprintf(sig_path, sizeof(sig_path), "%s.sig", package_path);
     
-    char* sig_b64 = base64_encode(sig, sig_len);
-    file_write(sig_path, sig_b64);
+    char cmd[4096];
+    snprintf(cmd, sizeof(cmd), 
+             "openssl dgst -sha256 -sign '%s' -out '%s' '%s' 2>/dev/null",
+             key_path, sig_path, package_path);
     
-    free(hash_str);
-    free(sig);
-    free(sig_b64);
-    EVP_MD_CTX_free(md_ctx);
-    EVP_PKEY_free(pkey);
+    int exit_code;
+    if (run_command(cmd, NULL, &exit_code) != 0 || exit_code != 0) {
+        LOG_ERROR("Failed to sign package");
+        return 1;
+    }
     
     LOG_SUCCESS("Package signed: %s", sig_path);
     return 0;
 }
 
 int package_verify_signature(const char* package_path, const char* pubkey_path) {
-    // Lire la clé publique
-    FILE* key_file = fopen(pubkey_path, "r");
-    if (!key_file) return 1;
+    if (!file_exists(package_path) || !file_exists(pubkey_path)) return 1;
     
-    EVP_PKEY* pkey = PEM_read_PUBKEY(key_file, NULL, NULL, NULL);
-    fclose(key_file);
-    
-    if (!pkey) return 1;
-    
-    // Lire la signature
     char sig_path[1024];
     snprintf(sig_path, sizeof(sig_path), "%s.sig", package_path);
     
-    char* sig_b64 = file_read(sig_path);
-    if (!sig_b64) {
-        EVP_PKEY_free(pkey);
+    if (!file_exists(sig_path)) {
+        LOG_ERROR("Signature file not found: %s", sig_path);
         return 1;
     }
     
-    size_t sig_len;
-    unsigned char* sig = base64_decode(sig_b64, &sig_len);
-    free(sig_b64);
+    char cmd[4096];
+    snprintf(cmd, sizeof(cmd), 
+             "openssl dgst -sha256 -verify '%s' -signature '%s' '%s' 2>/dev/null",
+             pubkey_path, sig_path, package_path);
     
-    if (!sig) {
-        EVP_PKEY_free(pkey);
-        return 1;
+    char* output;
+    int exit_code;
+    run_command(cmd, &output, &exit_code);
+    
+    if (exit_code == 0 && output && strstr(output, "Verified OK")) {
+        free(output);
+        return 0;
     }
     
-    // Calculer le hash du fichier
-    char* hash_str = package_compute_hash(package_path);
-    unsigned char hash[SHA256_DIGEST_LENGTH];
-    for (int i = 0; i < SHA256_DIGEST_LENGTH; i++) {
-        sscanf(hash_str + i * 2, "%02hhx", &hash[i]);
-    }
-    free(hash_str);
-    
-    // Vérifier
-    EVP_MD_CTX* md_ctx = EVP_MD_CTX_new();
-    EVP_VerifyInit(md_ctx, EVP_sha256());
-    EVP_VerifyUpdate(md_ctx, hash, SHA256_DIGEST_LENGTH);
-    
-    int result = EVP_VerifyFinal(md_ctx, sig, sig_len, pkey);
-    
-    free(sig);
-    EVP_MD_CTX_free(md_ctx);
-    EVP_PKEY_free(pkey);
-    
-    return result == 1 ? 0 : 1;
+    free(output);
+    return 1;
 }
 
 /* ================================================================
- * GESTION DES MÉTADONNÉES
+ * LECTURE DES MÉTADONNÉES
  * ================================================================ */
 
 PackageMeta* package_read_meta(const char* package_path) {
-    // Extraire temporairement le package.json
-    char temp_dir[1024];
-    snprintf(temp_dir, sizeof(temp_dir), "%s/gpm-meta-XXXXXX", "/tmp");
-    mkdtemp(temp_dir);
+    if (!file_exists(package_path)) return NULL;
     
-    if (package_extract(package_path, temp_dir) != 0) {
-        dir_remove(temp_dir);
-        return NULL;
-    }
+    char temp_dir[] = "/tmp/gpm-meta-XXXXXX";
+    if (!mkdtemp(temp_dir)) return NULL;
+    
+    char cmd[4096];
+    snprintf(cmd, sizeof(cmd), 
+             "cd '%s' && tar -xzf '%s' 'package.json' '*/package.json' 2>/dev/null",
+             temp_dir, package_path);
+    
+    int exit_code;
+    run_command(cmd, NULL, &exit_code);
     
     char meta_path[1024];
     snprintf(meta_path, sizeof(meta_path), "%s/package.json", temp_dir);
     
     if (!file_exists(meta_path)) {
-        // Chercher dans un sous-dossier
         DIR* dir = opendir(temp_dir);
+        if (!dir) {
+            dir_remove(temp_dir);
+            return NULL;
+        }
+        
         struct dirent* entry;
         bool found = false;
-        
         while ((entry = readdir(dir)) != NULL) {
             if (entry->d_type == DT_DIR && strcmp(entry->d_name, ".") != 0 && 
                 strcmp(entry->d_name, "..") != 0) {
@@ -363,39 +244,105 @@ PackageMeta* package_read_meta(const char* package_path) {
     
     json_t* val;
     val = json_object_get(root, "name");
-    if (val) meta->name = strdup(json_string_value(val));
+    if (val && json_is_string(val)) meta->name = strdup(json_string_value(val));
     
     val = json_object_get(root, "version");
-    if (val) meta->version = strdup(json_string_value(val));
+    if (val && json_is_string(val)) meta->version = strdup(json_string_value(val));
+    
+    val = json_object_get(root, "release");
+    if (val && json_is_string(val)) meta->release = strdup(json_string_value(val));
+    else meta->release = strdup("r0");
     
     val = json_object_get(root, "author");
-    if (val) meta->author = strdup(json_string_value(val));
+    if (val && json_is_string(val)) meta->author = strdup(json_string_value(val));
     
     val = json_object_get(root, "description");
-    if (val) meta->description = strdup(json_string_value(val));
+    if (val && json_is_string(val)) meta->description = strdup(json_string_value(val));
     
     val = json_object_get(root, "license");
-    if (val) meta->license = strdup(json_string_value(val));
+    if (val && json_is_string(val)) meta->license = strdup(json_string_value(val));
+    
+    val = json_object_get(root, "homepage");
+    if (val && json_is_string(val)) meta->homepage = strdup(json_string_value(val));
+    
+    val = json_object_get(root, "repository");
+    if (val && json_is_string(val)) meta->repository = strdup(json_string_value(val));
     
     val = json_object_get(root, "sha256");
-    if (val) meta->sha256 = strdup(json_string_value(val));
+    if (val && json_is_string(val)) meta->sha256 = strdup(json_string_value(val));
     
     val = json_object_get(root, "size");
-    if (val) meta->size = json_integer_value(val);
+    if (val) meta->size = (size_t)json_integer_value(val);
     
-    // Dependencies
+    val = json_object_get(root, "scope");
+    if (val && json_is_string(val)) {
+        if (strcmp(json_string_value(val), "private") == 0) 
+            meta->scope = PKG_SCOPE_PRIVATE;
+        else if (strcmp(json_string_value(val), "unlisted") == 0)
+            meta->scope = PKG_SCOPE_UNLISTED;
+        else
+            meta->scope = PKG_SCOPE_PUBLIC;
+    }
+    
+    val = json_object_get(root, "created_at");
+    if (val && json_is_string(val)) {
+        struct tm tm = {0};
+        strptime(json_string_value(val), "%Y-%m-%dT%H:%M:%S", &tm);
+        meta->created_at = mktime(&tm);
+    }
+    
+    val = json_object_get(root, "downloads");
+    if (val) meta->downloads = (int)json_integer_value(val);
+    
     json_t* deps = json_object_get(root, "dependencies");
     if (deps && json_is_array(deps)) {
-        meta->dep_count = json_array_size(deps);
-        meta->dependencies = calloc(meta->dep_count, sizeof(char*));
-        for (int i = 0; i < meta->dep_count; i++) {
-            meta->dependencies[i] = strdup(json_string_value(json_array_get(deps, i)));
+        meta->dep_count = (int)json_array_size(deps);
+        if (meta->dep_count > 0) {
+            meta->dependencies = calloc(meta->dep_count, sizeof(char*));
+            for (size_t i = 0; i < json_array_size(deps); i++) {
+                json_t* dep = json_array_get(deps, i);
+                if (json_is_string(dep)) {
+                    meta->dependencies[i] = strdup(json_string_value(dep));
+                }
+            }
+        }
+    }
+    
+    json_t* keywords = json_object_get(root, "keywords");
+    if (keywords && json_is_array(keywords)) {
+        meta->keyword_count = (int)json_array_size(keywords);
+        if (meta->keyword_count > 0) {
+            meta->keywords = calloc(meta->keyword_count, sizeof(char*));
+            for (size_t i = 0; i < json_array_size(keywords); i++) {
+                json_t* kw = json_array_get(keywords, i);
+                if (json_is_string(kw)) {
+                    meta->keywords[i] = strdup(json_string_value(kw));
+                }
+            }
+        }
+    }
+    
+    json_t* conflicts = json_object_get(root, "conflicts");
+    if (conflicts && json_is_array(conflicts)) {
+        meta->conflict_count = (int)json_array_size(conflicts);
+        if (meta->conflict_count > 0) {
+            meta->conflicts = calloc(meta->conflict_count, sizeof(char*));
+            for (size_t i = 0; i < json_array_size(conflicts); i++) {
+                json_t* conf = json_array_get(conflicts, i);
+                if (json_is_string(conf)) {
+                    meta->conflicts[i] = strdup(json_string_value(conf));
+                }
+            }
         }
     }
     
     json_decref(root);
     return meta;
 }
+
+/* ================================================================
+ * LIBÉRATION MÉMOIRE
+ * ================================================================ */
 
 void package_meta_free(PackageMeta* meta) {
     if (!meta) return;
@@ -423,7 +370,7 @@ void package_meta_free(PackageMeta* meta) {
 }
 
 /* ================================================================
- * INSTALLATION / DÉSINSTALLATION DES FICHIERS
+ * INSTALLATION / DÉSINSTALLATION
  * ================================================================ */
 
 int package_install_file(const char* package_path) {
@@ -437,7 +384,7 @@ int package_uninstall_files(PackageMeta* meta) {
 }
 
 /* ================================================================
- * RÉSOLUTION DES DÉPENDANCES
+ * DÉPENDANCES
  * ================================================================ */
 
 int package_resolve_deps(PackageMeta* meta) {
@@ -445,8 +392,7 @@ int package_resolve_deps(PackageMeta* meta) {
         if (!package_is_installed(meta->dependencies[i], NULL)) {
             LOG_INFO("Installing dependency: %s", meta->dependencies[i]);
             if (gpm_install(meta->dependencies[i], NULL) != 0) {
-                LOG_ERROR("Failed to install dependency: %s", meta->dependencies[i]);
-                return 1;
+                LOG_WARN("Failed to install dependency: %s", meta->dependencies[i]);
             }
         }
     }
@@ -464,7 +410,7 @@ int package_check_conflicts(PackageMeta* meta) {
 }
 
 /* ================================================================
- * GESTION DES PACKAGES INSTALLÉS
+ * PACKAGES INSTALLÉS
  * ================================================================ */
 
 PackageList* package_get_installed(void) {
@@ -480,6 +426,7 @@ PackageList* package_get_installed(void) {
     while ((entry = readdir(dir)) != NULL) {
         if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
             continue;
+        if (entry->d_name[0] == '.') continue;
         
         char meta_path[1024];
         snprintf(meta_path, sizeof(meta_path), "%s/%s/package.json", 
@@ -517,7 +464,7 @@ bool package_is_installed(const char* name, const char* version) {
         PackageMeta* meta = package_read_meta(meta_path);
         if (!meta) return false;
         
-        bool match = strcmp(meta->version, version) == 0;
+        bool match = meta->version && strcmp(meta->version, version) == 0;
         package_meta_free(meta);
         return match;
     }
@@ -526,10 +473,6 @@ bool package_is_installed(const char* name, const char* version) {
 }
 
 char* package_find_in_cache(const char* name, const char* version, const char* arch) {
-    char cache_name[256];
-    snprintf(cache_name, sizeof(cache_name), "%s-%s-%s" GPM_PACKAGE_EXT, 
-             name, version ? version : "*", arch ? arch : "*");
-    
     DIR* dir = opendir(g_config.cache_dir);
     if (!dir) return NULL;
     
@@ -557,7 +500,7 @@ char* package_find_in_cache(const char* name, const char* version, const char* a
 char* str_duplicate(const char* src) {
     if (!src) return NULL;
     char* dst = malloc(strlen(src) + 1);
-    strcpy(dst, src);
+    if (dst) strcpy(dst, src);
     return dst;
 }
 
@@ -565,36 +508,9 @@ char* str_concat(const char* s1, const char* s2) {
     size_t len1 = s1 ? strlen(s1) : 0;
     size_t len2 = s2 ? strlen(s2) : 0;
     char* result = malloc(len1 + len2 + 1);
+    if (!result) return NULL;
     if (s1) strcpy(result, s1);
     if (s2) strcpy(result + len1, s2);
-    return result;
-}
-
-char* str_replace(const char* str, const char* old, const char* new) {
-    char* result;
-    int i, cnt = 0;
-    size_t newlen = strlen(new);
-    size_t oldlen = strlen(old);
-    
-    for (i = 0; str[i] != '\0'; i++) {
-        if (strstr(&str[i], old) == &str[i]) {
-            cnt++;
-            i += oldlen - 1;
-        }
-    }
-    
-    result = malloc(i + cnt * (newlen - oldlen) + 1);
-    i = 0;
-    while (*str) {
-        if (strstr(str, old) == str) {
-            strcpy(&result[i], new);
-            i += newlen;
-            str += oldlen;
-        } else {
-            result[i++] = *str++;
-        }
-    }
-    result[i] = '\0';
     return result;
 }
 
@@ -619,12 +535,12 @@ char* str_trim(char* str) {
 }
 
 char* str_upper(char* str) {
-    for (char* p = str; *p; p++) *p = toupper(*p);
+    for (char* p = str; *p; p++) *p = (char)toupper((unsigned char)*p);
     return str;
 }
 
 char* str_lower(char* str) {
-    for (char* p = str; *p; p++) *p = tolower(*p);
+    for (char* p = str; *p; p++) *p = (char)tolower((unsigned char)*p);
     return str;
 }
 
@@ -641,6 +557,7 @@ char* path_join(const char* path1, const char* path2) {
 
 char* path_dirname(const char* path) {
     char* copy = strdup(path);
+    if (!copy) return NULL;
     char* last_slash = strrchr(copy, '/');
     if (last_slash) {
         *last_slash = '\0';
@@ -651,13 +568,13 @@ char* path_dirname(const char* path) {
 }
 
 char* path_basename(const char* path) {
-    char* last_slash = strrchr(path, '/');
-    return last_slash ? strdup(last_slash + 1) : strdup(path);
+    const char* last_slash = strrchr(path, '/');
+    return strdup(last_slash ? last_slash + 1 : path);
 }
 
 char* path_extension(const char* path) {
-    char* dot = strrchr(path, '.');
-    return dot ? strdup(dot) : strdup("");
+    const char* dot = strrchr(path, '.');
+    return strdup(dot ? dot : "");
 }
 
 bool file_exists(const char* path) {
@@ -670,21 +587,21 @@ bool dir_exists(const char* path) {
 }
 
 int dir_create(const char* path) {
-    char tmp[PATH_MAX];
-    snprintf(tmp, sizeof(tmp), "mkdir -p %s", path);
-    return system(tmp);
+    char cmd[4096];
+    snprintf(cmd, sizeof(cmd), "mkdir -p '%s'", path);
+    return system(cmd);
 }
 
 int dir_remove(const char* path) {
-    char tmp[PATH_MAX];
-    snprintf(tmp, sizeof(tmp), "rm -rf %s", path);
-    return system(tmp);
+    char cmd[4096];
+    snprintf(cmd, sizeof(cmd), "rm -rf '%s'", path);
+    return system(cmd);
 }
 
 size_t file_size(const char* path) {
     struct stat st;
     if (stat(path, &st) != 0) return 0;
-    return st.st_size;
+    return (size_t)st.st_size;
 }
 
 char* file_read(const char* path) {
@@ -695,9 +612,13 @@ char* file_read(const char* path) {
     long size = ftell(f);
     fseek(f, 0, SEEK_SET);
     
-    char* content = malloc(size + 1);
-    fread(content, 1, size, f);
-    content[size] = '\0';
+    char* content = malloc((size_t)size + 1);
+    if (!content) {
+        fclose(f);
+        return NULL;
+    }
+    size_t n = fread(content, 1, (size_t)size, f);
+    content[n] = '\0';
     fclose(f);
     
     return content;
@@ -712,11 +633,11 @@ int file_write(const char* path, const char* content) {
 }
 
 char* get_home_dir(void) {
-    char* home = getenv("HOME");
+    const char* home = getenv("HOME");
     if (home) return strdup(home);
     
     struct passwd* pw = getpwuid(getuid());
-    return pw ? strdup(pw->pw_dir) : strdup("/root");
+    return strdup(pw ? pw->pw_dir : "/root");
 }
 
 char* get_current_dir(void) {
@@ -725,22 +646,14 @@ char* get_current_dir(void) {
 }
 
 char* get_temp_dir(void) {
-    char* tmp = getenv("TMPDIR");
+    const char* tmp = getenv("TMPDIR");
     if (!tmp) tmp = getenv("TMP");
     if (!tmp) tmp = getenv("TEMP");
-    return tmp ? strdup(tmp) : strdup("/tmp");
+    return strdup(tmp ? tmp : "/tmp");
 }
 
 char* get_os_name(void) {
-    #ifdef __linux__
     return strdup("Linux");
-    #elif __APPLE__
-    return strdup("macOS");
-    #else
-    struct utsname buf;
-    uname(&buf);
-    return strdup(buf.sysname);
-    #endif
 }
 
 char* get_os_version(void) {
@@ -762,11 +675,11 @@ char* get_hostname(void) {
 }
 
 char* get_username(void) {
-    char* user = getenv("USER");
+    const char* user = getenv("USER");
     if (user) return strdup(user);
     
     struct passwd* pw = getpwuid(getuid());
-    return pw ? strdup(pw->pw_name) : strdup("unknown");
+    return strdup(pw ? pw->pw_name : "unknown");
 }
 
 ArchType get_cpu_arch(void) {
@@ -779,11 +692,11 @@ ArchType get_cpu_arch(void) {
     if (strcmp(buf.machine, "armv7l") == 0) return ARCH_ARMV7L;
     if (strcmp(buf.machine, "riscv64") == 0) return ARCH_RISCV64;
     
-    return ARCH_UNKNOWN;
+    return ARCH_X86_64; // fallback
 }
 
 int get_cpu_count(void) {
-    return sysconf(_SC_NPROCESSORS_ONLN);
+    return (int)sysconf(_SC_NPROCESSORS_ONLN);
 }
 
 long get_total_ram(void) {
@@ -797,7 +710,7 @@ long get_free_ram(void) {
 time_t get_boot_time(void) {
     struct sysinfo info;
     if (sysinfo(&info) == 0) {
-        return time(NULL) - info.uptime;
+        return time(NULL) - (time_t)info.uptime;
     }
     return 0;
 }
@@ -806,7 +719,10 @@ char* generate_uuid(void) {
     unsigned char buf[16];
     FILE* f = fopen("/dev/urandom", "rb");
     if (!f) return NULL;
-    fread(buf, 1, 16, f);
+    if (fread(buf, 1, 16, f) != 16) {
+        fclose(f);
+        return NULL;
+    }
     fclose(f);
     
     buf[6] = (buf[6] & 0x0f) | 0x40;
@@ -828,7 +744,7 @@ char* base64_encode(const unsigned char* data, size_t len) {
     bio = BIO_push(b64, bio);
     
     BIO_set_flags(bio, BIO_FLAGS_BASE64_NO_NL);
-    BIO_write(bio, data, len);
+    BIO_write(bio, data, (int)len);
     BIO_flush(bio);
     
     BUF_MEM* buf;
@@ -850,7 +766,7 @@ unsigned char* base64_decode(const char* data, size_t* out_len) {
     BIO_set_flags(bio, BIO_FLAGS_BASE64_NO_NL);
     
     unsigned char* buf = malloc(strlen(data));
-    *out_len = BIO_read(bio, buf, strlen(data));
+    *out_len = BIO_read(bio, buf, (int)strlen(data));
     
     BIO_free_all(bio);
     return buf;
@@ -887,7 +803,13 @@ int run_command(const char* cmd, char** output, int* exit_code) {
     
     while (fgets(buffer, sizeof(buffer), pipe) != NULL) {
         size_t len = strlen(buffer);
-        result = realloc(result, result_size + len + 1);
+        char* tmp = realloc(result, result_size + len + 1);
+        if (!tmp) {
+            free(result);
+            pclose(pipe);
+            return 1;
+        }
+        result = tmp;
         memcpy(result + result_size, buffer, len + 1);
         result_size += len;
     }
@@ -896,55 +818,6 @@ int run_command(const char* cmd, char** output, int* exit_code) {
     if (exit_code) *exit_code = WEXITSTATUS(status);
     if (output) *output = result;
     else free(result);
-    
-    return 0;
-}
-
-int run_command_async(const char* cmd) {
-    pid_t pid = fork();
-    if (pid == 0) {
-        execl("/bin/sh", "sh", "-c", cmd, NULL);
-        exit(1);
-    }
-    return pid;
-}
-
-int wait_for_process(pid_t pid, int* exit_code) {
-    int status;
-    waitpid(pid, &status, 0);
-    if (exit_code) *exit_code = WEXITSTATUS(status);
-    return 0;
-}
-
-void set_process_name(const char* name) {
-    #ifdef __linux__
-    prctl(PR_SET_NAME, name, 0, 0, 0);
-    #endif
-}
-
-int daemonize(void) {
-    pid_t pid = fork();
-    if (pid < 0) return 1;
-    if (pid > 0) exit(0);
-    
-    if (setsid() < 0) return 1;
-    
-    signal(SIGHUP, SIG_IGN);
-    
-    pid = fork();
-    if (pid < 0) return 1;
-    if (pid > 0) exit(0);
-    
-    chdir("/");
-    umask(0);
-    
-    for (int i = 0; i < 3; i++) close(i);
-    
-    int devnull = open("/dev/null", O_RDWR);
-    dup2(devnull, STDIN_FILENO);
-    dup2(devnull, STDOUT_FILENO);
-    dup2(devnull, STDERR_FILENO);
-    close(devnull);
     
     return 0;
 }

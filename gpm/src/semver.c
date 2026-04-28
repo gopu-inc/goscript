@@ -179,6 +179,7 @@ char* gpm_semver_to_string(SemVer ver) {
     return buffer;
 }
 
+
 /* ================================================================
  * PARSER UNE CONTRAINTE DE VERSION
  * Exemples: "1.2.3", ">=1.2.3", "^1.0.0", "~2.1", "*", "latest"
@@ -225,14 +226,17 @@ Dependency gpm_dependency_parse(const char* name, const char* constraint) {
     } else if (strchr(constraint, '-')) {
         // Range: "1.0.0 - 2.0.0"
         dep.type = VER_RANGE;
-        char* dash = strstr(constraint, " - ");
+        char* constraint_copy = strdup(constraint);
+        char* dash = strstr(constraint_copy, " - ");
         if (dash) {
             *dash = '\0';
-            dep.version = gpm_semver_parse(constraint);
+            dep.version = gpm_semver_parse(constraint_copy);
             dep.version_max = gpm_semver_parse(dash + 3);
             *dash = '-';
+            free(constraint_copy);
             return dep;
         }
+        free(constraint_copy);
     }
     
     // Parser la version
@@ -240,12 +244,8 @@ Dependency gpm_dependency_parse(const char* name, const char* constraint) {
     dep.version = gpm_semver_parse(ver_str);
     
     if (dep.type == 0) {
-        // Si pas de préfixe, c'est exact ou caret implicite
-        if (ver_str[0] == '0') {
-            dep.type = VER_EXACT;
-        } else {
-            dep.type = VER_CARET;  // npm-style: "1.2.3" => "^1.2.3"
-        }
+        // Si pas de préfixe, c'est caret implicite (npm-style)
+        dep.type = VER_CARET;
     }
     
     return dep;

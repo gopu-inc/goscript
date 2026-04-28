@@ -218,6 +218,25 @@ int gpm_install_package(const char* name, const char* version) {
     return -1;
 }
 
+int gpm_run_script(const char* script) {
+    if (!script || !script[0]) {
+        LOG_WARN("Aucun script à exécuter");
+        return 0;
+    }
+    
+    LOG_STEP("Exécution du script");
+    printf("  > %s\n", script);
+    
+    int ret = system(script);
+    
+    if (ret == 0) {
+        LOG_SUCCESS("Script terminé");
+    } else {
+        LOG_WARN("Script terminé avec le code %d", WEXITSTATUS(ret));
+    }
+    
+    return ret;
+}
 /* ================================================================
  * INSTALLER DEPUIS Manifest.toml (gpm install sans argument)
  * ================================================================ */

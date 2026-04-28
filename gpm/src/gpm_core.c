@@ -1,5 +1,5 @@
 // gpm_core.c - Implémentation du nouveau cœur
-#include "gpm_v2.h"
+#include "gpm.h"
 #include <libgen.h>
 #include <dirent.h>
 #include <sys/wait.h>

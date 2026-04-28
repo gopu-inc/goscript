@@ -291,7 +291,7 @@ int gpm_build_package(void);
 int gpm_lockfile_read(Lockfile* lock);
 int gpm_lockfile_write(Lockfile* lock);
 int gpm_lockfile_generate(DepNode* tree);
-
+Dependency gpm_dependency_parse(const char* name, const char* constraint);
 // Réseau
 int gpm_network_init(void);
 char* gpm_network_get(const char* url, long* status);

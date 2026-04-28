@@ -251,6 +251,7 @@ int gpm_manifest_read(Manifest* manifest);
 int gpm_manifest_write(Manifest* manifest);
 int gpm_manifest_validate(Manifest* manifest);
 
+void gpm_flatten_tree_to_list(DepNode* node, DepNode*** list, int* count);
 // Version
 SemVer gpm_semver_parse(const char* version);
 int gpm_semver_compare(SemVer a, SemVer b);

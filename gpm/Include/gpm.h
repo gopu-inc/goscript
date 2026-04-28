@@ -263,6 +263,30 @@ int gpm_flatten_tree(DepNode* root);
 int gpm_hoist_dependencies(DepNode* root);
 void gpm_free_dep_tree(DepNode* node);
 
+// Dépendances
+Dependency gpm_dependency_parse(const char* name, const char* constraint);
+char* gpm_resolve_version(Dependency* dep);
+
+// Arbre
+void gpm_print_tree(DepNode* node, int depth);
+void gpm_flatten_tree_to_list(DepNode* node, DepNode*** list, int* count);
+
+// Lockfile
+int gpm_compute_integrity(const char* name, const char* version, char* output);
+
+// Installation
+int gpm_init_project(const char* name, const char* version);
+
+// Publication
+int gpm_publish(void);
+
+// Authentification
+int gpm_login(const char* username, const char* password);
+int gpm_logout(void);
+
+// Build
+int gpm_build_package(void);
+
 // Lockfile
 int gpm_lockfile_read(Lockfile* lock);
 int gpm_lockfile_write(Lockfile* lock);

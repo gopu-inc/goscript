@@ -1,9 +1,85 @@
 // src/install.c
 #include "gpm.h"
 
+
 /* ================================================================
- * TÉLÉCHARGER UN PACKAGE DEPUIS LE REGISTRE
+ * INITIALISER UN NOUVEAU PROJET (gpm init)
  * ================================================================ */
+
+int gpm_init_project(const char* name, const char* version) {
+    printf("\n");
+    printf(COLOR_CYAN COLOR_BOLD);
+    printf("╔══════════════════════════════════════════════════╗\n");
+    printf("║     GPM v%s - Initialisation de projet           ║\n", GPM_VERSION);
+    printf("╚══════════════════════════════════════════════════╝\n");
+    printf(COLOR_RESET "\n");
+    
+    Manifest manifest = {0};
+    char input[256];
+    
+    // Nom du package
+    printf("package name: (%s) ", name ? name : "my-project");
+    fflush(stdout);
+    if (fgets(input, sizeof(input), stdin)) {
+        input[strcspn(input, "\n")] = '\0';
+    }
+    strncpy(manifest.name, (input[0] && strcmp(input, "") != 0) ? input : (name ? name : "my-project"), sizeof(manifest.name) - 1);
+    
+    // Version
+    printf("version: (1.0.0) ");
+    fflush(stdout);
+    if (fgets(input, sizeof(input), stdin)) {
+        input[strcspn(input, "\n")] = '\0';
+    }
+    strncpy(manifest.version, (input[0] && strcmp(input, "") != 0) ? input : (version ? version : "1.0.0"), sizeof(manifest.version) - 1);
+    
+    // Description
+    printf("description: ");
+    fflush(stdout);
+    if (fgets(manifest.description, sizeof(manifest.description), stdin)) {
+        manifest.description[strcspn(manifest.description, "\n")] = '\0';
+    }
+    
+    // Point d'entrée
+    printf("entry point: (main.gjs) ");
+    fflush(stdout);
+    if (fgets(manifest.main, sizeof(manifest.main), stdin)) {
+        manifest.main[strcspn(manifest.main, "\n")] = '\0';
+    }
+    if (!manifest.main[0]) strcpy(manifest.main, "main.gjs");
+    
+    // Auteur
+    printf("author: ");
+    fflush(stdout);
+    if (fgets(manifest.author, sizeof(manifest.author), stdin)) {
+        manifest.author[strcspn(manifest.author, "\n")] = '\0';
+    }
+    
+    // Licence
+    printf("license: (MIT) ");
+    fflush(stdout);
+    if (fgets(manifest.license, sizeof(manifest.license), stdin)) {
+        manifest.license[strcspn(manifest.license, "\n")] = '\0';
+    }
+    if (!manifest.license[0]) strcpy(manifest.license, "MIT");
+    
+    // Valeurs par défaut
+    strcpy(manifest.release, "r0");
+    strcpy(manifest.arch, gpm_config.arch[0] ? gpm_config.arch : "x86_64");
+    
+    // Écrire le manifest
+    if (gpm_manifest_write(&manifest) == 0) {
+        printf("\n");
+        LOG_SUCCESS("Projet initialisé !");
+        LOG_INFO("  Manifest: %s", GPM_MANIFEST_FILE);
+        LOG_INFO("  Package: %s@%s", manifest.name, manifest.version);
+        LOG_INFO("  Exécutez 'gpm install' pour installer les dépendances");
+        return 0;
+    }
+    
+    return -1;
+}
+
 
 static int download_package(const char* name, const char* version, char* output_path) {
     // Construire l'URL de téléchargement

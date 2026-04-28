@@ -1,4 +1,4 @@
-# gpm/Makefile
+# gpm/Makefile - AJOUTER les nouveaux fichiers
 CC = gcc
 CFLAGS = -Wall -Wextra -O2 -I./include
 LDFLAGS = -lcurl -ljansson -lssl -lcrypto
@@ -16,6 +16,8 @@ SOURCES = $(SRC_DIR)/main.c \
           $(SRC_DIR)/network.c \
           $(SRC_DIR)/install.c \
           $(SRC_DIR)/lockfile.c \
+          $(SRC_DIR)/publish.c \
+          $(SRC_DIR)/build.c \
           $(SRC_DIR)/utils.c
 
 OBJECTS = $(SOURCES:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o)

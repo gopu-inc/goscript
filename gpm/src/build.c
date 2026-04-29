@@ -54,6 +54,17 @@ int gpm_build_package(void) {
             system(cmd);
         }
     }
+
+// 1. Copier obligatoirement le Manifest.toml
+char cmd_manifest[1024];
+snprintf(cmd_manifest, sizeof(cmd_manifest), "cp Manifest.toml '%s/'", build_dir);
+system(cmd_manifest);
+
+// 2. Si tu veux que GPM inclue automatiquement les .gjs (comme tu l'as fait manuellement)
+char cmd_sources[1024];
+snprintf(cmd_sources, sizeof(cmd_sources), "cp *.gjs '%s/' 2>/dev/null", build_dir);
+system(cmd_sources);
+
     
     // Créer l'archive .tar.bool
     char archive_name[512];

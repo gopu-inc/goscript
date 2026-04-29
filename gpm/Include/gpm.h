@@ -136,10 +136,7 @@ typedef struct {
     int dep_count;
     Dependency* dev_dependencies;
     int dev_dep_count;
-
-    int bin_count;
-    BinEntry bins[GPM_MAX_BINS];
-
+    
     // Scripts npm-like
     char scripts_preinstall[1024];
     char scripts_install[1024];
@@ -161,14 +158,6 @@ typedef struct {
     char sha256[128];
     time_t created_at;
 } Manifest;
-
-#define GPM_MAX_BINS 10
-
-typedef struct {
-    char cmd_name[64];
-    char script_path[256];
-} BinEntry;
-
 
 // Configuration GPM
 typedef struct {

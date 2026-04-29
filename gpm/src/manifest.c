@@ -72,7 +72,34 @@ int gpm_manifest_read(Manifest* manifest) {
             }
             continue;
         }
+       
+    if (strcmp(section, "bin") == 0) {
+        continue;
+    }
+}
+
+if (strcmp(section, "bin") == 0) {
+    char* eq = strchr(line, '=');
+    if (eq && manifest->bin_count < GPM_MAX_BINS) {
+        *eq = '\0';
+        char* key = line; // Tu peux utiliser une fonction de trim ici
+        char* val = eq + 1;
         
+        // Nettoyer les espaces et guillemets (simplifié)
+        while(*key == ' ' || *key == '\t') key++;
+        char* end_key = key + strlen(key) - 1;
+        while(end_key > key && (*end_key == ' ' || *end_key == '\t')) *end_key-- = '\0';
+        
+        while(*val == ' ' || *val == '\t' || *val == '"') val++;
+        char* end_val = val + strlen(val) - 1;
+        while(end_val > val && (*end_val == ' ' || *end_val == '\t' || *end_val == '"')) *end_val-- = '\0';
+
+        strncpy(manifest->bins[manifest->bin_count].cmd_name, key, 63);
+        strncpy(manifest->bins[manifest->bin_count].script_path, val, 255);
+        manifest->bin_count++;
+    }
+}
+
         // Clé = valeur
         char* eq = strchr(line, '=');
         if (!eq) continue;

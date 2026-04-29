@@ -128,7 +128,40 @@ int gpm_install_package(const char* name, const char* version) {
         rmdir(gpm_modules_path);
         unlink(gpm_modules_path);
     }
+    // Dans install.c, vers la fin de l'installation réussie du package :
+
+if (manifest.bin_count > 0) {
+    LOG_INFO("Création des liens exécutables...");
     
+    // S'assurer que le dossier de destination existe
+    system("mkdir -p /usr/local/bin");
+    
+    for (int i = 0; i < manifest.bin_count; i++) {
+        char target[1024];
+        char link[1024];
+        char cmd[2048];
+        
+        // Le chemin absolu vers le script installé
+        snprintf(target, sizeof(target), "%s/%s/%s", 
+                 GPM_LIB_DIR, manifest.name, manifest.bins[i].script_path);
+                 
+        // Le chemin absolu vers le raccourci global
+        snprintf(link, sizeof(link), "/usr/local/bin/%s", manifest.bins[i].cmd_name);
+        
+        // 1. Rendre le script original exécutable (chmod +x)
+        snprintf(cmd, sizeof(cmd), "chmod +x '%s'", target);
+        system(cmd);
+        
+        // 2. Créer le lien symbolique (ln -sf cible lien)
+        snprintf(cmd, sizeof(cmd), "ln -sf '%s' '%s'", target, link);
+        if (system(cmd) == 0) {
+            LOG_SUCCESS("  [GPM] %s -> %s", manifest.bins[i].cmd_name, manifest.bins[i].script_path);
+        } else {
+            LOG_ERROR("  [GPM] Échec de la création du lien pour %s", manifest.bins[i].cmd_name);
+        }
+    }
+}
+
     // Créer un lien symbolique vers /usr/local/lib/goscript/pkg
     snprintf(cmd, sizeof(cmd), 
              "ln -sf '%s' '%s' 2>/dev/null || cp -r '%s' '%s'",

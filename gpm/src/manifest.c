@@ -179,7 +179,7 @@ if (strcmp(section, "bin") == 0) {
                 strncpy(manifest->scripts_test, value, sizeof(manifest->scripts_test) - 1);
             }
         }
-    }
+    
     
     fclose(f);
     

@@ -1,20 +1,33 @@
-# Goscript
+# GPM - Goscript Package Manager
+*.o
+*.obj
 *.exe
 *.out
-*.o
+*.app
+gpm
+gpm.exe
 *.a
 *.so
 *.dylib
-
-# IDE
-.vscode/
+*.dll
+*.pdb
+*.ilk
+*.user
+*.vs
+_cache/
+*.cache
+*.log
 .idea/
+.vscode/
 *.swp
 *.swo
-
-# OS
+*~
 .DS_Store
 Thumbs.db
-
-# Logs
-*.log
+test_modules/
+tmp/
+temp/
+*.tmp
+*.temp
+gpm.local.conf
+.gpmrc

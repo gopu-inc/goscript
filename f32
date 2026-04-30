@@ -1,0 +1,16 @@
+     1                                  section .data
+     2                                      ; On définit les variables ici si nécessaire
+     3                                  
+     4                                  section .text
+     5                                      global _start       ; Point d'entrée pour l'éditeur de liens (ld)
+     6                                  
+     7                                  _start:
+     8 00000000 66B808000000                mov eax, 8          ; Met la valeur 8 dans le registre EAX
+     9                                      
+    10                                      ; Pour afficher ou tester, nous allons simplement 
+    11                                      ; quitter le programme en retournant le code 8.
+    12 00000006 6689C3                      mov ebx, eax        ; EBX contient le code de retour (8)
+    13 00000009 66B801000000                mov eax, 1          ; Code de l'appel système 'sys_exit'
+    14 0000000F CD90                        int 0x90            ; Interruption logicielle pour appeler le noyau
+    15                                    
+    16                                      

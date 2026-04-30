@@ -2,7 +2,7 @@
                     GOSCRIPT LANGUAGE SPECIFICATION
 ================================================================================
 
-Date: 2026-04-25 09:30:07
+Date: 2026-04-28 10:19:45
 Contient TOUT le code source du langage Goscript
 
 ================================================================================
@@ -570,12 +570,13 @@ ASTNode* program_root;
 /* Non-terminals */
 %type <node> switch_statement ternary_expr
 %type <node> try_statement catch_block finally_block throw_statement
-%type <node> module_decl dict_access
+%type <node> module_decl 
 %type <node> continue_statement
 %type <node> use_statement
 %type <string> import_path use_path
 %type <node_list> array_patterns
 %type <node> sysf_expr sh_expr
+%type <node> bracket_access
 %type <node> import_constraints import_options
 %type <node_list> name_list
 %type <node> dict_expr dict_type
@@ -592,7 +593,7 @@ ASTNode* program_root;
 %type <node_list> statement_list argument_list param_list struct_fields enum_variants array_items match_cases function_decl_list struct_init_fields
 %type <node> break_statement
 %type <node> nnl_statement jmp_statement
-%type <node> lambda_expr array_access
+%type <node> lambda_expr 
 %type <node> async_expr await_expr spawn_expr
 %type <node> async_function_decl
 %type <string> import_path_tail
@@ -954,12 +955,10 @@ dict_entry_list:
     ;
 
 /* Accès dictionnaire */
-dict_access:
+/* UNIFIE : un seul type d'accès par crochet */
+bracket_access:
     primary_expr TOKEN_LBRACKET expression TOKEN_RBRACKET {
-        // Détecter si c'est un accès dictionnaire ou tableau
-        // Par défaut, c'est un accès tableau, mais on peut différencier par le type
-        // Pour l'instant, on crée un nœud d'accès dictionnaire
-        $$ = create_dict_access_node($1, $3);
+        $$ = create_array_access_node($1, $3);
     }
     ;
 
@@ -1324,11 +1323,7 @@ lambda_expr:
     ;
 
 // Array access
-array_access:
-    primary_expr TOKEN_LBRACKET expression TOKEN_RBRACKET {
-        $$ = create_array_access_node($1, $3);
-    }
-    ;
+
 
 primary_expr:
     TOKEN_NUMBER {
@@ -1356,13 +1351,12 @@ primary_expr:
         $$ = $2;
     }
     | call_expr
-    | dict_access
+    | bracket_access
     | dict_expr
     | array_expr
     | struct_expr
     | member_access
     | lambda_expr
-    | array_access
     | await_expr
     | sysf_expr  
     | sh_expr   
@@ -3232,6 +3226,9 @@ void interpret_program(ASTNode* program);
 #include "interpreter.h"
 #include <dlfcn.h>
 #include <ffi.h>
+
+
+
 
 
 extern void register_native_c_functions(Environment* env);
@@ -5209,6 +5206,8 @@ case NODE_ARRAY_ACCESS: {
     Value idx = evaluate_expr(node->array_access.index, env);
     
     // Cas 1: Tableau
+    
+    // Cas 1: Tableau
     if (container.type == 8 && idx.type == 0) {
         int index = idx.int_val;
         if (index >= 0 && index < container.array_val.count) {
@@ -5943,7 +5942,7 @@ void interpret_program(ASTNode* program) {
     } else {
         global_args_val.array_val.elements = NULL;
     }
-    env_set(global, "args", global_args_val);
+    env_set(global, "ARGV", global_args_val);
     
     // ============================================
     // ENREGISTREMENT DES STRUCTURES ET FONCTIONS
@@ -6795,12 +6794,12 @@ static LoadedModule* load_file_module(const char* full_path, const char* module_
                 case NODE_EXPORT:
                     register_export(mod, stmt->export.name, NULL);
                     break;
-             /*   
+              
                 case NODE_IMPORT:
                     evaluate_statement(stmt, mod->env, full_path);
                     break;
                 // ----------------------------------------------
-                    */
+                    
                 default:
                     break;
             }
@@ -7923,125 +7922,73 @@ void print_ast(ASTNode* node, int depth) {
 11. MAKEFILE
 ================================================================================
 
-CC = gcc
-CFLAGS = -Wall -g -O0 -I./src -I./src/ast -I./src/interpreter
-LDFLAGS = -lm -ldl -lffi
+/**
+ * =========================================================================
+ * GPM (Goscript Package Manager) v1.0.0
+ * Copyright (c) 2026 Gopu.inc Team
+ * =========================================================================
+ */
 
-# Détection automatique de l'architecture
+CXX = g++
+CXXFLAGS = -std=c++17 -Wall -Wextra -O2 -march=native
+LDFLAGS = -lcurl -lssl -lcrypto -lz -lpthread -ldl
+
 UNAME_S := $(shell uname -s)
-UNAME_M := $(shell uname -m)
 
-# Pas de -march par défaut, on laisse gcc choisir
 ifeq ($(UNAME_S),Linux)
-    ifeq ($(UNAME_M),x86_64)
-        MARCH = -march=x86-64
-    else ifeq ($(UNAME_M),i686)
-        MARCH = -march=i686
-    else ifeq ($(UNAME_M),i586)
-        MARCH = -march=i586
-    else ifeq ($(UNAME_M),aarch64)
-        MARCH = -march=armv8-a
-    else ifeq ($(UNAME_M),armv7l)
-        MARCH = -march=armv7-a
-    else ifeq ($(UNAME_M),armv8l)
-        MARCH = -march=armv8-a
-    else
-        MARCH =
-    endif
+    CXXFLAGS += -DPLATFORM_LINUX
 else ifeq ($(UNAME_S),Darwin)
-    ifeq ($(UNAME_M),arm64)
-        MARCH = -arch arm64
-    else
-        MARCH = -arch x86_64
-    endif
-else
-    MARCH =
+    CXXFLAGS += -DPLATFORM_MACOS -I/usr/local/opt/openssl/include
+    LDFLAGS += -L/usr/local/opt/openssl/lib
 endif
 
-# Ajouter MARCH aux CFLAGS s'il est défini
-ifneq ($(MARCH),)
-    CFLAGS += $(MARCH)
-endif
+SRC_DIR = gpm
+BUILD_DIR = build
+BIN_DIR = bin
+INCLUDE_DIRS = -I$(SRC_DIR)
+SOURCES = $(shell find $(SRC_DIR) -name '*.cpp' -type f)
+OBJECTS = $(SOURCES:$(SRC_DIR)/%.cpp=$(BUILD_DIR)/%.o)
+DEPS = $(OBJECTS:.o=.d)
+TARGET = $(BIN_DIR)/gpm
 
-# Sources
-SCANNER_C = scanner.c
-PARSER_C = parser.c
-PARSER_H = parser.h
+.PHONY: all clean install uninstall test debug release help
 
-SOURCES = $(SCANNER_C) $(PARSER_C) \
-          src/ast/ast.c \
-          src/main.c \
-          src/interpreter/interpreter_env.c \
-          src/interpreter/interpreter_import.c \
-          src/interpreter/interpreter_ffi.c \
-          src/interpreter/interpreter_eval.c
+all: $(TARGET)
 
-OBJECTS = scanner.o parser.o ast.o main.o \
-          interpreter_env.o interpreter_import.o \
-          interpreter_ffi.o interpreter_eval.o
+$(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp
+	@mkdir -p $(dir $@)
+	@$(CXX) $(CXXFLAGS) $(INCLUDE_DIRS) -MMD -c $< -o $@
 
-TARGET = gd
-
-all: $(SCANNER_C) $(PARSER_C) $(TARGET)
-
-# Scanner - avec suppression du warning de règle non matchée
-$(SCANNER_C): src/lexer/scanner.l
-	flex -o $(SCANNER_C) src/lexer/scanner.l 2>&1 | grep -v "warning, rule cannot be matched" || true
-
-# Parser - avec gestion des conflits (acceptable pour l'instant)
-$(PARSER_C) $(PARSER_H): src/parser/parser.y
-	bison -d -o $(PARSER_C) src/parser/parser.y
-
-# AST
-ast.o: src/ast/ast.c src/ast/ast.h
-	$(CC) $(CFLAGS) -c src/ast/ast.c -o ast.o
-
-# Main
-main.o: src/main.c
-	$(CC) $(CFLAGS) -c src/main.c -o main.o
-
-# Interpreter
-interpreter_env.o: src/interpreter/interpreter_env.c src/interpreter/interpreter.h
-	$(CC) $(CFLAGS) -c src/interpreter/interpreter_env.c -o interpreter_env.o
-
-interpreter_import.o: src/interpreter/interpreter_import.c src/interpreter/interpreter.h
-	$(CC) $(CFLAGS) -c src/interpreter/interpreter_import.c -o interpreter_import.o
-
-interpreter_ffi.o: src/interpreter/interpreter_ffi.c src/interpreter/interpreter.h
-	$(CC) $(CFLAGS) -c src/interpreter/interpreter_ffi.c -o interpreter_ffi.o
-
-interpreter_eval.o: src/interpreter/interpreter_eval.c src/interpreter/interpreter.h
-	$(CC) $(CFLAGS) -c src/interpreter/interpreter_eval.c -o interpreter_eval.o
-
-# Scanner et Parser objects
-scanner.o: $(SCANNER_C) $(PARSER_H)
-	$(CC) $(CFLAGS) -c $(SCANNER_C) -o scanner.o
-
-parser.o: $(PARSER_C) $(PARSER_H)
-	$(CC) $(CFLAGS) -c $(PARSER_C) -o parser.o
-
-# Link
 $(TARGET): $(OBJECTS)
-	$(CC) $(CFLAGS) $(OBJECTS) -o $(TARGET) $(LDFLAGS)
+	@mkdir -p $(BIN_DIR)
+	@$(CXX) $(CXXFLAGS) $^ -o $@ $(LDFLAGS)
+
+install: $(TARGET)
+	@mkdir -p /usr/local/bin /usr/local/lib/goscript /usr/local/lib/gpm
+	@cp $(TARGET) /usr/local/bin/gpm
+
+uninstall:
+	@rm -f /usr/local/bin/gpm
+
+test: $(TARGET)
+	@./$(TARGET) --version
+	@./$(TARGET) --help
 
 clean:
-	rm -f $(SCANNER_C) $(PARSER_C) $(PARSER_H)
-	rm -f $(OBJECTS)
-	rm -f $(TARGET)
+	@rm -rf $(BUILD_DIR) $(BIN_DIR)
 
-install:
-	cp $(TARGET) /usr/local/bin/
-	mkdir -p /usr/local/lib/goscript
-	cp -r lib/* /usr/local/lib/goscript/ 2>/dev/null || true
+debug: CXXFLAGS += -g -O0 -DDEBUG
+debug: all
 
-# Afficher l'architecture détectée
-debug:
-	@echo "OS: $(UNAME_S)"
-	@echo "Arch: $(UNAME_M)"
-	@echo "MARCH: $(MARCH)"
-	@echo "CFLAGS: $(CFLAGS)"
+release: CXXFLAGS += -O3 -DNDEBUG -flto
+release: LDFLAGS += -flto
+release: all
 
-.PHONY: all clean install debug
+help:
+	@echo "GPM v1.0.0"
+	@echo "Cibles: all install uninstall clean debug release test help"
+
+-include $(DEPS)
 
 
 ================================================================================
@@ -8049,1846 +7996,51 @@ debug:
 ================================================================================
 
 ----------------------------------------
-MODULE: lib/__builtin__.gjs
+MODULE: lib/gcsv.gjs
 ----------------------------------------
-module __builtin__
+module gcsv
 
-pub fn inputln(): string {
-    // Utilisation de -r pour éviter les problèmes avec les backslashes
-    ret sysf("read -r _tmp_var && echo $_tmp_var")
-}
-// Fonction typeod simplifiée - Détection de type fiable
-// Fonction typeod simplifiée
-pub fn typeod(v: any): string {
-    if v == nil { ret "nil" }
-    
-    // Test simple via sysf pour éviter les try/catch imbriqués qui font planter le lexer
-    lt is_bool = sysf("case '" + v + "' in true|false) echo 1;; *) echo 0;; esac")
-    if is_bool == "1" { ret "bool" }
-
-    // Si on peut concaténer avec une chaîne, c'est un type simple (string/int)
-    ret "string" 
-}
-
-pub fn ints(s: string): int {
-    if s == nil || s == "" {
-        ret 0
-    }
-    ret atoi_c(s)
-}
-
-pub fn str(v: any): string {
-    if v == nil {
-        ret "nil"
-    }
-    // Utilisation de %s pour être plus propre avec printf si dispo, 
-    // sinon echo -n est très bien
-    ret sysf("echo -n \"" + v + "\"")
-}
-
-// Ajout du support void pour les fonctions système
-pub fn exit(code: int): void {
-    sh("exit " + str(code))
-}
-
-// Fonction len universelle pour Goscript
-fn len(obj) {
-    if obj == nil {
-        ret 0
-    }
-
-    // Le langage supporte l'itération sur les chaînes, tableaux et dictionnaires
-    // On utilise une boucle while avec un compteur pour déterminer la taille
-    muts count = 0
-    
-    // En Goscript, l'accès par index fonctionne pour les chaînes et les tableaux
-    // Pour les dictionnaires, l'itération 'for in' est généralement utilisée
-    // Mais voici une approche générique par parcours :
-    
-    try {
-        // Tentative de parcours pour les types itérables
-        for item in obj {
-            count = count + 1
-        }
-    } catch (e) {
-        // Si l'objet n'est pas itérable (ex: int, bool), on retourne 0 ou on gère l'erreur
-        ret 0
-    }
-    
-    ret count
-}
-
-pub fn trim(s: string): string {
-    if s == nil || len(s) == 0 { 
-        ret "" 
-    }
-    
-    muts start_found = false
-    muts res = ""
-    muts trailing_spaces = ""
-    
-    // On utilise 'for in' pour éviter le bug du NODE(17) (indexation)
-    for c in s {
-        if !start_found {
-            // On saute les espaces au début
-            if c == " " || c == "\t" || c == "\n" || c == "\r" {
-                continue
-            }
-            start_found = true
-        }
-        
-        if start_found {
-            if c == " " || c == "\t" || c == "\n" || c == "\r" {
-                // On stocke les espaces temporairement
-                // S'il y a d'autres caractères après, on les ajoutera
-                trailing_spaces = trailing_spaces + c
-            } else {
-                // On ajoute les espaces accumulés précédemment + le caractère actuel
-                res = res + trailing_spaces + c
-                trailing_spaces = ""
-            }
-        }
-    }
-    
-    ret res
-}
-/*
-for c in s {
-        if !start_found {
-            // On saute les espaces au début
-            if c == " " || c == "\t" || c == "\n" || c == "\r" {
-                continue
-            }
-            start_found = true
-        }
-        
-        if start_found {
-            if c == " " || c == "\t" || c == "\n" || c == "\r" {
-                // On stocke les espaces temporairement
-                // S'il y a d'autres caractères après, on les ajoutera
-                trailing_spaces = trailing_spaces + c
-            } else {
-                // On ajoute les espaces accumulés précédemment + le caractère actuel
-                res = res + trailing_spaces + c
-                trailing_spaces = ""
-            }
-        }
-    }
-    
-    ret res
-}
-*/
-
-
-----------------------------------------
-MODULE: lib/__os.gjs
-----------------------------------------
-// Module __os - Informations système via await
-// Pas de FFI, uniquement des commandes shell
-
-// Version de l'OS
-pub fn version(): string {
-    lt v = await "cat /etc/os-release 2>/dev/null | grep VERSION_ID | cut -d= -f2 | tr -d '\"'"
-    if v == nil || v == "" {
-        v = await "uname -r"
-    }
-    ret trim(v)
-}
-
-// Nom de l'OS
-pub fn name(): string {
-    lt n = await "cat /etc/os-release 2>/dev/null | grep NAME | head -1 | cut -d= -f2 | tr -d '\"'"
-    if n == nil || n == "" {
-        n = await "uname -s"
-    }
-    ret trim(n)
-}
-
-// Architecture
-pub fn arch(): string {
-    ret trim(await "uname -m")
-}
-
-// Nom d'hôte
-pub fn hostname(): string {
-    ret trim(await "hostname")
-}
-
-// Utilisateur courant
-pub fn user(): string {
-    ret trim(await "whoami")
-}
-
-// Uptime système
-pub fn uptime(): string {
-    ret trim(await "uptime")
-}
-
-// Date et heure
-pub fn datetime(): string {
-    ret trim(await "date")
-}
-
-// Timestamp Unix
-pub fn timestamp(): int {
-    lt ts = await "date +%s"
-    ret to_int(trim(ts))
-}
-
-// PID du processus courant
-pub fn pid(): int {
-    lt p = await "echo $$"
-    ret to_int(trim(p))
-}
-
-// Variables d'environnement
-pub fn getenv(key: string): string {
-    ret trim(await "echo $" + key)
-}
-
-// Chemins système
-pub fn cwd(): string {
-    ret trim(await "pwd")
-}
-
-pub fn home(): string {
-    ret trim(await "echo $HOME")
-}
-
-pub fn temp(): string {
-    ret trim(await "echo /tmp")
-}
-
-// Fonction helper
-fn trim(s: string): string {
-    if s == nil { ret "" }
-    muts l = len(s)
-    muts st = 0
-    muts en = l - 1
-    while st < l {
-        if s[st] == 10 || s[st] == 13 {
-            st = st + 1
-        } else { break }
-    }
-    while en >= 0 {
-        if s[en] == 10 || s[en] == 13 {
-            en = en - 1
-        } else { break }
-    }
-    if st > en { ret "" }
-    muts res = ""
-    muts i = st
-    while i <= en {
-        res = res + s[i]
-        i = i + 1
-    }
-    ret res
-}
-
-fn to_int(s: string): int {
-    if s == nil { ret 0 }
-    muts res = 0
-    muts i = 0
-    while i < len(s) {
-        muts c = s[i]
-        if c >= 48 && c <= 57 {
-            res = res * 10 + (c - 48)
-        } else { break }
-        i = i + 1
-    }
-    ret res
-}
-
-fn len(s: string): int {
-    if s == nil { ret 0 }
-    muts count = 0
-    muts i = 0
-    loop {
-        if s[i] == nil { break }
-        count = count + 1
-        i = i + 1
-    }
-    ret count
-}
-
-
-----------------------------------------
-MODULE: lib/__str.gjs
-----------------------------------------
-// Module __str - Version ultra-minimaliste
-// Seulement les fonctions qui ne causent pas de segfault
-
-pub fn len(s: string): int {
-    if s == nil { ret 0 }
-    ret strlen_c(s)
-}
-
-pub fn contains(s: string, sub: string): bool {
-    if s == nil || sub == nil { ret false }
-    ret strstr_c(s, sub) != nil
-}
-
-pub fn to_int(s: string): int {
-    if s == nil { ret 0 }
-    ret atoi_c(s)
-}
-
-pub fn to_float(s: string): float {
-    if s == nil { ret 0.0 }
-    ret atof_c(s)
-}
-
-// Pas de to_upper, to_lower, trim, substring pour l'instant
-
-
-----------------------------------------
-MODULE: lib/__str_min.gjs
-----------------------------------------
-pub fn len(s: string): int {
-    if s == nil {
-        ret 0
-    }
-    ret 100  // Valeur factice pour tester
-}
-
-pub fn to_upper(s: string): string {
-    ret s
-}
-
-
-----------------------------------------
-MODULE: lib/b64.gjs
-----------------------------------------
-// lib/b64.gjs
-module b64
-
-// Encode a string to Base64
-pub fn encode(data: string): string {
-    // On passe la string via printf pour éviter le \n final, puis base64
-    ret sysf("printf '" + data + "' | base64")
-}
-
-// Decode a Base64 string
-pub fn decode(data: string): string {
-    // On décode via base64 -d
-    ret sysf("printf '" + data + "' | base64 -d")
-}
-
-
-
-----------------------------------------
-MODULE: lib/c__builtin__.gjs
-----------------------------------------
-// ============================================
-// Built-in Module for Gopu.inc
-// Chargé automatiquement au démarrage
-// ============================================
-
-pub const VERSION = "0.2.0"
-pub const AUTHOR = "Gopu.inc Team"
-pub const PI = 3.141592653589793
-pub const E = 2.718281828459045
-pub const DEBUG = false
-
-// ============================================
-// Assertions
-// ============================================
-pub fn assert(condition: bool, message: string): bool {
-    if !condition {
-        println("[ASSERT FAILED] " + message)
-        ret false
-    }
-    ret true
-}
-
-pub fn assert_eq(a, b, message: string): bool {
-    if a != b {
-        println("[ASSERT FAILED] " + message + " (" + a + " != " + b + ")")
-        ret false
-    }
-    ret true
-}
-
-// ============================================
-// Logging utilities
-// ============================================
-pub fn log(level: string, msg: string) {
-    println("[" + level + "] " + msg)
-}
-
-pub fn info(msg: string) {
-    log("INFO", msg)
-}
-
-pub fn warn(msg: string) {
-    log("WARN", msg)
-}
-
-pub fn error(msg: string) {
-    log("ERROR", msg)
-}
-
-pub fn debug(msg: string) {
-    if DEBUG {
-        log("DEBUG", msg)
-    }
-}
-
-// ============================================
-// Math utilities
-// ============================================
-pub fn abs(x: int): int {
-    if x < 0 {
-        ret -x
-    }
-    ret x
-}
-
-pub fn max(a, b) {
-    if a > b {
-        ret a
-    }
-    ret b
-}
-
-pub fn min(a, b) {
-    if a < b {
-        ret a
-    }
-    ret b
-}
-
-pub fn clamp(x, low, high) {
-    if x < low {
-        ret low
-    }
-    if x > high {
-        ret high
-    }
-    ret x
-}
-
-// ============================================
-// String utilities
-// ============================================
-pub fn is_empty(s: string): bool {
-    ret s == ""
-}
-
-pub fn not_empty(s: string): bool {
-    ret s != ""
-}
-
-pub fn len(s: string): int {
-    muts count = 0
-    for _ in s {
-        count = count + 1
-    }
-    ret count
-}
-
-pub fn contains(s: string, substr: string): bool {
-    muts i = 0
-    muts s_len = len(s)
-    muts sub_len = len(substr)
-    
-    while i <= s_len - sub_len {
-        muts j = 0
-        muts match = true
-        while j < sub_len {
-            if s[i + j] != substr[j] {
-                match = false
-                break
-            }
-            j = j + 1
-        }
-        if match {
-            ret true
-        }
-        i = i + 1
-    }
-    ret false
-}
-
-// ============================================
-// Type utilities
-// ============================================
-pub fn type_of(value) {
-    ret "unknown"
-}
-
-// ============================================
-// Timing utilities
-// ============================================
-pub fn now(): int {
-    ret system("date +%s")
-}
-
-
-----------------------------------------
-MODULE: lib/crypto.gjs
-----------------------------------------
-// lib/crypto.gjs
-module crypto
-
-// Hash using sha256sum
-pub fn sha256(data: string): string {
-    // On utilise printf pour envoyer la string sans \n, puis sha256sum
-    lt cmd = "printf '" + data + "' | sha256sum | awk '{print $1}'"
-    ret sysf(cmd)
-}
-
-// Hash using md5sum
-pub fn md5(data: string): string {
-    lt cmd = "printf '" + data + "' | md5sum | awk '{print $1}'"
-    ret sysf(cmd)
-}
-
-
-
-----------------------------------------
-MODULE: lib/db.gjs
-----------------------------------------
-/* lib/db.gjs
-*/
-module db
-
-// Ajouter ou mettre à jour une entrée (Format KEY:VALUE)
-pub fn set(file: string, key: string, value: string) {
-    // On supprime l'ancienne clé si elle existe, puis on ajoute la nouvelle
-    // C'est l'équivalent d'un "UPSERT"
-    lt cmd = "touch " + file + "; sed -i '/^" + key + ":/d' " + file + "; echo '" + key + ":" + value + "' >> " + file
-    sysf(cmd)
-}
-
-// Récupérer une valeur par sa clé
-pub fn get(file: string, key: string): string {
-    // On cherche la ligne commençant par key:, puis on coupe après le premier ':'
-    lt cmd = "grep '^" + key + ":' " + file + " | cut -d':' -f2-"
-    ret sysf(cmd)
-}
-
-// Vérifier si une clé existe
-pub fn exists(file: string, key: string): string {
-    ret sysf("grep -q '^" + key + ":' " + file + " && echo 'True' || echo 'False'")
-}
-
-// Supprimer une clé
-pub fn delete(file: string, key: string) {
-    sysf("sed -i '/^" + key + ":/d' " + file)
-}
-
-// Compter le nombre d'entrées
-pub fn count(file: string): string {
-    ret sysf("wc -l < " + file)
-}
-
-// Chercher toutes les lignes contenant un motif (pattern)
-pub fn search(file: string, pattern: string): string {
-    // -i pour ignorer la casse, tr pour mettre sur une seule ligne avec des virgules
-    ret sysf("grep -i '" + pattern + "' " + file + " | tr '\\n' ',' | sed 's/,$//'")
-}
-
-
-
-----------------------------------------
-MODULE: lib/deepseek.gjs
-----------------------------------------
-// ============================================
-// deepseek.gjs - Version ultra simple
-// ============================================
-
-module deepseek
-
-struct Config {
-    api_key: string
-}
-
-pub fn new_config(api_key: string): Config {
-    ret new Config{
-        api_key: api_key
-    }
-}
-
-pub fn ask(api_key: string, question: string): string {
-    lt cmd = "curl -s -X POST 'https://api.deepseek.com/v1/chat/completions' -H 'Content-Type: application/json' -H 'Authorization: Bearer " + api_key + "' -d '{\"model\":\"deepseek-chat\",\"messages\":[{\"role\":\"user\",\"content\":\"" + question + "\"}]}'"
-    
-    lt result = sysf(cmd)
-    ret result
-}
-
-
-----------------------------------------
-MODULE: lib/fs.gjs
-----------------------------------------
-// lib/fs.gjs
-module fs
-
-// Équivalent de fopen/fwrite (Écrase le fichier)
-pub fn write(path: string, content: string) {
-    sysf("echo '" + content + "' > " + path)
-}
-
-// Équivalent de fopen/fwrite (Ajoute à la fin)
-pub fn append(path: string, content: string) {
-    sysf("echo '" + content + "' >> " + path)
-}
-
-// Équivalent de fread (Lit tout le contenu)
-pub fn read(path: string): string {
-    ret sysf("cat " + path)
-}
-
-// Récupérer la taille du fichier (en octets)
-pub fn size(path: string): string {
-    ret sysf("stat -c %s " + path)
-}
-
-// Vérifier si un fichier existe
-pub fn exists(path: string): string {
-    ret sysf("[ -f " + path + " ] && echo 'True' || echo 'False'")
-}
-
-// Supprimer un fichier (unlink)
-pub fn remove(path: string) {
-    sysf("rm -rf " + path)
-}
-
-
-
-
-----------------------------------------
-MODULE: lib/groq.gjs
-----------------------------------------
-// ============================================
-// groq.gjs - Version ultra simple
-// ============================================
-
-module groq
-
-struct Config {
-    api_key: string
-}
-
-pub fn new_config(api_key: string): Config {
-    ret new Config{
-        api_key: api_key
-    }
-}
-
-pub fn ask(api_key: string, question: string): string {
-    lt cmd = "curl -s -X POST 'https://api.groq.com/openai/v1/chat/completions' -H 'Content-Type: application/json' -H 'Authorization: Bearer " + api_key + "' -d '{\"model\":\"llama3-8b-8192\",\"messages\":[{\"role\":\"user\",\"content\":\"" + question + "\"}]}'"
-    
-    lt result = sysf(cmd)
-    ret result
-}
-
-
-----------------------------------------
-MODULE: lib/http.gjs
-----------------------------------------
-// lib/http.gjs
-module http
-
-// Perform a simple HTTP GET request
-pub fn get(url: string): string {
-    lt cmd = "python3 -c \"import urllib.request; print(urllib.request.urlopen('" + url + "').read().decode())\""
-    ret sysf(cmd)
-}
-
-// Start a local HTTP server (Simple version)
-pub fn serve(port: int) {
-    println("🚀 GoScript Server running on port " + port)
-    
-    // On utilise directement le module http.server de python
-    // C'est la méthode la plus fiable en une ligne
-    lt cmd = "python3 -m http.server " + port
-    
-    sysf(cmd)
-}
-
-
-
-----------------------------------------
-MODULE: lib/io.gjs
-----------------------------------------
-// lib/io.gjs
-module io
-
-// Lire le contenu complet d'un fichier
-pub fn read_file(path: string): string {
-    lt py_code = "print(open('" + path + "', 'r', encoding='utf-8').read(), end='')"
-    ret sysf("python3 -c \"" + py_code + "\"")
-}
-
-// Écrire du contenu (écrase le fichier existant)
-pub fn write_file(path: string, content: string) {
-    // On utilise les triples apostrophes (''') pour englober la variable content
-    // Cela permet à Python de gérer les sauts de ligne nativement sans crasher
-    lt py_code = "open('" + path + "', 'w', encoding='utf-8').write('''" + content + "''')"
-    sysf("python3 -c \"" + py_code + "\"")
-}
-
-// Ajouter du contenu (à la fin du fichier)
-pub fn append_file(path: string, content: string) {
-    lt py_code = "open('" + path + "', 'a', encoding='utf-8').write('''" + content + "''')"
-    sysf("python3 -c \"" + py_code + "\"")
-}
-
-
-
-----------------------------------------
-MODULE: lib/json.gjs
-----------------------------------------
-// lib/json.gjs
-module json
-
-pub fn get(data: string, key: string): string {
-    // On affine le regex pour exclure les accolades à la fin [^",}]
-    lt cmd = "printf '" + data + "' | sed -n 's/.*\"" + key + "\": *\"\\?\\([^\",}]*\\)\"\\?.*/\\1/p' | sed 's/\"//g'"
-    ret sysf(cmd)
-}
-
-pub fn format(data: string): string {
-    lt cmd = "printf '" + data + "' | sed 's/,/,\\n /g; s/{/{\\n /g; s/}/\\n}/g'"
-    ret sysf(cmd)
-}
-
-pub fn is_json(data: string): string {
-    ret sysf("printf '" + data + "' | grep -qE '^[ \t]*[\{\[]' && echo 'True' || echo 'False'")
-}
-
-
-
-----------------------------------------
-MODULE: lib/math.gjs
-----------------------------------------
-// Math utilities for Goscript
-
-// lib/math.gjs
-module math
-
-// Racine carrée
-pub fn sqrt(n: float): string {
-    ret sysf("awk 'BEGIN { print sqrt(" + n + ") }'")
-}
-
-// Puissance (n^p)
-pub fn pow(n: float, p: float): string {
-    ret sysf("awk 'BEGIN { print " + n + " ^ " + p + " }'")
-}
-
-// Arrondi (Round)
-pub fn round(n: float): string {
-    ret sysf("awk 'BEGIN { printf(\"%.0f\", " + n + ") }'")
-}
-
-// Valeur absolue
-pub fn abs(n: float): string {
-    ret sysf("awk 'BEGIN { print (" + n + " < 0) ? -" + n + " : " + n + " }'")
-}
-
-// Générer un nombre aléatoire entre 0 et max
-pub fn random(max: int): string {
-    // Utilise l'heure actuelle comme graine (seed) pour plus de hasard
-    ret sysf("awk 'BEGIN { srand(); print int(rand() * " + max + ") }'")
-}
-
-
-
-----------------------------------------
-MODULE: lib/net.gjs
-----------------------------------------
-// lib/net.gjs
-module net
-
-// Simple HTTP GET using wget (BusyBox friendly)
-pub fn get(url: string): string {
-    // -q: quiet, -O -: output to stdout
-    ret sysf("wget -qO- '" + url + "'")
-}
-
-// Check if a host is alive
-pub fn ping(host: string): string {
-    // -c 1: one packet, -W 1: 1 second timeout
-    ret sysf("ping -c 1 -W 1 " + host + " > /dev/null && echo 'Online' || echo 'Offline'")
-}
-
-// Get local IP address
-pub fn local_ip(): string {
-    ret sysf("hostname -i | awk '{print $1}'")
-}
-
-
-
-----------------------------------------
-MODULE: lib/os.gjs
-----------------------------------------
-// lib/os.gjs
-module os
-
-// Get current working directory
-pub fn getcwd(): string {
-    ret sysf("pwd")
-}
-
-// List files (Compatible BusyBox / Android)
-pub fn list_dir(path: string): string {
-    // ls -1 (une colonne) puis tr pour remplacer \n par ", "
-    ret sysf("ls -1 " + path + " | tr '\\n' ',' | sed 's/,$//'")
-}
-
-// Check if a file or directory exists
-pub fn exists(path: string): string {
-    ret sysf("[ -e '" + path + "' ] && echo 'True' || echo 'False'")
-}
-
-// Get an environment variable
-pub fn getenv(name: string): string {
-    ret sysf("echo $" + name)
-}
-
-// Remove a file or directory
-pub fn remove(path: string) {
-    sysf("rm -rf " + path)
-}
-
-// Create a directory
-pub fn mkdir(path: string) {
-    sysf("mkdir -p " + path)
-}
-
-
-
-----------------------------------------
-MODULE: lib/random.gjs
-----------------------------------------
-// lib/random.gjs
-module random
-
-pub fn int(max: int): string {
-    ret sysf("awk -v max=" + max + " 'BEGIN { srand(); print int(rand() * max) }'")
-}
-
-pub fn string(length: int): string {
-    ret sysf("cat /dev/urandom | tr -dc 'a-zA-Z0-0' | fold -w " + length + " | head -n 1")
-}
-
-// UUID fait maison (Compatible tout système Linux/BusyBox)
-pub fn uuid(): string {
-    // On génère 16 octets aléatoires et on les formate
-    lt cmd = "hexdump -vn 16 -e '4/1 \"%02x\" \"-\" 2/1 \"%02x\" \"-\" 2/1 \"%02x\" \"-\" 2/1 \"%02x\" \"-\" 6/1 \"%02x\"' /dev/urandom"
-    ret sysf(cmd)
-}
-
-
-
-----------------------------------------
-MODULE: lib/sa.gjs
-----------------------------------------
-import http.transport
-
-fn main() {
-    // Utilisation de la méthode associée via l'impl
-    lt config = transport::TransportConfig::time(45)
-    
-    println("Configuration initiale :")
-    println(config.max_time)
-    
-    // Si tu as implémenté les setters
-    config.enable_ssl(false)
-    
-    println("SSL activé :")
-    println(config.verify_ssl)
-}
-
-
-
-----------------------------------------
-MODULE: lib/slib.gjs
-----------------------------------------
-fn trim(s: string): string {
-    if s == nil { ret "" }
-    muts l = len(s)
-    muts st = 0
-    muts en = l - 1
-    while st < l {
-        if s[st] == 10 || s[st] == 13 {
-            st = st + 1
-        } else { break }
-    }
-    while en >= 0 {
-        if s[en] == 10 || s[en] == 13 {
-            en = en - 1
-        } else { break }
-    }
-    if st > en { ret "" }
-    muts res = ""
-    muts i = st
-    while i <= en {
-        res = res + s[i]
-        i = i + 1
-    }
-    ret res
-}
-
-fn to_int(s: string): int {
-    if s == nil { ret 0 }
-    muts res = 0
-    muts i = 0
-    while i < len(s) {
-        muts c = s[i]
-        if c >= 48 && c <= 57 {
-            res = res * 10 + (c - 48)
-        } else { break }
-        i = i + 1
-    }
-    ret res
-}
-
-fn len(s: string): int {
-    if s == nil { ret 0 }
-    muts count = 0
-    muts i = 0
-    loop {
-        if s[i] == nil { break }
-        count = count + 1
-        i = i + 1
-    }
-    ret count
-}
-
-fn main() {
-   trim("hello")
-}
-
-
-----------------------------------------
-MODULE: lib/string.gjs
-----------------------------------------
-// String utilities
-
-fn to_upper(s: string) -> string {
-    // TODO: Implement
-    ret s
-}
-
-fn to_lower(s: string) -> string {
-    // TODO: Implement
-    ret s
-}
-
-fn length(s: string) -> int {
-    ret len(s)
-}
-
-
-----------------------------------------
-MODULE: lib/structd.gjs
-----------------------------------------
-// ============================================
-// STRUCTD - Module pour structures
-// Version stable sans erreurs de syntaxe
-// ============================================
-
-// Convertir une structure en JSON
-pub fn to_json(obj) {
-    if type_of(obj) == "struct" {
-        muts result = "{"
-        muts fields_list = fields(obj)
-        muts i = 0
-        while i < len(fields_list) {
-            result = result + "\"" + fields_list[i] + "\":" + to_json(get(obj, fields_list[i]))
-            if i < len(fields_list) - 1 {
-                result = result + ","
-            }
-            i = i + 1
-        }
-        ret result + "}"
-    } else if type_of(obj) == "int" {
-        ret obj
-    } else if type_of(obj) == "string" {
-        ret "\"" + obj + "\""
-    } else if type_of(obj) == "bool" {
-        if obj {
-            ret "true"
-        } else {
-            ret "false"
-        }
-    } else if type_of(obj) == "array" {
-        muts result = "["
-        muts i = 0
-        while i < len(obj) {
-            result = result + to_json(obj[i])
-            if i < len(obj) - 1 {
-                result = result + ","
-            }
-            i = i + 1
-        }
-        ret result + "]"
-    } else {
-        ret "null"
-    }
-}
-
-// Cloner une structure
-pub fn clone(obj) {
-    if type_of(obj) == "struct" {
-        ret obj
-    } else if type_of(obj) == "array" {
-        muts result = []
-        muts i = 0
-        while i < len(obj) {
-            result = push(result, clone(obj[i]))
-            i = i + 1
-        }
-        ret result
-    } else {
-        ret obj
-    }
-}
-
-// Comparer deux objets
-pub fn equals(a, b): bool {
-    if type_of(a) != type_of(b) {
-        ret false
-    }
-    ret a == b
-}
-
-// Obtenir les champs d'une structure
-pub fn fields(obj) {
-    ret []
-}
-
-// Obtenir un champ
-pub fn get(obj, field) {
-    ret obj[field]
-}
-
-// Définir un champ
-pub fn set(obj, field, value) {
-    obj[field] = value
-    ret obj
-}
-
-// Afficher une structure
-pub fn dump(obj) {
-    println("=== STRUCTURE DUMP ===")
-    println("Type: " + type_of(obj))
-    println("JSON: " + to_json(obj))
-    println("===================")
-}
-
-info("structd module loaded")
-
-
-----------------------------------------
-MODULE: lib/sys.gjs
-----------------------------------------
-// lib/sys.gjs
-module sys
-
-// Get the list of command line arguments
-pub fn argv(): string {
-    // Returns arguments as a comma-separated string
-    lt py_code = "import sys; print(', '.join(sys.argv))"
-    ret sysf("python3 -c \"" + py_code + "\"")
-}
-
-// Exit the script with a specific status code
-pub fn exit(code: int) {
-    lt py_code = "import sys; sys.exit(" + code + ")"
-    sysf("python3 -c \"" + py_code + "\"")
-}
-
-// Get Python/System platform (linux, darwin, win32)
-pub fn platform(): string {
-    lt py_code = "import sys; print(sys.platform)"
-    ret sysf("python3 -c \"" + py_code + "\"")
-}
-
-// Get Python version powering GoScript's backend
-pub fn version(): string {
-    ver = "0.2.0 (goscript season)"
-    ret ver
-}
-
-
-
-----------------------------------------
-MODULE: lib/system.gjs
-----------------------------------------
-// lib/system.gjs
-import fs
-import db
-import ui
-import time
-
-module system
-
-lt CONFIG_FILE = "system.conf"
-lt LOG_FILE = "activity.log"
-
-pub fn init(app_name: string) {
-    ui::clear()
-    ui::banner(app_name + " BOOTING...")
-    
-    log("INFO", "Application " + app_name + " started.")
-    
-    if (fs::exists(CONFIG_FILE) == "False") {
-        log("WARN", "Config missing. Creating default...")
-        db::set(CONFIG_FILE, "boot_count", "0")
-        db::set(CONFIG_FILE, "last_user", "none")
-    }
-
-    lt count = db::get(CONFIG_FILE, "boot_count")
-    lt new_count = sysf("echo $((" + count + " + 1))")
-    db::set(CONFIG_FILE, "boot_count", new_count)
-}
-
-pub fn log(level: string, message: string) {
-    lt timestamp = time::now()
-    lt entry = "[" + timestamp + "] [" + level + "] " + message
-    
-    fs::append(LOG_FILE, entry)
-    
-    if (level == "ERROR") { println(ui::red(entry)) }
-    if (level == "WARN")  { println(ui::yellow(entry)) }
-    if (level == "INFO")  { println(ui::green(entry)) }
-}
-
-pub fn get_param(key: string): string {
-    ret db::get(CONFIG_FILE, key)
-}
-
-
-
-----------------------------------------
-MODULE: lib/tar.gjs
-----------------------------------------
-// lib/tar.gjs
-module tar
-
-// Pack a directory or file: tar -czf output.tar.gz source
-pub fn pack(source: string, output: string) {
-    println(" Archiving: " + source + " -> " + output)
-    sysf("tar -czf " + output + " " + source)
-}
-
-// Unpack an archive: tar -xzf archive.tar.gz
-pub fn unpack(archive: string, destination: string) {
-    println(" Extracting: " + archive + " to " + destination)
-    // On s'assure que le dossier de destination existe, puis on extrait
-    sysf("mkdir -p " + destination + " && tar -xzf " + archive + " -C " + destination)
-}
-
-
-
-----------------------------------------
-MODULE: lib/test.gjs
-----------------------------------------
-// Import des sous-modules (le parseur lira "http.client" et chargera "lib/http/client.gjs")
-import http
-import http.client
-import http.transport
-
-fn main() {
-    println("=== TEST DU PACKAGE HTTP ===")
-    
-    // Accès au module racine (via __self__.gjs)
-    println("Version HTTP : " + http::VERSION)
-    
-    // Accès aux sous-modules avec ::
-    lt config = transport::new_config(60)
-    println("Timeout configuré : " + config.timeout)
-    
-    println("\nExécution d'une requête GET...")
-    lt response = client::get("https://httpbin.org/get")
-    
-    // Affichage natif
-    println(response)
-    
-    ret 0
-}
-
-
-
-----------------------------------------
-MODULE: lib/test_.gjs
-----------------------------------------
-import http.__self__
-import http.client
-
-fn main() {
-    println("=== TEST DU PACKAGE HTTP ===")
-    
-    // Accès au module racine (via __self__.gjs)
-    println("Version HTTP : " + __self__::VERSION)
-    
-    // Accès aux sous-modules avec ::
-    println("\nExécution d'une requête GET...")
-
-    lt response = client::get("https://www.google.com/url?q=https://httpbin.org/&sa=U&sqi=2&ved=2ahUKEwjAh92GwoGUAxXRXkEAHcvmHNAQFnoECBAQAQ&usg=AOvVaw3K5N0e-erjTFd-w6Beo-zn")    
-    lt res = client::post("https://www.google.com/url?q=https://httpbin.org/&sa=U&sqi=2&ved=2ahUKEwjAh92GwoGUAxXRXkEAHcvmHNAQFnoECBAQAQ&usg=AOvVaw3K5N0e-erjTFd-w6Beo-zn", "meta")
-    println("POST exec ")
-   
-   // Affichage natif
-    println(response)
-    println(res)
-    ret 0
-}
-
-
-
-----------------------------------------
-MODULE: lib/test_dd.gjs
-----------------------------------------
-import deepseek
-
-fn main() {
-    println("=== TEST DEEPSEEK ===\n")
-    
-    lt key = "sk-c21ef26edc184fcfa5124a171fbd6f49"
-    lt response = deepseek::ask(key, "Bonjour")
-    
-    println("Réponse: " + response)
-    
-    ret 0
-}
-
-
-----------------------------------------
-MODULE: lib/test_deep.gjs
-----------------------------------------
-// test_deepseek.gjs
-import deepseek
-
-fn main() {
-    println("=== TEST DEEPSEEK API ===\n")
-    
-    // Votre clé API
-    lt api_key = "votre-cle-api-ici"
-    
-    // Configuration
-    lt cfg = deepseek::new_config(api_key)
-    cfg = deepseek::set_temperature(cfg, 0.8)
-    
-    // Requête simple
-    lt response = deepseek::chat(cfg, "Qu'est-ce que le langage Goscript?")
-    
-    if response.success {
-        println("Réponse: " + response.content)
-        println("Tokens utilisés: " + response.usage_tokens)
-    } else {
-        println("Erreur: " + response.error)
-    }
-    
-    // Version simplifiée
-    lt answer = deepseek::ask(api_key, "Bonjour, qui es-tu?")
-    println(answer)
-    
-    ret 0
-}
-
-
-----------------------------------------
-MODULE: lib/test_deeps.gjs
-----------------------------------------
-import deepseek
-
-fn main() {
-    println("=== TEST DEEPSEEK API ===\n")
-    
-    // Remplace par ta vraie clé API
-    lt api_key = "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-    
-    // Test avec ask (simple)
-    println("--- Test ask ---")
-    lt reponse1 = deepseek::ask(api_key, "Bonjour, qui es-tu?")
-    println(reponse1)
-    println("")
-    
-    // Test avec chat (configuration complète)
-    println("--- Test chat ---")
-    lt cfg = deepseek::new_config(api_key)
-    cfg = deepseek::set_temperature(cfg, 0.8)
-    cfg = deepseek::set_max_tokens(cfg, 500)
-    
-    lt resp = deepseek::chat(cfg, "Explique ce qu'est Goscript en une phrase.")
-    
-    if resp.success {
-        println("Reponse: " + resp.content)
-        println("Tokens: " + resp.usage_tokens)
-    } else {
-        println("Erreur: " + resp.error)
-    }
-    
-    ret 0
-}
-
-
-----------------------------------------
-MODULE: lib/test_file.gjs
-----------------------------------------
-// test_gg.gjs - Test du module fs sans f-strings
 import fs
 
-println("=== TEST FS SIMPLE ===\n")
-
-lt test_dir = "/tmp/fs_test"
-lt test_file = test_dir + "/test.txt"
-
-// mkdir
-println("Création: " + test_dir)
-fs::mkdir(test_dir)
-
-// write
-lt content = "Hello from Goscript!"
-println("Écriture: " + test_file)
-fs::write(test_file, content)
-
-// exists
-println("Exists dir: " + fs::is_dir(test_dir))
-println("Exists file: " + fs::is_file(test_file))
-
-// read
-lt read_content = fs::read(test_file)
-println("Contenu: " + read_content)
-
-// size
-lt sz = fs::size(test_file)
-println("Taille: " + sz + " octets")
-
-// ls
-println("\nContenu du dossier:")
-println(fs::ls(test_dir))
-
-// pwd
-lt current = fs::pwd()
-println("\nPWD: " + current)
-
-// basename/dirname
-println("Basename: " + fs::basename(test_file))
-println("Dirname: " + fs::dirname(test_file))
-
-// realpath
-println("Realpath: " + fs::realpath(test_file))
-
-// touch
-fs::touch(test_dir + "/touched.txt")
-println("Touché: " + fs::exists(test_dir + "/touched.txt"))
-
-// cp
-fs::cp(test_file, test_dir + "/copy.txt")
-println("Copié: " + fs::exists(test_dir + "/copy.txt"))
-
-// mv
-fs::mv(test_dir + "/copy.txt", test_dir + "/renamed.txt")
-println("Renommé: " + fs::exists(test_dir + "/renamed.txt"))
-
-// nettoyage
-println("\nNettoyage...")
-fs::rm(test_dir)
-println("Supprimé: " + (!fs::exists(test_dir)))
-
-println("\n=== TEST OK ===")
-
-
-----------------------------------------
-MODULE: lib/test_fs.gjs
-----------------------------------------
-// test_fs.gjs - Test du module fs
-import fs
-
-println("=== TEST DU MODULE FS ===\n")
-
-// Test pwd
-lt current = fs::pwd()
-println("Répertoire courant: " + current)
-
-// Test mkdir
-lt test_dir = "/tmp/fs_test"
-println("\nCréation du dossier: " + test_dir)
-fs::mkdir(test_dir)
-println("Dossier créé: " + fs::is_dir(test_dir))
-
-// Test cd
-println("Changement de répertoire vers: " + test_dir)
-fs::cd(test_dir)
-println("Nouveau répertoire: " + fs::pwd())
-
-// Test write
-lt test_file = "test.txt"
-lt content = "Hello from Goscript!"
-println("\nÉcriture du fichier: " + test_file)
-fs::write(test_file, content)
-println("Fichier créé: " + fs::is_file(test_file))
-
-// Test read
-lt read_content = fs::read(test_file)
-println("Contenu lu: " + read_content)
-
-// Test size
-lt file_size = fs::size(test_file)
-println("Taille: " + file_size + " octets")
-
-// Test append
-fs::append(test_file, "\nDeuxième ligne")
-lt appended = fs::read(test_file)
-println("Après append: " + appended)
-
-// Test basename/dirname
-println("\nBasename: " + fs::basename(test_file))
-println("Dirname: " + fs::dirname(test_file))
-
-// Test realpath
-lt real = fs::realpath(test_file)
-println("Realpath: " + real)
-
-// Test ls
-println("\nListe des fichiers:")
-println(fs::ls("."))
-
-// Test cp
-fs::cp(test_file, "test_copy.txt")
-println("\nCopie créée: " + fs::exists("test_copy.txt"))
-
-// Test mv
-fs::mv("test_copy.txt", "test_renamed.txt")
-println("Renommé: " + fs::exists("test_renamed.txt"))
-
-// Retour au répertoire précédent
-fs::cd(current)
-
-// Test rm (nettoyage)
-println("\nNettoyage...")
-fs::rm(test_dir)
-println("Dossier supprimé: " + !fs::exists(test_dir))
-
-println("\n=== TEST TERMINÉ ===")
-
-
-----------------------------------------
-MODULE: lib/test_fs2.gjs
-----------------------------------------
-// test_fs.gjs - Test ultra simple
-import fs
-
-println("=== TEST FS SIMPLE ===\n")
-
-lt test_dir = "/tmp/fs_test_simple"
-
-// Test mkdir
-println("Création dossier: " + test_dir)
-lt r1 = fs::mkdir(test_dir)
-println("  mkdir: " + r1)
-
-// Test exists
-lt r2 = fs::exists(test_dir)
-println("  exists: " + r2)
-
-// Test is_dir
-lt r3 = fs::is_dir(test_dir)
-println("  is_dir: " + r3)
-
-// Test write
-lt test_file = test_dir + "/test.txt"
-println("\nÉcriture fichier: " + test_file)
-lt r4 = fs::write(test_file, "Hello")
-println("  write: " + r4)
-
-// Test is_file
-lt r5 = fs::is_file(test_file)
-println("  is_file: " + r5)
-
-// Test read
-lt content = fs::read(test_file)
-println("  read: " + content)
-
-// Test ls
-println("\nListe fichiers:")
-lt files = fs::ls(test_dir)
-println(files)
-
-// Test rm
-println("Nettoyage...")
-lt r6 = fs::rm(test_dir)
-println("  rm: " + r6)
-
-println("\n=== TEST TERMINÉ ===")
-
-
-----------------------------------------
-MODULE: lib/test_fs_system.gjs
-----------------------------------------
-// test_fs_system.gjs - Test du module fs avec system_c
-import fs
-
-println("=== TEST FS AVEC SYSTEM_C ===\n")
-
-lt test_dir = "/tmp/fs_system_test"
-lt test_file = test_dir + "/test.txt"
-
-// mkdir
-println("1. Création dossier: " + test_dir)
-lt r1 = fs::mkdir(test_dir)
-println("   mkdir retour: " + r1)
-
-// exists
-println("2. Exists dossier: " + fs::exists(test_dir))
-
-// is_dir
-println("3. Is dir: " + fs::is_dir(test_dir))
-
-// write
-println("\n4. Écriture fichier: " + test_file)
-lt r2 = fs::write(test_file, "Hello from system_c")
-println("   write retour: " + r2)
-
-// is_file
-println("5. Is file: " + fs::is_file(test_file))
-
-// exists file
-println("6. Exists fichier: " + fs::exists(test_file))
-
-// ls
-println("\n7. Liste du dossier:")
-lt r3 = fs::ls(test_dir)
-println("   ls retour: " + r3)
-
-// pwd
-println("\n8. PWD:")
-lt r4 = fs::pwd()
-println("   pwd retour: " + r4)
-
-// touch
-println("\n9. Touch:")
-lt test_file2 = test_dir + "/touched.txt"
-fs::touch(test_file2)
-println("   Touched exists: " + fs::exists(test_file2))
-
-// cp
-println("\n10. Copie:")
-fs::cp(test_file, test_dir + "/copy.txt")
-println("    Copie exists: " + fs::exists(test_dir + "/copy.txt"))
-
-// mv
-println("\n11. Déplacement:")
-fs::mv(test_dir + "/copy.txt", test_dir + "/renamed.txt")
-println("    Renamed exists: " + fs::exists(test_dir + "/renamed.txt"))
-println("    Copy exists: " + fs::exists(test_dir + "/copy.txt"))
-
-// rm
-println("\n12. Nettoyage:")
-fs::rm(test_dir)
-println("    Dossier supprimé: " + (!fs::exists(test_dir)))
-
-println("\n=== TEST TERMINÉ ===")
-
-
-----------------------------------------
-MODULE: lib/test_gg.gjs
-----------------------------------------
-// test_fs.gjs - Test du module fs avec f-strings
-import fs
-
-println(f"=== TEST FS AVEC F-STRINGS ===\n")
-
-lt test_dir = "/tmp/fs_test"
-lt test_file = f"{test_dir}/test.txt"
-
-// mkdir
-println(f"Création: {test_dir}")
-fs::mkdir(test_dir)
-
-// write
-lt content = "Hello from Goscript!"
-println(f"Écriture: {test_file}")
-fs::write(test_file, content)
-
-// exists
-println(f"Exists dir: {fs::is_dir(test_dir)}")
-println(f"Exists file: {fs::is_file(test_file)}")
-
-// read
-lt read_content = fs::read(test_file)
-println(f"Contenu: {read_content}")
-
-// size
-lt sz = fs::size(test_file)
-println(f"Taille: {sz} octets")
-
-// ls
-println(f"\nContenu du dossier:")
-println(fs::ls(test_dir))
-
-// head/tail
-fs::write_lines(test_file, ["ligne1", "ligne2", "ligne3", "ligne4", "ligne5"])
-println(f"\nHead 3: {fs::head(test_file, 3)}")
-println(f"Lines: {fs::count_lines(test_file)}")
-
-// file info
-println(f"\nType: {fs::file_type(test_file)}")
-println(f"Owner: {fs::owner(test_file)}")
-println(f"Perms: {fs::perms(test_file)}")
-
-// pwd
-lt current = fs::pwd()
-println(f"\nPWD: {current}")
-
-// temp file
-lt tmp = fs::mktemp("gs")
-println(f"Temp file: {tmp}")
-fs::write(tmp, "temp content")
-fs::rm(tmp)
-
-// nettoyage
-println(f"\nNettoyage...")
-fs::rm(test_dir)
-println(f"Supprimé: {!fs::exists(test_dir)}")
-
-println(f"\n=== TEST OK ===")
-
-
-----------------------------------------
-MODULE: lib/test_groq.gjs
-----------------------------------------
-import groq
-
-fn main() {
-    println("=== TEST GROQ ===\n")
-    
-    // Remplace par ta clé API Groq
-    lt key = "VOTRE_CLE_API_GROQ"
-    lt response = groq::ask(key, "Bonjour")
-    
-    println("Réponse: " + response)
-    
-    ret 0
+// On utilise []string pour typer le tableau proprement
+struct Row {
+    data: []string, 
+    raw: string
 }
 
+struct CSVParser {
+    separator: string,
+    file: string,
+    header: string
+}
 
-----------------------------------------
-MODULE: lib/test_json.gjs
-----------------------------------------
-import json
-
-fn main() {
-    println("=== TEST JSON MODULE ===\n")
-    
-    // Exemple de réponse API
-    lt response = "{\"id\":\"chatcmpl-123\",\"model\":\"llama3\",\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"Bonjour! Je suis une IA.\"}}],\"usage\":{\"total_tokens\":42}}"
-    
-    println("1. Parser une réponse complète:")
-    lt content = json::parse_response(response)
-    println("   Content: " + content)
-    println("")
-    
-    println("2. Extraire des valeurs spécifiques:")
-    lt model = json::get(response, "model")
-    lt tokens = json::get(response, "total_tokens")
-    println("   Model: " + model)
-    println("   Tokens: " + tokens)
-    println("")
-    
-    println("3. Vérifier les types:")
-    match json::type_of(response, "choices") {
-        "array" => println("   choices est un array")
-        "object" => println("   choices est un object")
-        "string" => println("   choices est un string")
-        _ => println("   type inconnu")
+pub fn new_parser(file: string, sep: string): CSVParser {
+    lt content = sysf("head -n 1 " + file)
+    ret new CSVParser {
+        separator: sep,
+        file: file,
+        header: content
     }
-    println("")
-    
-    println("4. Vérifier si une clé existe:")
-    if json::has_key(response, "model") {
-        println("   'model' existe")
-    }
-    if !json::has_key(response, "nonexistent") {
-        println("   'nonexistent' n'existe pas")
-    }
-    println("")
-    
-    println("5. Toutes les clés:")
-    lt keys = json::keys(response)
-    println("   " + keys)
-    
-    ret 0
 }
 
-
-----------------------------------------
-MODULE: lib/test_strlen.gjs
-----------------------------------------
-fn main() {
-    println("=== TEST STRLEN ===\n")
-    
-    lt s = "hello"
-    println("String: " + s)
-    
-    lt l = strlen_c(s)
-    println("Longueur: " + l)
-    
-    ret 0
-}
-
-
-----------------------------------------
-MODULE: lib/test_sysf.gjs
-----------------------------------------
-import ft from "time/ft"
-
-fn main() {
-    println("=== TEST SYSF ===\n")
-    
-    lt result = sysf("echo 'hello world'")
-    ft::sleep(5)
-    println("Resultat: " + result)
-    
-    ret 0
-}
-
-
-----------------------------------------
-MODULE: lib/tet.gjs
-----------------------------------------
-struct P {
-   nom: string,
-   ages: int
-}
-
-fn test() {
-   pri = new p{
-           nom: "paul",
-           ages: 16
-   }
-   ret pri.nom 
-}
-
-fn main() {
-   println(test())
-}
-
-
-----------------------------------------
-MODULE: lib/tewt.gjs
-----------------------------------------
-fn fs(path) {
-   ret system_c(f"ls -la {path}")
-}
-
-fn main() {
-   f = fs(".")
-   println(f)
-}
-
-
-----------------------------------------
-MODULE: lib/time.gjs
-----------------------------------------
-// lib/time.gjs
-module time
-
-// Temps actuel formaté (Ex: 2026-04-24 10:45:30)
-pub fn now(): string {
-    ret sysf("date '+%Y-%m-%d %H:%M:%S'")
-}
-
-// Timestamp Unix (Secondes depuis 1970)
-pub fn timestamp(): string {
-    ret sysf("date +%s")
-}
-
-// Obtenir uniquement l'année ou le jour (utile pour les backups)
-pub fn format(fmt: string): string {
-    // fmt peut être "%d-%m-%Y" par exemple
-    ret sysf("date '+" + fmt + "'")
-}
-
-// Pause de l'exécution
-pub fn sleep(seconds: int) {
-    // On utilise la commande système sleep
-    sysf("sleep " + seconds)
-}
-
-
-
-----------------------------------------
-MODULE: lib/ui.gjs
-----------------------------------------
-// lib/ui.gjs
-module ui
-
-pub fn red(t: string): string { ret "\033[31m" + t + "\033[0m" }
-pub fn green(t: string): string { ret "\033[32m" + t + "\033[0m" }
-pub fn yellow(t: string): string { ret "\033[33m" + t + "\033[0m" }
-pub fn blue(t: string): string { ret "\033[34m" + t + "\033[0m" }
-pub fn bold(t: string): string { ret "\033[1m" + t + "\033[0m" }
-
-pub fn clear() { sysf("clear") }
-
-// Progress Bar - L'astuce des pros en AWK
-pub fn progress_bar(percent: int) {
-    // On passe tout à AWK : il calcule et dessine la ligne d'un coup
-    lt cmd = "awk 'BEGIN { " +
-             "printf \"\\r[%3d%%] \", " + percent + "; " +
-             "for(i=0; i<20; i++) printf (i<" + percent + "/5 ? \"#\" : \"-\"); " +
-             "}'"
-    sysf(cmd)
-}
-
-pub fn banner(title: string) {
-    println("========================================")
-    println("   " + title)
-    println("========================================")
-}
-
-// Create an interactive menu
-pub fn menu(title: string, options: string): string {
-    clear()
-    banner(bold(blue(title)))
-    
-    println(yellow("Please select an option:"))
-    
-    // On utilise AWK pour transformer la liste "Opt1,Opt2" en menu numéroté
-    lt cmd = "echo '" + options + "' | awk -F',' '{for(i=1; i<=NF; i++) printf \"  " + green("%d)") + " %s\\n\", i, $i}'"
-    sysf(cmd)
-    
-    println("\n" + bold("Type a number: "))
-    
-    // Capture de l'entrée utilisateur via read en Bash
-    ret sysf("read choice; echo $choice")
-}
-
-
-
-----------------------------------------
-MODULE: lib/uil.gjs
-----------------------------------------
-import color from "fmt/color"
-
-fn main() {
-   lt col = color::red(" Bonjour ")
-   println(col)
-}
-
-
-----------------------------------------
-MODULE: lib/xzip.gjs
-----------------------------------------
-module xzip
-
-// Compresse une chaîne et la retourne en Base64
-pub fn compress(data: string): string {
-    lt cmd = "python3 -c \"import gzip, base64, sys; print(base64.b64encode(gzip.compress(sys.argv[1].encode())).decode())\" '" + data + "'"
+pub fn get_field(line: string, index: int, sep: string): string {
+    lt cmd = "echo '" + line + "' | awk -F'" + sep + "' '{print $" + (index + 1) + "}'"
     ret sysf(cmd)
 }
 
-// Décompresse une chaîne Base64 (compressée en gzip) vers le texte original
-pub fn decompress(b64_data: string): string {
-    lt cmd = "python3 -c \"import gzip, base64, sys; print(gzip.decompress(base64.b64decode(sys.argv[1])).decode())\" '" + b64_data + "'"
-    ret sysf(cmd)
+pub fn count(p: CSVParser): int {
+    lt c = sysf("wc -l < " + p.file)
+    ret atoi_c(c) - 1
+}
+
+pub fn read_line(p: CSVParser, line_num: int): Row {
+    lt target = line_num + 1
+    lt line_content = sysf("sed -n '" + target + "p' " + p.file)
+    
+    ret new Row {
+        data: [], // Création d'un tableau vide en Goscript
+        raw: line_content
+    }
 }
 
 
@@ -12141,6 +10293,407 @@ fn main() {
 14. FICHIERS DE TEST
 ================================================================================
 
+----------------------------------------
+TEST: cli.gjs
+----------------------------------------
+import gpm
+import ui
+
+fn main() {
+    // Initialisation de l'environnement (création de /modules, etc.)
+    gpm::init_env()
+
+    // Vérification des arguments
+    if (len(ARGV) == 0) {
+        ui::banner("GOSCRIPT PACKAGE MANAGER v5.2")
+        println(ui::bold("Système détecté : ") + gpm::get_os_type() + " (" + gpm::get_arch() + ")")
+        println("")
+        println(ui::bold("Usage :"))
+        println("  ./gd cli.gjs login <user> <pass>   " + ui::yellow("- Connexion au Zarch Hub"))
+        println("  ./gd cli.gjs list                  " + ui::yellow("- Lister les paquets disponibles"))
+        println("  ./gd cli.gjs install <nom> [ver]   " + ui::yellow("- Installer un paquet public"))
+        println("  ./gd cli.gjs get-private <nom>     " + ui::yellow("- Installer un paquet privé (Token requis)"))
+        println("")
+        ret 0
+    }
+
+    lt cmd = ARGV[0]
+
+    // --- COMMANDE : LOGIN ---
+    if (cmd == "login") {
+        if (len(ARGV) < 3) {
+            println(ui::red("Erreur : Utilisation -> gpm login <utilisateur> <mot_de_passe>"))
+            ret 1
+        }
+        gpm::login(ARGV[1], ARGV[2])
+        ret 0
+    }
+
+    // --- COMMANDE : LIST ---
+    if (cmd == "list") {
+        gpm::list_packages()
+        ret 0
+    }
+
+    // --- COMMANDE : INSTALL (PUBLIC) ---
+    if (cmd == "install") {
+        if (len(ARGV) < 2) {
+            println(ui::red("Erreur : Précise au moins le nom du paquet."))
+            ret 1
+        }
+
+        lt pkg_name = ARGV[1]
+        lt pkg_ver = "1.1.0" // Version par défaut
+        
+        if (len(ARGV) >= 3) {
+            pkg_ver = ARGV[2]
+        }
+
+        // Appel de la fonction install(nom, version, release, is_public)
+        gpm::install(pkg_name, pkg_ver, "r0", true)
+        ret 0
+    }
+
+    // --- COMMANDE : GET-PRIVATE ---
+    if (cmd == "get-private") {
+        if (len(ARGV) < 2) {
+            println(ui::red("Erreur : Nom du paquet privé requis."))
+            ret 1
+        }
+
+        lt pkg_name = ARGV[1]
+        // On force is_public à false
+        gpm::install(pkg_name, "1.0.0", "r0", false)
+        ret 0
+    }
+
+    // --- COMMANDE INCONNUE ---
+    println(ui::red("Commande '" + cmd + "' inconnue."))
+    println("Utilise ./gd cli.gjs sans argument pour voir l'aide.")
+}
+
+
+
+----------------------------------------
+TEST: gpm.gjs
+----------------------------------------
+import gpm
+import fs
+import ui
+
+module gpm
+
+// Configuration du Zarch Hub
+cn API_BASE = "https://gsql-badge.onrender.com"
+cn MOD_DIR = "modules"
+
+// Initialisation de l'environnement
+pub fn init_env() {
+    if fs::exists(MOD_DIR) == "False" {
+        sysf("mkdir -p " + MOD_DIR)
+    }
+}
+
+// Fonction pour tenter une installation sur une architecture précise
+fn try_arch(name, version, release, arch) {
+    lt url = API_BASE + "/package/download/public/" + name + "/" + version + "/" + release + "/" + arch
+    print("  🔍 Essai " + arch + "... ")
+
+    // On utilise curl -f pour détecter l'erreur HTTP via le code de sortie
+    lt target = name + ".tar.bool"
+    lt cmd = "curl -sL -f " + url + " -o " + target
+    lt res = sysf(cmd)
+
+    // Si le fichier existe et n'est pas vide (on vérifie via le shell)
+    if fs::exists(target) == "True" {
+        println(ui::green("✅ Trouvé !"))
+        
+        println("  ➜ Extraction...")
+        // Extraction propre dans le dossier modules/
+        sysf("mkdir -p " + MOD_DIR + "/" + name)
+        sysf("tar -xf " + target + " -C " + MOD_DIR + "/" + name)
+        
+        // Nettoyage
+        sysf("rm " + target)
+        ret true
+    }
+
+    println(ui::red("❌"))
+    ret false
+}
+
+// Fonction principale d'installation
+pub fn install(name, version) {
+    if version == "" {
+        version = "1.1.0"
+    }
+    
+    ui::banner("GPM GOSCRIPT: " + name)
+    println("Installation de la version " + version + "...")
+
+    init_env()
+
+    // On teste les architectures dans l'ordre de probabilité sur ton serveur
+    if try_arch(name, version, "r0", "x86_64") == true {
+        println(ui::green("🚀 Déployé avec succès dans " + MOD_DIR + "/" + name))
+        ret true
+    }
+
+    if try_arch(name, version, "r0", "i686") == true {
+        println(ui::green("🚀 Déployé avec succès (i686)"))
+        ret true
+    }
+
+    if try_arch(name, version, "r0", "aarch64") == true {
+        println(ui::green("🚀 Déployé avec succès (aarch64)"))
+        ret true
+    }
+
+    println(ui::red("❌ Erreur: Impossible de trouver un binaire pour " + name))
+    ret false
+}
+
+// Point d'entrée CLI
+fn main() {
+    if len(ARGV) < 1 {
+        println("Usage: ./gd gpm.gjs install <nom> [version]")
+        ret 0
+    }
+
+    lt cmd = ARGV[0]
+    if cmd == "install" {
+        if len(ARGV) < 2 {
+            println(ui::red("Erreur: Nom du paquet requis."))
+            ret 1
+        }
+        
+        lt pkg = ARGV[1]
+        lt ver = ""
+        if len(ARGV) > 2 {
+            ver = ARGV[2]
+        }
+        
+        install(pkg, ver)
+    }
+}
+
+
+
+----------------------------------------
+TEST: style.gjs
+----------------------------------------
+import system
+import ui
+import fs
+import time
+import db
+
+fn main() {
+    // 1. Initialisation du framework
+    // Cela va effacer l'écran, afficher la bannière et incrémenter le boot_count
+    system::init("MAURICIO-OS V1")
+
+    // 2. Test du système de Logging
+    println("\n" + ui::bold("--- Test des Logs ---"))
+    system::log("INFO", "Démarrage des tests unitaires...")
+    system::log("WARN", "Ceci est un avertissement de test.")
+    
+    // 3. Test de la persistance (Database + Config)
+    println("\n" + ui::bold("--- Test de Configuration ---"))
+    
+    // On enregistre une info personnalisée
+    system::log("INFO", "Sauvegarde du profil utilisateur...")
+    sysf("touch system.conf") // Sécurité pour s'assurer que le fichier existe
+    
+    lt current_boots = system::get_param("boot_count")
+    println("Nombre de démarrages enregistrés : " + ui::green(current_boots))
+
+    // 4. Test du File System (via les logs)
+    println("\n" + ui::bold("--- Vérification du fichier Log ---"))
+    if (fs::exists("activity.log") == "True") {
+        lt log_size = fs::size("activity.log")
+        println("Fichier activity.log détecté (" + log_size + " octets)")
+    } else {
+        system::log("ERROR", "Échec critique : activity.log introuvable !")
+    }
+
+    // 5. Affichage final des dernières activités
+    println("\n" + ui::blue("Dernières entrées du journal :"))
+    println("----------------------------------------")
+    lt is = sysf("tail -n 5 activity.log")
+    println(is)
+    println("----------------------------------------")
+
+    println("\n" + ui::green("✅ Test terminé avec succès !"))
+    
+    ret 0
+}
+
+
+
+----------------------------------------
+TEST: test.gjs
+----------------------------------------
+import gsql.db // Utilise le chemin exact si nécessaire
+
+fn main() {
+    println(">>> Initialisation du moteur GSQL <<<")
+    
+    // On vérifie que le fichier existe avant
+    lt path = "test.gdb"
+    sysf("touch " + path) 
+
+    lt my_db = db::connect(path)
+    
+    if my_db != nil {
+        my_db.insert("user=mauricio,rank=admin")
+        lt c = my_db.count()
+        println("Stats : " + c + " lignes.")
+    }
+}
+
+
+
+----------------------------------------
+TEST: test_argv.gjs
+----------------------------------------
+fn main() {
+    println("Nombre d'arguments: " + len(ARGV))
+    
+    lt i = 0
+    while i < len(ARGV) {
+        println("ARGV[" + i + "] = " + ARGV[i])
+        i = i + 1
+    }
+}
+
+
+----------------------------------------
+TEST: test_argv2.gjs
+----------------------------------------
+
+fn types(s) {
+    muts i = 0
+    for i in i {
+        ret i = i + 1
+    }
+    if s == ARGV[0] {
+       
+        ret "type 0 ( 0x800880 mov x0x )"
+    }
+    
+    ret "unknow"
+}
+
+fn main() {
+    lt arg0 = ARGV[0]
+    println("arg0 = " + arg0)
+    println("type de arg0 = " + types(arg0))
+}
+
+
+----------------------------------------
+TEST: test_conf.gjs
+----------------------------------------
+import config
+
+fn main() {
+    // On cherche l'URL de l'API
+    lt conf_api = config::parser_conf("/etc/gpm.conf", "API_URL")
+    println("API URL -> " + conf_api.parse)
+    
+    // On cherche le répertoire d'installation
+    lt conf_dir = config::parser_conf("/etc/gpm.conf", "INSTALL_DIR")
+    println("Install Dir -> " + conf_dir.parse)
+}
+
+
+
+----------------------------------------
+TEST: test_csv.gjs
+----------------------------------------
+import gcsv
+
+fn main() {
+    println("--- GCSV Framework Test ---")
+
+    // On initialise sur ton fichier master_users
+    lt parser = gcsv::new_parser("/var/lib/gsql/master_users.gdb", ",")
+    
+    println("Fichier: " + parser.file)
+    println("Header: " + parser.header)
+    
+    lt total = gcsv::count(parser)
+    println("Total lignes: " + total)
+
+    // On lit la ligne 2 du fichier (première donnée après header)
+    lt row = gcsv::read_line(parser, 2)
+    
+    // On récupère le champ "nom" (colonne 2, donc index 1)
+    lt nom = gcsv::get_field(row.raw, 1, ",")
+    println("Nom extrait: " + nom)
+}
+
+
+
+----------------------------------------
+TEST: test_gcsv.gjs
+----------------------------------------
+import gcsv
+import ui
+
+fn main() {
+    println(ui::green("--- GCSV Framework Test ---"))
+
+    // 1. Initialisation du parser sur un fichier existant
+    lt parser = gcsv::new_parser("/var/lib/gsql/master_users.gdb", ",")
+    
+    // 2. Affichage des infos
+    println("Fichier: " + parser.file)
+    println("Colonnes detectées: " + parser.header)
+    
+    // 3. Extraction de données
+    lt nb = gcsv::count(parser)
+    println("Nombre d'entrées: " + nb)
+
+    // 4. Lecture de la première ligne de données (index 2 dans le fichier)
+    lt row1 = gcsv::read_line(parser, 2)
+    
+    // On extrait le nom (colonne index 1)
+    lt nom = gcsv::get_field(row1.raw, 1, ",")
+    println("Nom extrait de la ligne 2: " + nom)
+}
+
+
+
+----------------------------------------
+TEST: test_gsql.gjs
+----------------------------------------
+import gsql
+import ui
+
+fn main() {
+    println(ui::green("--- Initialisation GSQL ---"))
+     
+    gsql::Ginit() 
+    // 1. Création de la table 'users' dans la db 'master'
+    lt users = gsql::create_table("master", "users")
+    
+    // 2. Insertion de données (format clé-valeur ou CSV)
+    gsql::insert(users, "id=1,nom=Mauricio,role=admin")
+    gsql::insert(users, "id=2,nom=Leo,role=user")
+    
+    gsql::insert(users, "id=3,nom=Diego,role=marchant")
+    // 3. Requête (SELECT)
+    println("Recherche de l'admin...")
+    lt admin = gsql::select_where(users, "role=admin")
+    println("Résultat : " + admin)
+    lt pp = gsql::select_where(users, "nom=Leo")  
+    println(pp)
+}
+
+
+
 ================================================================================
 15. RÉSUMÉ DES MOTS-CLÉS
 ================================================================================
@@ -12152,8 +10705,8 @@ Mots-clés du langage:
 STATISTIQUES
 ================================================================================
 
-Modules lib/: 45
+Modules lib/: 1
 Exemples: 160
-Tests: 0
+Tests: 10
 
-Taille totale du fichier: 370,616 octets
+Taille totale du fichier: 336,327 octets

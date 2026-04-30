@@ -1,3 +1,6 @@
+
+
+
 CC = gcc
 CFLAGS = -Wall -g -O0 -I./src -I./src/ast -I./src/interpreter
 LDFLAGS = -lm -ldl -lffi

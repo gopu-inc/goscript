@@ -116,7 +116,7 @@ int gpm_login(const char* username, const char* password) {
                 gpm_config_save();
                 
                 LOG_SUCCESS("Authentifié en tant que %s", username);
-                LOG_INFO("Token sauvegardé dans %s/%s", 
+                LOG_INFO("Token sauvegardé dans ~/%s/%s", 
                          gpm_config.home_dir, GPM_CONFIG_FILE);
                 
                 json_decref(root);

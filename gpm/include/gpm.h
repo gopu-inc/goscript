@@ -52,12 +52,12 @@
 #define GPM_TEMP_DIR           "/tmp/gpm"
 
 // Registry
-#define GPM_REGISTRY_URL       "https://gsql-badge.onrender.com"
+#define GPM_REGISTRY_URL       "https://zarch-hub.onrender.com"
 #define GPM_API_VERSION        "v5.2"
 #define GPM_DEFAULT_SCOPE      "public"
 
 // Timeouts et limites
-#define GPM_TIMEOUT            30
+#define GPM_TIMEOUT            300
 #define GPM_RETRY_COUNT        3
 #define GPM_RETRY_DELAY        2
 #define GPM_MAX_PARALLEL       4

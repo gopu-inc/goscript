@@ -1,5 +1,27 @@
-// src/build.c - VERSION AMÉLIORÉE
+// Remplacer tout le fichier build.c par cette version corrigée
+
+// src/build.c - VERSION CORRIGÉE
 #include "gpm.h"
+
+/* ================================================================
+ * FORMATER LA TAILLE POUR L'AFFICHAGE (DÉPLACÉ AVANT UTILISATION)
+ * ================================================================ */
+
+static char* format_size(size_t bytes) {
+    static char buffer[32];
+    
+    if (bytes < 1024) {
+        snprintf(buffer, sizeof(buffer), "%zu B", bytes);
+    } else if (bytes < 1024 * 1024) {
+        snprintf(buffer, sizeof(buffer), "%.1f KB", bytes / 1024.0);
+    } else if (bytes < 1024 * 1024 * 1024) {
+        snprintf(buffer, sizeof(buffer), "%.1f MB", bytes / (1024.0 * 1024.0));
+    } else {
+        snprintf(buffer, sizeof(buffer), "%.2f GB", bytes / (1024.0 * 1024.0 * 1024.0));
+    }
+    
+    return buffer;
+}
 
 /* ================================================================
  * VÉRIFIER SI UN FICHIER EST IGNORÉ PAR .gpmignore
@@ -19,25 +41,18 @@ static bool is_ignored(const char* filepath, char** ignore_patterns, int pattern
         if (strcmp(filename, pattern) == 0) return true;
         if (strcmp(filepath, pattern) == 0) return true;
         
-        // Match wildcard (*.ext)
-        if (pattern[0] == '*' && pattern[1] == '.') {
-            const char* ext = pattern + 1;
-            const char* file_ext = strrchr(filename, '.');
-            if (file_ext && strcmp(file_ext, ext) == 0) return true;
-        }
-        
-        // Match directory (dir/)
-        size_t pattern_len = strlen(pattern);
-        if (pattern[pattern_len - 1] == '/') {
-            if (strncmp(filepath, pattern, pattern_len) == 0) return true;
-        }
-        
         // Match extension (*.ext)
         if (pattern[0] == '*' && pattern[1] == '.') {
             const char* ext = pattern + 1;
             size_t file_len = strlen(filename);
             size_t ext_len = strlen(ext);
             if (file_len > ext_len && strcmp(filename + file_len - ext_len, ext) == 0) return true;
+        }
+        
+        // Match directory (dir/)
+        size_t pattern_len = strlen(pattern);
+        if (pattern_len > 0 && pattern[pattern_len - 1] == '/') {
+            if (strncmp(filepath, pattern, pattern_len) == 0) return true;
         }
     }
     
@@ -80,16 +95,13 @@ static char** load_gpmignore(int* count) {
     
     char line[1024];
     while (fgets(line, sizeof(line), f)) {
-        // Nettoyer la ligne
         line[strcspn(line, "\n")] = '\0';
         line[strcspn(line, "\r")] = '\0';
         
-        // Ignorer commentaires et lignes vides
         char* trimmed = line;
         while (*trimmed == ' ' || *trimmed == '\t') trimmed++;
         if (trimmed[0] == '#' || trimmed[0] == '\0') continue;
         
-        // Allouer plus d'espace si nécessaire
         if (*count >= capacity) {
             capacity = capacity == 0 ? 16 : capacity * 2;
             patterns = realloc(patterns, capacity * sizeof(char*));
@@ -102,27 +114,16 @@ static char** load_gpmignore(int* count) {
     
     fclose(f);
     
-    // Ajouter des patterns par défaut
+    // Patterns par défaut
     const char* default_ignores[] = {
-        ".gpm/",
-        ".git/",
-        ".gitignore",
-        ".gpmignore",
-        "build/",
-        "gpm_modules/",
-        "node_modules/",
-        "*.tar.bool",
-        "*.tar.gz",
-        "*.o",
-        "*.a",
-        "*.so",
-        ".DS_Store",
-        "Thumbs.db",
+        ".gpm/", ".git/", ".gitignore", ".gpmignore",
+        "build/", "gpm_modules/", "node_modules/",
+        "*.tar.bool", "*.tar.gz", "*.o", "*.a", "*.so",
+        ".DS_Store", "Thumbs.db",
         NULL
     };
     
     for (int i = 0; default_ignores[i]; i++) {
-        // Vérifier si déjà présent
         bool already = false;
         for (int j = 0; j < *count; j++) {
             if (strcmp(patterns[j], default_ignores[i]) == 0) {
@@ -162,13 +163,11 @@ static void free_gpmignore(char** patterns, int count) {
  * ================================================================ */
 
 static int copy_file_with_parent(const char* src, const char* dst) {
-    // Créer le répertoire parent
     char* dst_copy = strdup(dst);
     char* parent = dirname(dst_copy);
     gpm_mkdir_p(parent);
     free(dst_copy);
     
-    // Copier le fichier
     char cmd[2048];
     snprintf(cmd, sizeof(cmd), "cp -f '%s' '%s' 2>/dev/null", src, dst);
     int ret = system(cmd);
@@ -187,21 +186,15 @@ static int copy_file_with_parent(const char* src, const char* dst) {
 static void copy_readme_files(const char* src_dir, const char* dst_dir, 
                                char** ignore_patterns, int pattern_count) {
     const char* readme_variants[] = {
-        "README.md",
-        "README.MD",
-        "Readme.md",
-        "readme.md",
-        "README.txt",
-        "README",
-        "readme",
-        "README.rst",
-        "README.markdown",
-        "README.mdown",
-        "README.org",
+        "README.md", "README.MD", "Readme.md", "readme.md",
+        "README.txt", "README", "readme",
+        "README.rst", "README.markdown", "README.mdown", "README.org",
         NULL
     };
     
     int copied = 0;
+    
+    // Chercher à la racine
     for (int i = 0; readme_variants[i]; i++) {
         char src_path[1024];
         snprintf(src_path, sizeof(src_path), "%s/%s", src_dir, readme_variants[i]);
@@ -221,20 +214,13 @@ static void copy_readme_files(const char* src_dir, const char* dst_dir,
         }
     }
     
-    // Chercher aussi dans docs/
-    char docs_readme[1024];
-    snprintf(docs_readme, sizeof(docs_readme), "%s/docs", src_dir);
-    
-    if (gpm_file_exists(docs_readme)) {
-        for (int i = 0; readme_variants[i]; i++) {
-            char src_path[1024];
-            snprintf(src_path, sizeof(src_path), "%s/docs/%s", src_dir, readme_variants[i]);
-            
-            if (gpm_file_exists(src_path)) {
-                if (is_ignored(readme_variants[i], ignore_patterns, pattern_count)) {
-                    continue;
-                }
-                
+    // Chercher dans docs/
+    for (int i = 0; readme_variants[i]; i++) {
+        char src_path[1024];
+        snprintf(src_path, sizeof(src_path), "%s/docs/%s", src_dir, readme_variants[i]);
+        
+        if (gpm_file_exists(src_path)) {
+            if (!is_ignored(readme_variants[i], ignore_patterns, pattern_count)) {
                 char dst_path[1024];
                 snprintf(dst_path, sizeof(dst_path), "%s/docs/%s", dst_dir, readme_variants[i]);
                 
@@ -261,7 +247,7 @@ static int copy_manifest_files(Manifest* manifest, const char* src_dir,
                                 int pattern_count) {
     int copied = 0;
     
-    // 1. Copier le fichier main (entry point)
+    // 1. Copier le fichier main
     if (manifest->main[0]) {
         char src_path[1024];
         snprintf(src_path, sizeof(src_path), "%s/%s", src_dir, manifest->main);
@@ -277,7 +263,7 @@ static int copy_manifest_files(Manifest* manifest, const char* src_dir,
         }
     }
     
-    // 2. Copier les fichiers listés dans files[]
+    // 2. Copier les fichiers listés
     if (manifest->files_count > 0) {
         LOG_INFO("  📁 Copie de %d fichiers listés dans Manifest.toml...", manifest->files_count);
         
@@ -302,15 +288,13 @@ static int copy_manifest_files(Manifest* manifest, const char* src_dir,
         }
     }
     
-    // 3. Copier tous les .gjs si aucun fichier n'est listé
+    // 3. Fallback: copier tous les .gjs si aucun fichier listé
     if (manifest->files_count == 0) {
         LOG_INFO("  📁 Aucun fichier listé, copie automatique de tous les .gjs...");
         
         char cmd[2048];
         snprintf(cmd, sizeof(cmd),
-                 "cd '%s' && find . -name '*.gjs' -type f 2>/dev/null | while read f; do "
-                 "  echo \"$f\"; "
-                 "done",
+                 "cd '%s' && find . -name '*.gjs' -type f 2>/dev/null",
                  src_dir);
         
         FILE* fp = popen(cmd, "r");
@@ -319,12 +303,10 @@ static int copy_manifest_files(Manifest* manifest, const char* src_dir,
             while (fgets(filepath, sizeof(filepath), fp)) {
                 filepath[strcspn(filepath, "\n")] = '\0';
                 
-                // Enlever le ./ du début
                 const char* rel_path = filepath;
                 if (rel_path[0] == '.' && rel_path[1] == '/') rel_path += 2;
                 
                 if (is_ignored(rel_path, ignore_patterns, pattern_count)) {
-                    LOG_DEBUG("    Ignoré: %s", rel_path);
                     continue;
                 }
                 
@@ -340,12 +322,10 @@ static int copy_manifest_files(Manifest* manifest, const char* src_dir,
         }
     }
     
-    // 4. Copier les .so et .a (bibliothèques compilées)
+    // 4. Copier .so et .a
     char cmd_libs[2048];
     snprintf(cmd_libs, sizeof(cmd_libs),
-             "cd '%s' && find . \\( -name '*.so' -o -name '*.so.*' -o -name '*.a' \\) -type f 2>/dev/null | while read f; do "
-             "  echo \"$f\"; "
-             "done",
+             "cd '%s' && find . \\( -name '*.so' -o -name '*.so.*' -o -name '*.a' \\) -type f 2>/dev/null",
              src_dir);
     
     FILE* fp2 = popen(cmd_libs, "r");
@@ -357,9 +337,7 @@ static int copy_manifest_files(Manifest* manifest, const char* src_dir,
             const char* rel_path = filepath;
             if (rel_path[0] == '.' && rel_path[1] == '/') rel_path += 2;
             
-            if (is_ignored(rel_path, ignore_patterns, pattern_count)) {
-                continue;
-            }
+            if (is_ignored(rel_path, ignore_patterns, pattern_count)) continue;
             
             char dst_path[1024];
             snprintf(dst_path, sizeof(dst_path), "%s/%s", dst_dir, rel_path);
@@ -376,7 +354,7 @@ static int copy_manifest_files(Manifest* manifest, const char* src_dir,
 }
 
 /* ================================================================
- * COPIER LES DÉPENDANCES RÉSOLUES DANS L'ARCHIVE
+ * COPIER LES DÉPENDANCES RÉSOLUES
  * ================================================================ */
 
 static int copy_dependencies_to_build(const char* build_dir, Manifest* manifest) {
@@ -391,14 +369,12 @@ static int copy_dependencies_to_build(const char* build_dir, Manifest* manifest)
     snprintf(vendor_dir, sizeof(vendor_dir), "%s/gpm_modules", build_dir);
     gpm_mkdir_p(vendor_dir);
     
-    // Résoudre l'arbre de dépendances
     DepNode* tree = gpm_resolve_tree(manifest);
     if (!tree) {
         LOG_WARN("  Impossible de résoudre les dépendances");
         return 0;
     }
     
-    // Aplatir l'arbre
     DepNode** flat = NULL;
     int flat_count = 0;
     gpm_flatten_tree_to_list(tree, &flat, &flat_count);
@@ -416,8 +392,8 @@ static int copy_dependencies_to_build(const char* build_dir, Manifest* manifest)
         if (!gpm_file_exists(dep_src)) {
             LOG_WARN("  ⚠️ Dépendance non installée: %s@%s", node->name, node->version);
             
-            // Essayer de l'installer automatiquement
-            LOG_INFO("  📥 Installation automatique de %s@%s...", node->name, node->version);
+            // Installation automatique
+            LOG_INFO("  📥 Installation de %s@%s...", node->name, node->version);
             if (gpm_install_package(node->name, node->version) == 0) {
                 LOG_SUCCESS("  ✅ %s@%s installé", node->name, node->version);
             } else {
@@ -435,20 +411,21 @@ static int copy_dependencies_to_build(const char* build_dir, Manifest* manifest)
         if (system(cmd) == 0 && gpm_file_exists(dep_dst)) {
             LOG_SUCCESS("  📦 %s@%s copié dans vendor", node->name, node->version);
             copied++;
-        } else {
-            LOG_WARN("  ⚠️ Échec de copie de %s@%s", node->name, node->version);
         }
     }
     
     free(flat);
     gpm_free_dep_tree(tree);
     
-    LOG_INFO("  📊 %d dépendance(s) incluse(s) dans l'archive", copied);
+    if (copied > 0) {
+        LOG_INFO("  📊 %d dépendance(s) incluse(s)", copied);
+    }
+    
     return copied;
 }
 
 /* ================================================================
- * CONSTRUCTION DU PACKAGE (VERSION AMÉLIORÉE)
+ * CONSTRUCTION DU PACKAGE (FONCTION PRINCIPALE)
  * ================================================================ */
 
 int gpm_build_package(void) {
@@ -462,15 +439,12 @@ int gpm_build_package(void) {
         return -1;
     }
     
-    // Valider le manifest
     if (gpm_manifest_validate(&manifest) != 0) {
         LOG_ERROR("Manifest.toml invalide");
         return -1;
     }
     
     LOG_INFO("  Package: %s@%s", manifest.name, manifest.version);
-    LOG_INFO("  Release: %s", manifest.release);
-    LOG_INFO("  Architecture: %s", manifest.arch);
     
     // 2. Charger .gpmignore
     int ignore_count = 0;
@@ -480,7 +454,6 @@ int gpm_build_package(void) {
     char build_dir[512];
     snprintf(build_dir, sizeof(build_dir), "build/pkg-%s", manifest.name);
     
-    // Nettoyer l'ancien build
     if (gpm_file_exists(build_dir)) {
         char cmd_clean[1024];
         snprintf(cmd_clean, sizeof(cmd_clean), "rm -rf '%s'", build_dir);
@@ -496,7 +469,7 @@ int gpm_build_package(void) {
     snprintf(path, sizeof(path), "%s/usr/lib", build_dir);
     gpm_mkdir_p(path);
     
-    // 4. Exécuter le script de build si présent
+    // 4. Script de build
     if (manifest.scripts_build[0]) {
         LOG_STEP("Exécution du script de build...");
         LOG_INFO("  > %s", manifest.scripts_build);
@@ -507,10 +480,9 @@ int gpm_build_package(void) {
             free_gpmignore(ignore_patterns, ignore_count);
             return -1;
         }
-        LOG_SUCCESS("Build terminé");
     }
     
-    // 5. Copier le Manifest.toml
+    // 5. Copier Manifest.toml
     LOG_STEP("Copie des fichiers...");
     
     char cmd_manifest[1024];
@@ -518,80 +490,64 @@ int gpm_build_package(void) {
     system(cmd_manifest);
     LOG_DEBUG("  ✅ Manifest.toml copié");
     
-    // 6. Copier les fichiers listés dans Manifest.toml
+    // 6. Copier les fichiers
     char cwd[PATH_MAX];
     getcwd(cwd, sizeof(cwd));
     
     int files_copied = copy_manifest_files(&manifest, cwd, build_dir, 
                                             ignore_patterns, ignore_count);
-    LOG_INFO("  📁 %d fichiers copiés dans le build", files_copied);
+    LOG_INFO("  📁 %d fichiers copiés", files_copied);
     
-    // 7. Copier le(s) README
+    // 7. Copier README
     copy_readme_files(cwd, build_dir, ignore_patterns, ignore_count);
     
-    // 8. Copier le CHANGELOG si présent
+    // 8. Copier CHANGELOG
     const char* changelog_variants[] = {
         "CHANGELOG.md", "CHANGELOG.txt", "CHANGELOG",
         "CHANGES.md", "CHANGES.txt", "CHANGES",
-        "HISTORY.md", "HISTORY.txt",
         NULL
     };
-    
     for (int i = 0; changelog_variants[i]; i++) {
         char cl_path[1024];
         snprintf(cl_path, sizeof(cl_path), "%s/%s", cwd, changelog_variants[i]);
-        
-        if (gpm_file_exists(cl_path)) {
-            if (!is_ignored(changelog_variants[i], ignore_patterns, ignore_count)) {
-                char dst_cl[1024];
-                snprintf(dst_cl, sizeof(dst_cl), "%s/%s", build_dir, changelog_variants[i]);
-                copy_file_with_parent(cl_path, dst_cl);
-                LOG_DEBUG("  📋 %s copié", changelog_variants[i]);
-            }
+        if (gpm_file_exists(cl_path) && !is_ignored(changelog_variants[i], ignore_patterns, ignore_count)) {
+            char dst_cl[1024];
+            snprintf(dst_cl, sizeof(dst_cl), "%s/%s", build_dir, changelog_variants[i]);
+            copy_file_with_parent(cl_path, dst_cl);
             break;
         }
     }
     
-    // 9. Copier le LICENSE si présent
+    // 9. Copier LICENSE
     const char* license_variants[] = {
         "LICENSE", "LICENSE.md", "LICENSE.txt",
-        "LICENCE", "LICENCE.md",
-        "COPYING", "COPYING.txt",
+        "LICENCE", "LICENCE.md", "COPYING",
         NULL
     };
-    
     for (int i = 0; license_variants[i]; i++) {
         char lic_path[1024];
         snprintf(lic_path, sizeof(lic_path), "%s/%s", cwd, license_variants[i]);
-        
-        if (gpm_file_exists(lic_path)) {
-            if (!is_ignored(license_variants[i], ignore_patterns, ignore_count)) {
-                char dst_lic[1024];
-                snprintf(dst_lic, sizeof(dst_lic), "%s/%s", build_dir, license_variants[i]);
-                copy_file_with_parent(lic_path, dst_lic);
-                LOG_DEBUG("  📜 %s copié", license_variants[i]);
-            }
+        if (gpm_file_exists(lic_path) && !is_ignored(license_variants[i], ignore_patterns, ignore_count)) {
+            char dst_lic[1024];
+            snprintf(dst_lic, sizeof(dst_lic), "%s/%s", build_dir, license_variants[i]);
+            copy_file_with_parent(lic_path, dst_lic);
             break;
         }
     }
     
-    // 10. Copier les dépendances résolues dans gpm_modules/
+    // 10. Copier dépendances
     copy_dependencies_to_build(build_dir, &manifest);
     
-    // 11. Copier le script d'installation si présent
+    // 11. Copier install.sh
     char install_script[1024];
     snprintf(install_script, sizeof(install_script), "%s/install.sh", cwd);
-    
-    if (gpm_file_exists(install_script)) {
-        if (!is_ignored("install.sh", ignore_patterns, ignore_count)) {
-            char dst_install[1024];
-            snprintf(dst_install, sizeof(dst_install), "%s/install.sh", build_dir);
-            copy_file_with_parent(install_script, dst_install);
-            LOG_DEBUG("  🔧 install.sh copié");
-        }
+    if (gpm_file_exists(install_script) && !is_ignored("install.sh", ignore_patterns, ignore_count)) {
+        char dst_install[1024];
+        snprintf(dst_install, sizeof(dst_install), "%s/install.sh", build_dir);
+        copy_file_with_parent(install_script, dst_install);
     }
     
-    // 12. Créer l'archive .tar.bool
+    // 12. Créer l'archive
     LOG_STEP("Création de l'archive...");
     
     char archive_name[512];
@@ -600,7 +556,6 @@ int gpm_build_package(void) {
              manifest.name, manifest.version, manifest.release,
              manifest.arch, GPM_PACKAGE_EXT);
     
-    // Supprimer l'ancienne archive si elle existe
     if (gpm_file_exists(archive_name)) {
         unlink(archive_name);
     }
@@ -617,25 +572,22 @@ int gpm_build_package(void) {
         return -1;
     }
     
-    // 13. Calculer SHA256
+    // 13. SHA256
     char* sha = gpm_sha256_file(archive_name);
     if (sha) {
         strncpy(manifest.sha256, sha, sizeof(manifest.sha256) - 1);
     }
     
-    // 14. Obtenir la taille
+    // 14. Taille
     struct stat st;
     stat(archive_name, &st);
     
-    // 15. Afficher le résumé
+    // 15. Résumé
     printf("\n");
     LOG_SUCCESS("Build terminé !");
     printf("  ┌─────────────────────────────────────────────┐\n");
-    printf("  │  📦 Archive: %-31s │\n", archive_name + 6);  // Skip "build/"
-    printf("  │  📏 Taille:  %-31s │\n", 
-           st.st_size > 1024 * 1024 
-               ? gpm_format_size(st.st_size) 
-               : gpm_format_size(st.st_size));
+    printf("  │  📦 Archive: %-31s │\n", archive_name + 6);
+    printf("  │  📏 Taille:  %-31s │\n", format_size(st.st_size));
     if (sha) {
         printf("  │  🔐 SHA256:  %-31s │\n", sha);
     }
@@ -643,35 +595,13 @@ int gpm_build_package(void) {
     if (manifest.dep_count > 0) {
         printf("  │  📦 Déps:    %-29d │\n", manifest.dep_count);
     }
-    printf("  └─────────────────────────────────────────────┘\n");
-    printf("\n");
+    printf("  └─────────────────────────────────────────────┘\n\n");
     
-    // 16. Nettoyer le répertoire de build temporaire
+    // 16. Nettoyer
     snprintf(cmd, sizeof(cmd), "rm -rf '%s'", build_dir);
     system(cmd);
     
-    // 16. Libérer les patterns
     free_gpmignore(ignore_patterns, ignore_count);
     
     return 0;
-}
-
-/* ================================================================
- * FORMATER LA TAILLE POUR L'AFFICHAGE
- * ================================================================ */
-
-char* gpm_format_size(size_t bytes) {
-    static char buffer[32];
-    
-    if (bytes < 1024) {
-        snprintf(buffer, sizeof(buffer), "%zu B", bytes);
-    } else if (bytes < 1024 * 1024) {
-        snprintf(buffer, sizeof(buffer), "%.1f KB", bytes / 1024.0);
-    } else if (bytes < 1024 * 1024 * 1024) {
-        snprintf(buffer, sizeof(buffer), "%.1f MB", bytes / (1024.0 * 1024.0));
-    } else {
-        snprintf(buffer, sizeof(buffer), "%.2f GB", bytes / (1024.0 * 1024.0 * 1024.0));
-    }
-    
-    return buffer;
 }

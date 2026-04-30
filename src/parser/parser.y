@@ -437,12 +437,9 @@ type:
 
 /* Dictionnaire */
 dict_expr:
-    TOKEN_DICT TOKEN_LBRACE dict_entries TOKEN_RBRACE {
-        $$ = create_dict_node($3);
-    }
-    | TOKEN_MAP TOKEN_LBRACE dict_entries TOKEN_RBRACE {
-        $$ = create_dict_node($3);
-    }
+    TOKEN_DICT TOKEN_LBRACE dict_entries TOKEN_RBRACE { $$ = create_dict_node($3); }
+    | TOKEN_MAP TOKEN_LBRACE dict_entries TOKEN_RBRACE { $$ = create_dict_node($3); }
+    | TOKEN_LBRACE dict_entries TOKEN_RBRACE { $$ = create_dict_node($2); }
     ;
 
 dict_entries:

@@ -54,7 +54,7 @@ ASTNode* program_root;
 %token TOKEN_OPTIONAL TOKEN_COALESCE
 %token TOKEN_RANGE TOKEN_RANGE_INC TOKEN_MUTS
 %token TOKEN_SYSF TOKEN_SH
-%token TOKEN_THIS
+
 
 
 /* Delimiters */
@@ -857,9 +857,6 @@ primary_expr:
     }
     | TOKEN_IDENTIFIER {
         $$ = create_identifier_node($1);
-    }
-    | TOKEN_THIS {
-        $$ = create_identifier_node("this");
     }
     | TOKEN_LPAREN expression TOKEN_RPAREN {
         $$ = $2;

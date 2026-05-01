@@ -585,6 +585,9 @@ ASTNode* create_import_node(char* path, char* alias, ASTNode* constraints);
 ASTNode* create_export_node(char* name);
 ASTNode* create_packet_node(char* name, ASTNodeList* statements);
 
+
+ASTNode* default_value; 
+
 /* Fonctions */
 ASTNode* create_function_node(char* name, ASTNodeList* params, ASTNode* return_type, ASTNodeList* body);
 ASTNode* create_public_function_node(char* name, ASTNodeList* params, ASTNode* return_type, ASTNodeList* body);

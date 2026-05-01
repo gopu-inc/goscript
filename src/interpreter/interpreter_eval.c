@@ -1070,6 +1070,7 @@ Value call_method(Value* obj, char* method_name, ASTNodeList* args, Environment*
     
     Environment* method_env = create_env(env);
     env_set(method_env, "self", *obj);
+    env_set(method_env, "this", *obj);
     
     if (args) {
         for (int i = 0; i < args->count; i++) {

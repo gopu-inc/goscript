@@ -414,14 +414,19 @@ param_list:
     }
     ;
 
+/* Dans parser.y */
+
 param:
-    TOKEN_IDENTIFIER {
-        $$ = create_identifier_node($1);
-    }
-    | TOKEN_IDENTIFIER TOKEN_COLON type {
-        $$ = create_param_node($1, $3);
-    }
-    ;
+    TOKEN_IDENTIFIER 
+    { $$ = create_param_node($1, NULL, NULL); }
+|   TOKEN_IDENTIFIER TOKEN_COLON type 
+    { $$ = create_param_node($1, $3, NULL); }
+|   TOKEN_IDENTIFIER TOKEN_ASSIGN expression 
+    { $$ = create_param_node($1, NULL, $3); } /* Version simple : ident = valeur */
+|   TOKEN_IDENTIFIER TOKEN_COLON type TOKEN_ASSIGN expression 
+    { $$ = create_param_node($1, $3, $5); }   /* Version complète : ident: type = valeur */
+;
+
 
 type:
     TOKEN_IDENTIFIER {

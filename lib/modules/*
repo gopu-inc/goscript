@@ -1,0 +1,99 @@
+// lib/__builtin__.gjs - Module built-in
+
+module __builtin__
+
+// ============================================
+// STRUCTURE TYPES
+// ============================================
+
+struct Types {
+    // Placeholder pour l'implémentation
+}
+
+// ============================================
+// IMPLÉMENTATION DE TYPES
+// ============================================
+
+impl Types {
+    // Retourne le type d'une valeur sous forme de string
+    pub fn of(value: string): string {
+        // Détecter le type via des commandes shell
+        ret detect_type(value)
+    }
+    
+    // Vérifie si c'est un nombre
+    pub fn is_number(value: string): bool {
+        lt cmd = f"echo '{value}' | grep -q '^[0-9]\\+$' && echo true || echo false"
+        lt result = await cmd
+        ret result == "true"
+    }
+    
+    // Vérifie si c'est un float
+    pub fn is_float(value: string): bool {
+        lt cmd = f"echo '{value}' | grep -q '^[0-9]\\+\\.[0-9]\\+$' && echo true || echo false"
+        lt result = await cmd
+        ret result == "true"
+    }
+    
+    // Vérifie si c'est un booléen
+    pub fn is_bool(value: string): bool {
+        ret value == "true" || value == "false"
+    }
+    
+    // Vérifie si c'est nil
+    pub fn is_nil(value: string): bool {
+        ret value == "" || value == "nil"
+    }
+    
+    // Vérifie si c'est une string
+    pub fn is_string(value: string): bool {
+        // Si ce n'est ni nombre, ni bool, ni nil -> string
+        ret !is_number(value) && !is_bool(value) && !is_nil(value)
+    }
+}
+
+// ============================================
+// FONCTIONS GLOBALES
+// ============================================
+
+pub fn detect_type(value: string): string {
+    if value == "" || value == "nil" {
+        ret "nil"
+    }
+    
+    // Vérifier bool
+    if value == "true" || value == "false" {
+        ret "bool"
+    }
+    
+    // Vérifier int
+    lt cmd = f"echo '{value}' | grep -q '^-\\?[0-9]\\+$' && echo true || echo false"
+    lt is_int = await cmd
+    if is_int == "true" {
+        ret "int"
+    }
+    
+    // Vérifier float
+    lt cmd2 = f"echo '{value}' | grep -q '^-\\?[0-9]\\+\\.[0-9]\\+$' && echo true || echo false"
+    lt is_float = await cmd2
+    if is_float == "true" {
+        ret "float"
+    }
+    
+    // Sinon c'est une string
+    ret "string"
+}
+
+// ============================================
+// INSTANCE GLOBALE
+// ============================================
+
+pub lt types = Types{}
+
+// ============================================
+// FONCTIONS UTILITAIRES
+// ============================================
+
+pub fn typeof(value: string): string {
+    ret types.of(value)
+}

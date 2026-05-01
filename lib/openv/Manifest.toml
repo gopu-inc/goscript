@@ -1,0 +1,21 @@
+# Manifest.toml
+# Généré pour OPENV Framework
+
+[metadata]
+name = "openv"
+version = "0.1.0"
+release = "r0"
+arch = "x86_64"
+description = "OPENV Framework - Environment variable manager for Goscript"
+author = "Mauricio-100 <ceoseshell@gmail.com>"
+license = "MIT"
+homepage = "https://github.com/gopu-inc/openv"
+main = "test.gjs"
+
+[dependencies]
+httplib = ">=1.1.0"
+
+
+[scripts]
+build = "mkdir -p build && tar -czf build/openv-0.1.0-r0.x86_64.tar.bool *.gjs .openv Manifest.toml"
+test = "gd test.gjs"

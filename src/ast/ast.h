@@ -487,11 +487,14 @@ struct {
             char* name;
         } optional_type;
         
-        /* Paramètres et champs */
+    
+                /* Paramètres et champs */
         struct {
             char* name;
             struct ASTNode* param_type;
+            struct ASTNode* default_value; // <-- Ajoute cette ligne
         } param;
+
         struct {
             char* name;
             struct ASTNode* field_type;

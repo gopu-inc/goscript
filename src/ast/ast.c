@@ -660,13 +660,15 @@ ASTNode* create_optional_type_node(char* name) {
     return node;
 }
 
-ASTNode* create_param_node(char* name, ASTNode* type) {
-    ASTNode* node = malloc(sizeof(ASTNode));
-    node->type = NODE_PARAM;
-    node->param.name = strdup(name);
-    node->param.param_type = type;
+
+ASTNode* create_param_node(char* name, ASTNode* type, ASTNode* default_value) {
+    ASTNode* node = create_node(NODE_PARAM); // Ou votre type de noeud
+    node->data.param.name = name;
+    node->data.param.type = type;
+    node->data.param.default_value = default_value; // On stocke la valeur par défaut
     return node;
 }
+
 
 ASTNode* create_field_node(char* name, ASTNode* type) {
     ASTNode* node = malloc(sizeof(ASTNode));

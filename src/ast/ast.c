@@ -660,23 +660,16 @@ ASTNode* create_optional_type_node(char* name) {
     return node;
 }
 
-
-/* Dans src/ast/ast.c */
 ASTNode* create_param_node(char* name, ASTNode* type, ASTNode* default_value) {
-    // 1. Utilisez le mécanisme d'allocation habituel de votre projet
-    // Si 'create_node' n'existe pas, regardez comment 'create_if_node' est fait.
-    // Probablement quelque chose comme :
     ASTNode* node = (ASTNode*)malloc(sizeof(ASTNode)); 
     if (!node) return NULL;
 
-    // 2. Initialisez le type du noeud (vérifiez le nom exact du type dans ast.h)
-    node->type = NODE_PARAM; // ou TOKEN_PARAM selon votre enum
+    node->type = NODE_PARAM; 
 
-    // 3. Assignez les champs. 
-    // Comme votre erreur dit "no member named data", essayez l'accès direct :
-    node->param_name = name;      // Vérifiez si c'est 'name' ou 'param_name'
-    node->param_type = type;      // Vérifiez le nom exact dans votre struct
-    node->default_value = default_value; 
+    // Utiliser la bonne syntaxe d'accès à l'union/struct
+    node->param.name = name;
+    node->param.param_type = type;
+    node->param.default_value = default_value; 
 
     return node;
 }

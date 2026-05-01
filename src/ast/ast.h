@@ -670,8 +670,7 @@ ASTNode* create_optional_type_node(char* name);
 ASTNode* create_muts_node(char* name, ASTNode* type, ASTNode* value);
 ASTNode* create_public_muts_node(char* name, ASTNode* type, ASTNode* value);
 
-/* Paramètres et champs */
-ASTNode* create_param_node(char* name, ASTNode* type);
+ASTNode* create_param_node(char* name, ASTNode* type, ASTNode* default_value);
 ASTNode* create_field_node(char* name, ASTNode* type);
 ASTNode* create_field_init_node(char* name, ASTNode* value);
 

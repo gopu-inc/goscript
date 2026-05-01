@@ -54,7 +54,6 @@ void yyerror(const char* msg);
 "pub"                   { return TOKEN_PUB; }
 "new"                   { return TOKEN_NEW; }
 "module"                { return TOKEN_MODULE; }
-"this"                  { return TOKEN_THIS; }
 "only"                  { return TOKEN_ONLY; }
 "sandbox"               { return TOKEN_SANDBOX; }
 "security"              { return TOKEN_SECURITY; }

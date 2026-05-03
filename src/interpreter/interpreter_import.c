@@ -553,55 +553,42 @@ static LoadedModule* load_file_module(const char* full_path, const char* module_
                     break;
                 }
                 
-                            case NODE_IMPL: {
-                // 1. Enregistrer dans la table globale des implémentations
-                register_impl(stmt->impl.name, stmt);
+          
+case NODE_IMPL: {
+    // 1. Enregistrer dans la table globale
+    register_impl(stmt->impl.name, stmt);
+    
+    // 2. Exporter chaque méthode comme fonction dans l'environnement
+    if (stmt->impl.methods) {
+        for (int j = 0; j < stmt->impl.methods->count; j++) {
+            ASTNode* method = stmt->impl.methods->nodes[j];
+            if (method->type == NODE_FUNCTION || 
+                method->type == NODE_PUBLIC_FUNCTION) {
                 
-                // 2. Exporter chaque méthode dans l'environnement du module
-                if (stmt->impl.methods) {
-                    for (int j = 0; j < stmt->impl.methods->count; j++) {
-                        ASTNode* method = stmt->impl.methods->nodes[j];
-                        if (method->type == NODE_FUNCTION || 
-                            method->type == NODE_PUBLIC_FUNCTION ||
-                            method->type == NODE_ASYNC_FUNCTION) {
-                            
-                            Value func_val;
-                            func_val.type = 4;
-                            func_val.func_val.node = method;
-                            func_val.func_val.closure = mod->env;
-                            
-                            // Nom simplifié: Method_post
-                            char* simple_name = malloc(
-                                strlen(stmt->impl.name) + 
-                                strlen(method->function.name) + 2
-                            );
-                            sprintf(simple_name, "%s_%s", 
-                                    stmt->impl.name, method->function.name);
-                            env_set(mod->env, simple_name, func_val);
-                            
-                            // Nom complet avec :: : Method::post
-                            char* full_name = malloc(
-                                strlen(stmt->impl.name) + 
-                                strlen(method->function.name) + 4
-                            );
-                            sprintf(full_name, "%s::%s", 
-                                    stmt->impl.name, method->function.name);
-                            env_set(mod->env, full_name, func_val);
-                            
-                            // Enregistrer dans les exports
-                            register_export(mod, simple_name, NULL);
-                            register_export(mod, full_name, NULL);
-                            
-                            free(simple_name);
-                            free(full_name);
-                        }
-                    }
-                }
+                Value func_val;
+                func_val.type = 4;
+                func_val.func_val.node = method;
+                func_val.func_val.closure = mod->env;
                 
-                // 3. Marquer l'impl comme exportée
-                register_export(mod, stmt->impl.name, NULL);
-                break;
-            }       
+                // Format: Method_post
+                char* method_key = malloc(strlen(stmt->impl.name) + 
+                                         strlen(method->function.name) + 2);
+                sprintf(method_key, "%s_%s", stmt->impl.name, method->function.name);
+                env_set(mod->env, method_key, func_val);
+                
+                // Format: Method::post
+                char* method_full = malloc(strlen(stmt->impl.name) + 
+                                          strlen(method->function.name) + 4);
+                sprintf(method_full, "%s::%s", stmt->impl.name, method->function.name);
+                env_set(mod->env, method_full, func_val);
+                
+                free(method_key);
+                free(method_full);
+            }
+        }
+    }
+    break;
+}          
                     
                 case NODE_EXPORT:
                     register_export(mod, stmt->export.name, NULL);

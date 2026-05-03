@@ -2080,32 +2080,46 @@ case NODE_LAMBDA: {
     return (Value){.type = 0};
 }
         // ==================== APPEL DE MÉTHODE ====================
+        // ==================== APPEL DE MÉTHODE (VERSION COMPLÈTE) ====================
 case NODE_METHOD_CALL: {
     Value obj = evaluate_expr(node->method_call.object, env);
+    char* method_name = node->method_call.method;
     
-    // Cas 1: Structure (type 6)
+    // ============================================
+    // CAS 1: STRUCTURE (type 6)
+    // ============================================
     if (obj.type == 6) {
-        char* method_name = node->method_call.method;
-        ASTNode* impl_node = find_impl(obj.struct_val.struct_name);
+        int method_found = 0;
         
+        // 1a. Chercher dans la table des implémentations
+        ASTNode* impl_node = find_impl(obj.struct_val.struct_name);
         if (impl_node) {
             ASTNode* method = find_method(impl_node, method_name);
             if (method) {
+                method_found = 1;
                 Environment* method_env = create_env(env);
+                
+                // Lier self/this et les paramètres
+                env_set(method_env, "self", obj);
+                env_set(method_env, "this", obj);
+                
                 if (method->function.params && method->function.params->count > 0) {
+                    // Premier paramètre = self
                     ASTNode* first_param = method->function.params->nodes[0];
                     env_set(method_env, first_param->identifier.name, obj);
+                    
+                    // Paramètres supplémentaires
                     if (node->method_call.args) {
-                        for (int i = 0; i < node->method_call.args->count && (i + 1) < method->function.params->count; i++) {
+                        for (int i = 0; i < node->method_call.args->count && 
+                             (i + 1) < method->function.params->count; i++) {
                             Value arg_val = evaluate_expr(node->method_call.args->nodes[i], env);
                             ASTNode* param = method->function.params->nodes[i + 1];
                             env_set(method_env, param->identifier.name, arg_val);
                         }
                     }
-                } else {
-                    env_set(method_env, "self", obj);
                 }
                 
+                // Exécuter le corps de la méthode
                 for (int i = 0; i < method->function.body->count; i++) {
                     ASTNode* stmt = method->function.body->nodes[i];
                     if (stmt->type == NODE_RETURN) {
@@ -2118,65 +2132,197 @@ case NODE_METHOD_CALL: {
                 free(method_env);
             }
         }
-    }
-    // Cas 2: Module (type 7)
-    else if (obj.type == 7) {
-        LoadedModule* module = (LoadedModule*)obj.int_val;
-        char* method_name = node->method_call.method;
-        Value* func = env_get(module->env, method_name);
         
-        if (func && func->type == 4) {
-            Environment* func_env = create_env(func->func_val.closure);
+        // 1b. Chercher dans l'environnement (méthodes exportées)
+        if (!method_found) {
+            // Format: Method_post
+            char* method_key = malloc(strlen(obj.struct_val.struct_name) + strlen(method_name) + 2);
+            sprintf(method_key, "%s_%s", obj.struct_val.struct_name, method_name);
             
-            if (node->method_call.args && func->func_val.node->function.params) {
-                int arg_count = node->method_call.args->count;
-                int param_count = func->func_val.node->function.params->count;
-                for (int i = 0; i < arg_count && i < param_count; i++) {
-                    Value arg_val = evaluate_expr(node->method_call.args->nodes[i], env);
-                    ASTNode* param = func->func_val.node->function.params->nodes[i];
-                    env_set(func_env, param->identifier.name, arg_val);
+            // Format: Method::post
+            char* method_full = malloc(strlen(obj.struct_val.struct_name) + strlen(method_name) + 4);
+            sprintf(method_full, "%s::%s", obj.struct_val.struct_name, method_name);
+            
+            Value* func = env_get(env, method_key);
+            if (!func) func = env_get(env, method_full);
+            
+            if (func) {
+                method_found = 1;
+                
+                // ============ FONCTION GOSCRIPT (type 4) ============
+                if (func->type == 4) {
+                    Environment* func_env = create_env(func->func_val.closure);
+                    env_set(func_env, "self", obj);
+                    env_set(func_env, "this", obj);
+                    
+                    if (func->func_val.node->function.params && 
+                        func->func_val.node->function.params->count > 0) {
+                        ASTNode* first_param = func->func_val.node->function.params->nodes[0];
+                        env_set(func_env, first_param->identifier.name, obj);
+                        
+                        if (node->method_call.args) {
+                            for (int i = 0; i < node->method_call.args->count && 
+                                 (i + 1) < func->func_val.node->function.params->count; i++) {
+                                Value arg_val = evaluate_expr(node->method_call.args->nodes[i], env);
+                                ASTNode* param = func->func_val.node->function.params->nodes[i + 1];
+                                env_set(func_env, param->identifier.name, arg_val);
+                            }
+                        }
+                    }
+                    
+                    for (int i = 0; i < func->func_val.node->function.body->count; i++) {
+                        ASTNode* stmt = func->func_val.node->function.body->nodes[i];
+                        if (stmt->type == NODE_RETURN) {
+                            result = evaluate_expr(stmt->return_stmt.value, func_env);
+                            break;
+                        } else {
+                            evaluate_statement(stmt, func_env, NULL);
+                        }
+                    }
+                    free(func_env);
                 }
-            }
-            
-            for (int i = 0; i < func->func_val.node->function.body->count; i++) {
-                ASTNode* stmt = func->func_val.node->function.body->nodes[i];
-                if (stmt->type == NODE_RETURN) {
-                    result = evaluate_expr(stmt->return_stmt.value, func_env);
-                    break;
-                } else {
-                    evaluate_statement(stmt, func_env, NULL);
+                // ============ LAMBDA (type 9) ============
+                else if (func->type == 9) {
+                    Environment* lambda_env = create_env(func->lambda_val.closure);
+                    env_set(lambda_env, "self", obj);
+                    env_set(lambda_env, "this", obj);
+                    
+                    if (func->lambda_val.node->lambda.params && 
+                        func->lambda_val.node->lambda.params->count > 0) {
+                        ASTNode* first_param = func->lambda_val.node->lambda.params->nodes[0];
+                        env_set(lambda_env, first_param->identifier.name, obj);
+                        
+                        if (node->method_call.args) {
+                            for (int i = 0; i < node->method_call.args->count && 
+                                 (i + 1) < func->lambda_val.node->lambda.params->count; i++) {
+                                Value arg_val = evaluate_expr(node->method_call.args->nodes[i], env);
+                                ASTNode* param = func->lambda_val.node->lambda.params->nodes[i + 1];
+                                env_set(lambda_env, param->identifier.name, arg_val);
+                            }
+                        }
+                    }
+                    
+                    for (int i = 0; i < func->lambda_val.node->lambda.body->count; i++) {
+                        ASTNode* stmt = func->lambda_val.node->lambda.body->nodes[i];
+                        if (stmt->type == NODE_RETURN) {
+                            result = evaluate_expr(stmt->return_stmt.value, lambda_env);
+                            break;
+                        } else {
+                            evaluate_statement(stmt, lambda_env, NULL);
+                        }
+                    }
+                    free(lambda_env);
                 }
-            }
-            free(func_env);
-        }
-    }
-    // Cas 3: Fallback (UFCS) pour les types primitifs
-    else {
-        char* method_name = node->method_call.method;
-        Value* func = env_get(env, method_name);
-        
-        if (func && (func->type == 4 || func->type == 5 || func->type == 9)) {
-            Environment* func_env = NULL;
-            if (func->type == 4) {
-                func_env = create_env(func->func_val.closure);
-            } else if (func->type == 9) {
-                func_env = create_env(func->lambda_val.closure);
-            }
-            
-            // Appel de fonction GoScript (type 4 ou 9)
-            if (func_env) {
-                if (func->func_val.node->function.params && func->func_val.node->function.params->count > 0) {
-                    ASTNode* first_param = func->func_val.node->function.params->nodes[0];
-                    env_set(func_env, first_param->identifier.name, obj);
+                // ============ FONCTION C FFI (type 5) ============
+                else if (func->type == 5) {
+                    int arg_count = (node->method_call.args ? node->method_call.args->count : 0) + 1;
+                    Value* args = malloc(arg_count * sizeof(Value));
+                    args[0] = obj;
                     
                     if (node->method_call.args) {
-                        for (int i = 0; i < node->method_call.args->count && (i + 1) < func->func_val.node->function.params->count; i++) {
-                            Value arg_val = evaluate_expr(node->method_call.args->nodes[i], env);
-                            ASTNode* param = func->func_val.node->function.params->nodes[i + 1];
-                            env_set(func_env, param->identifier.name, arg_val);
+                        for (int i = 0; i < node->method_call.args->count; i++) {
+                            args[i + 1] = evaluate_expr(node->method_call.args->nodes[i], env);
+                        }
+                    }
+                    
+                    // Appeler via FFI
+                    result = call_c_function_ffi(
+                        func->cfunc_val.func_ptr, 
+                        args, 
+                        arg_count, 
+                        func->cfunc_val.ret_type, 
+                        func->cfunc_val.arg_types
+                    );
+                    
+                    free(args);
+                }
+                // ============ PROMESSE (type 11) ============
+                else if (func->type == VALUE_TYPE_PROMISE) {
+                    // Une promesse comme méthode ? Traiter comme une exécution async
+                    Promise* p = (Promise*)func->int_val;
+                    result = await_promise(p, env);
+                }
+                // ============ FUTUR (type 12) ============
+                else if (func->type == VALUE_TYPE_FUTURE) {
+                    Future* f = (Future*)func->int_val;
+                    if (f->is_ready) {
+                        result = f->promise->result;
+                    } else {
+                        result = await_promise(f->promise, env);
+                    }
+                }
+            }
+            
+            free(method_key);
+            free(method_full);
+        }
+        
+        // 1c. Méthode spéciale intégrée pour les structures
+        if (!method_found) {
+            // Méthodes intégrées pour toutes les structures
+            if (strcmp(method_name, "to_string") == 0 || strcmp(method_name, "toString") == 0) {
+                char* repr = malloc(4096);
+                sprintf(repr, "%s{", obj.struct_val.struct_name);
+                for (int i = 0; i < obj.struct_val.field_count; i++) {
+                    if (i > 0) strcat(repr, ", ");
+                    if (obj.struct_val.fields[i].name) {
+                        strcat(repr, obj.struct_val.fields[i].name);
+                        strcat(repr, ": ");
+                        
+                        if (obj.struct_val.fields[i].value) {
+                            char val_str[256] = "";
+                            Value* v = obj.struct_val.fields[i].value;
+                            if (v->type == 2) snprintf(val_str, 256, "\"%s\"", v->string_val);
+                            else if (v->type == 0) snprintf(val_str, 256, "%d", v->int_val);
+                            else if (v->type == 1) snprintf(val_str, 256, "%f", v->float_val);
+                            else if (v->type == 3) snprintf(val_str, 256, "%s", v->bool_val ? "true" : "false");
+                            else snprintf(val_str, 256, "?");
+                            strcat(repr, val_str);
                         }
                     }
                 }
+                strcat(repr, "}");
+                result.type = 2;
+                result.string_val = repr;
+                method_found = 1;
+            }
+        }
+        
+        // 1d. Méthode non trouvée
+        if (!method_found) {
+            fprintf(stderr, "Error: Method '%s' not found for struct '%s'\n", 
+                    method_name, obj.struct_val.struct_name);
+            // Retourner une valeur nulle
+            result.type = 0;
+            result.int_val = 0;
+        }
+    }
+    
+    // ============================================
+    // CAS 2: MODULE (type 7)
+    // ============================================
+    else if (obj.type == 7) {
+        LoadedModule* module = (LoadedModule*)obj.int_val;
+        
+        // Chercher dans l'environnement du module
+        Value* func = env_get(module->env, method_name);
+        
+        if (func) {
+            // ============ FONCTION GOSCRIPT (type 4) ============
+            if (func->type == 4) {
+                Environment* func_env = create_env(func->func_val.closure);
+                
+                if (node->method_call.args && func->func_val.node->function.params) {
+                    int arg_count = node->method_call.args->count;
+                    int param_count = func->func_val.node->function.params->count;
+                    
+                    for (int i = 0; i < arg_count && i < param_count; i++) {
+                        Value arg_val = evaluate_expr(node->method_call.args->nodes[i], env);
+                        ASTNode* param = func->func_val.node->function.params->nodes[i];
+                        env_set(func_env, param->identifier.name, arg_val);
+                    }
+                }
+                
                 for (int i = 0; i < func->func_val.node->function.body->count; i++) {
                     ASTNode* stmt = func->func_val.node->function.body->nodes[i];
                     if (stmt->type == NODE_RETURN) {
@@ -2187,9 +2333,138 @@ case NODE_METHOD_CALL: {
                     }
                 }
                 free(func_env);
-            } 
-            // Appel de fonction C FFI (type 5)
+            }
+            // ============ LAMBDA (type 9) ============
+            else if (func->type == 9) {
+                Environment* lambda_env = create_env(func->lambda_val.closure);
+                
+                if (node->method_call.args && func->lambda_val.node->lambda.params) {
+                    int arg_count = node->method_call.args->count;
+                    int param_count = func->lambda_val.node->lambda.params->count;
+                    
+                    for (int i = 0; i < arg_count && i < param_count; i++) {
+                        Value arg_val = evaluate_expr(node->method_call.args->nodes[i], env);
+                        ASTNode* param = func->lambda_val.node->lambda.params->nodes[i];
+                        env_set(lambda_env, param->identifier.name, arg_val);
+                    }
+                }
+                
+                for (int i = 0; i < func->lambda_val.node->lambda.body->count; i++) {
+                    ASTNode* stmt = func->lambda_val.node->lambda.body->nodes[i];
+                    if (stmt->type == NODE_RETURN) {
+                        result = evaluate_expr(stmt->return_stmt.value, lambda_env);
+                        break;
+                    } else {
+                        evaluate_statement(stmt, lambda_env, NULL);
+                    }
+                }
+                free(lambda_env);
+            }
+            // ============ FONCTION C FFI (type 5) ============
             else if (func->type == 5) {
+                int arg_count = node->method_call.args ? node->method_call.args->count : 0;
+                Value* args = malloc(arg_count * sizeof(Value));
+                
+                if (node->method_call.args) {
+                    for (int i = 0; i < arg_count; i++) {
+                        args[i] = evaluate_expr(node->method_call.args->nodes[i], env);
+                    }
+                }
+                
+                result = call_c_function_ffi(
+                    func->cfunc_val.func_ptr, 
+                    args, 
+                    arg_count, 
+                    func->cfunc_val.ret_type, 
+                    func->cfunc_val.arg_types
+                );
+                free(args);
+            }
+            // ============ VALEUR DIRECTE ============
+            else {
+                result = *func;
+            }
+        } else {
+            fprintf(stderr, "Error: Function '%s' not found in module '%s'\n", 
+                    method_name, module->module_name);
+            result.type = 0;
+            result.int_val = 0;
+        }
+    }
+    
+    // ============================================
+    // CAS 3: TYPES PRIMITIFS - UFCS (Unified Function Call Syntax)
+    // ============================================
+    else {
+        Value* func = env_get(env, method_name);
+        
+        if (func) {
+            // ============ FONCTION GOSCRIPT (type 4) ============
+            if (func->type == 4) {
+                Environment* func_env = create_env(func->func_val.closure);
+                
+                // Premier paramètre = l'objet lui-même (self)
+                if (func->func_val.node->function.params && 
+                    func->func_val.node->function.params->count > 0) {
+                    ASTNode* first_param = func->func_val.node->function.params->nodes[0];
+                    env_set(func_env, first_param->identifier.name, obj);
+                    env_set(func_env, "self", obj);
+                    
+                    if (node->method_call.args) {
+                        for (int i = 0; i < node->method_call.args->count && 
+                             (i + 1) < func->func_val.node->function.params->count; i++) {
+                            Value arg_val = evaluate_expr(node->method_call.args->nodes[i], env);
+                            ASTNode* param = func->func_val.node->function.params->nodes[i + 1];
+                            env_set(func_env, param->identifier.name, arg_val);
+                        }
+                    }
+                }
+                
+                for (int i = 0; i < func->func_val.node->function.body->count; i++) {
+                    ASTNode* stmt = func->func_val.node->function.body->nodes[i];
+                    if (stmt->type == NODE_RETURN) {
+                        result = evaluate_expr(stmt->return_stmt.value, func_env);
+                        break;
+                    } else {
+                        evaluate_statement(stmt, func_env, NULL);
+                    }
+                }
+                free(func_env);
+            }
+            // ============ LAMBDA (type 9) ============
+            else if (func->type == 9) {
+                Environment* lambda_env = create_env(func->lambda_val.closure);
+                
+                if (func->lambda_val.node->lambda.params && 
+                    func->lambda_val.node->lambda.params->count > 0) {
+                    ASTNode* first_param = func->lambda_val.node->lambda.params->nodes[0];
+                    env_set(lambda_env, first_param->identifier.name, obj);
+                    env_set(lambda_env, "self", obj);
+                    
+                    if (node->method_call.args) {
+                        for (int i = 0; i < node->method_call.args->count && 
+                             (i + 1) < func->lambda_val.node->lambda.params->count; i++) {
+                            Value arg_val = evaluate_expr(node->method_call.args->nodes[i], env);
+                            ASTNode* param = func->lambda_val.node->lambda.params->nodes[i + 1];
+                            env_set(lambda_env, param->identifier.name, arg_val);
+                        }
+                    }
+                }
+                
+                for (int i = 0; i < func->lambda_val.node->lambda.body->count; i++) {
+                    ASTNode* stmt = func->lambda_val.node->lambda.body->nodes[i];
+                    if (stmt->type == NODE_RETURN) {
+                        result = evaluate_expr(stmt->return_stmt.value, lambda_env);
+                        break;
+                    } else {
+                        evaluate_statement(stmt, lambda_env, NULL);
+                    }
+                }
+                free(lambda_env);
+            }
+            // ============ FONCTION C FFI (type 5) ============
+            else if (func->type == 5) {
+                // L'objet devient le premier argument
                 int arg_count = (node->method_call.args ? node->method_call.args->count : 0) + 1;
                 Value* args = malloc(arg_count * sizeof(Value));
                 args[0] = obj;
@@ -2199,13 +2474,154 @@ case NODE_METHOD_CALL: {
                         args[i + 1] = evaluate_expr(node->method_call.args->nodes[i], env);
                     }
                 }
-                result = call_c_function_ffi(func->cfunc_val.func_ptr, args, arg_count, func->cfunc_val.ret_type, func->cfunc_val.arg_types);
+                
+                result = call_c_function_ffi(
+                    func->cfunc_val.func_ptr, 
+                    args, 
+                    arg_count, 
+                    func->cfunc_val.ret_type, 
+                    func->cfunc_val.arg_types
+                );
                 free(args);
             }
-        } else {
-            fprintf(stderr, "Error: Method '%s' not found for primitive type\n", method_name);
+            // ============ PROMESSE (type 11) ============
+            else if (func->type == VALUE_TYPE_PROMISE) {
+                Promise* p = (Promise*)func->int_val;
+                result = await_promise(p, env);
+            }
+            // ============ FUTUR (type 12) ============
+            else if (func->type == VALUE_TYPE_FUTURE) {
+                Future* f = (Future*)func->int_val;
+                if (f->is_ready) {
+                    result = f->promise->result;
+                } else {
+                    result = await_promise(f->promise, env);
+                }
+            }
+            // ============ AUTRES TYPES ============
+            else {
+                result = *func;
+            }
+        } 
+        // ============ MÉTHODES INTÉGRÉES POUR TYPES PRIMITIFS ============
+        else {
+            int builtin_found = 0;
+            
+            // Méthodes pour les strings (type 2)
+            if (obj.type == 2) {
+                if (strcmp(method_name, "len") == 0 || strcmp(method_name, "length") == 0) {
+                    result.type = 0;
+                    result.int_val = strlen(obj.string_val);
+                    builtin_found = 1;
+                }
+                else if (strcmp(method_name, "upper") == 0) {
+                    char* upper = strdup(obj.string_val);
+                    for (char* p = upper; *p; p++) *p = toupper(*p);
+                    result.type = 2;
+                    result.string_val = upper;
+                    builtin_found = 1;
+                }
+                else if (strcmp(method_name, "lower") == 0) {
+                    char* lower = strdup(obj.string_val);
+                    for (char* p = lower; *p; p++) *p = tolower(*p);
+                    result.type = 2;
+                    result.string_val = lower;
+                    builtin_found = 1;
+                }
+                else if (strcmp(method_name, "trim") == 0) {
+                    char* s = obj.string_val;
+                    while (isspace(*s)) s++;
+                    char* e = s + strlen(s) - 1;
+                    while (e > s && isspace(*e)) e--;
+                    size_t len = e - s + 1;
+                    char* trimmed = malloc(len + 1);
+                    strncpy(trimmed, s, len);
+                    trimmed[len] = '\0';
+                    result.type = 2;
+                    result.string_val = trimmed;
+                    builtin_found = 1;
+                }
+                else if (strcmp(method_name, "split") == 0) {
+                    // split(delimiter) -> array
+                    if (node->method_call.args && node->method_call.args->count > 0) {
+                        Value delim = evaluate_expr(node->method_call.args->nodes[0], env);
+                        if (delim.type == 2 && delim.string_val) {
+                            // Implémentation simplifiée
+                            result.type = 8;
+                            result.array_val.elements = create_node_list();
+                            result.array_val.count = 0;
+                            
+                            char* copy = strdup(obj.string_val);
+                            char* token = strtok(copy, delim.string_val);
+                            while (token) {
+                                ASTNode* elem = create_string_node(token);
+                                add_to_node_list(result.array_val.elements, elem);
+                                result.array_val.count++;
+                                token = strtok(NULL, delim.string_val);
+                            }
+                            free(copy);
+                            builtin_found = 1;
+                        }
+                    }
+                }
+            }
+            // Méthodes pour les tableaux (type 8)
+            else if (obj.type == 8) {
+                if (strcmp(method_name, "len") == 0 || strcmp(method_name, "length") == 0) {
+                    result.type = 0;
+                    result.int_val = obj.array_val.count;
+                    builtin_found = 1;
+                }
+                else if (strcmp(method_name, "push") == 0) {
+                    if (node->method_call.args && node->method_call.args->count > 0) {
+                        Value val = evaluate_expr(node->method_call.args->nodes[0], env);
+                        ASTNode* elem = create_number_node(val.int_val); // Simplifié
+                        if (val.type == 2) {
+                            free(elem);
+                            elem = create_string_node(val.string_val);
+                        }
+                        add_to_node_list(obj.array_val.elements, elem);
+                        obj.array_val.count++;
+                        result = obj;
+                        builtin_found = 1;
+                    }
+                }
+            }
+            // Méthodes pour les dictionnaires (type 10)
+            else if (obj.type == VALUE_TYPE_DICT) {
+                if (strcmp(method_name, "len") == 0 || strcmp(method_name, "length") == 0) {
+                    result.type = 0;
+                    result.int_val = obj.dict_val.count;
+                    builtin_found = 1;
+                }
+                else if (strcmp(method_name, "keys") == 0) {
+                    result.type = 8;
+                    result.array_val.elements = create_node_list();
+                    result.array_val.count = 0;
+                    for (int i = 0; i < obj.dict_val.count; i++) {
+                        Value* key = obj.dict_val.entries[i].key;
+                        ASTNode* elem;
+                        if (key->type == 2) {
+                            elem = create_string_node(key->string_val);
+                        } else {
+                            elem = create_number_node(key->int_val);
+                        }
+                        add_to_node_list(result.array_val.elements, elem);
+                        result.array_val.count++;
+                    }
+                    builtin_found = 1;
+                }
+            }
+            
+            if (!builtin_found) {
+                fprintf(stderr, "Error: Method '%s' not found for type %d\n", 
+                        method_name, obj.type);
+                result.type = 0;
+                result.int_val = 0;
+            }
         }
     }
+    
     break;
 }
         

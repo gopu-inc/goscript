@@ -553,7 +553,7 @@ static LoadedModule* load_file_module(const char* full_path, const char* module_
                     break;
                 }
                 
-                        case NODE_IMPL: {
+                            case NODE_IMPL: {
                 // 1. Enregistrer dans la table globale des implémentations
                 register_impl(stmt->impl.name, stmt);
                 
@@ -601,7 +601,7 @@ static LoadedModule* load_file_module(const char* full_path, const char* module_
                 // 3. Marquer l'impl comme exportée
                 register_export(mod, stmt->impl.name, NULL);
                 break;
-            }
+            }       
                     
                 case NODE_EXPORT:
                     register_export(mod, stmt->export.name, NULL);

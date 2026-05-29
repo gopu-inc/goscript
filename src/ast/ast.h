@@ -281,9 +281,11 @@ struct {
             char* path;
             char* alias;
             struct ASTNode* constraints;  // Contraintes d'import (only, timeout, etc.)
+            ASTNodeList* impl_list;       // Liste des impl à importer
         } import;
         struct {
             char* name;
+            ASTNodeList* export_list;     // Liste d'export (mix de fonctions et impl)
         } export;
         
         /* Packet */
@@ -544,6 +546,7 @@ struct {
             struct ASTNode* right;
         } assign_op;
     };
+    int is_impl;  // Flag pour les items export/import d'impl
 } ASTNode;
 /* ==================== Fonctions de création de listes ==================== */
 ASTNodeList* create_node_list(void);
@@ -589,7 +592,7 @@ ASTNode* create_export_node(char* name);
 ASTNode* create_packet_node(char* name, ASTNodeList* statements);
 
 
-ASTNode* default_value; 
+// ASTNode* default_value;  // Commented out to avoid multiple definition error
 
 /* Fonctions */
 ASTNode* create_function_node(char* name, ASTNodeList* params, ASTNode* return_type, ASTNodeList* body);

@@ -256,13 +256,15 @@ ASTNode* create_import_node(char* path, char* alias, ASTNode* constraints) {
     node->import.path = strdup(path);
     node->import.alias = alias ? strdup(alias) : NULL;
     node->import.constraints = constraints;
+    node->import.impl_list = NULL;
     return node;
 }
 
 ASTNode* create_export_node(char* name) {
     ASTNode* node = malloc(sizeof(ASTNode));
     node->type = NODE_EXPORT;
-    node->export.name = strdup(name);
+    node->export.name = name ? strdup(name) : NULL;
+    node->export.export_list = NULL;
     return node;
 }
 

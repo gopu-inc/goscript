@@ -41,6 +41,7 @@ static NnlContext* nnl_stack = NULL;
 #include <sys/wait.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <ctype.h>
 
 typedef struct {
     Value error;
@@ -327,7 +328,7 @@ void dump_module_env(LoadedModule* mod) {
 }
 
 // Trouver une implémentation par nom de structure
-ASTNode* find_impl(char* struct_name) {
+ASTNode* find_impl(const char* struct_name) {
     for (int i = 0; i < impl_count; i++) {
         if (strcmp(impl_table[i].struct_name, struct_name) == 0) {
             return impl_table[i].impl_node;
@@ -3076,11 +3077,30 @@ case NODE_MATCH: {
             );
             
             if (module) {
-                return 0;
-            } else {
-                fprintf(stderr, "Failed to load module: %s\n", node->import.path);
-                return 0;
-            }
+               // Charger les impl spécifiées si la liste n'est pas vide
+               if (node->import.impl_list && node->import.impl_list->count > 0) {
+                   for (int i = 0; i < node->import.impl_list->count; i++) {
+                       ASTNode* impl_item = node->import.impl_list->nodes[i];
+                       if (impl_item && impl_item->type == NODE_IDENTIFIER) {
+                           const char* impl_name = impl_item->identifier.name;
+                            
+                           // Chercher l'impl dans le module chargé
+                           ASTNode* impl_node = find_impl(impl_name);
+                           if (impl_node) {
+                               // L'impl est déjà dans la table globale
+                               // Rien à faire, il est automatiquement disponible
+                           } else {
+                               fprintf(stderr, "Warning: impl %s not found in module %s\n", 
+                                   impl_name, node->import.path);
+                           }
+                       }
+                   }
+               }
+               return 0;
+           } else {
+               fprintf(stderr, "Failed to load module: %s\n", node->import.path);
+               return 0;
+           }
         }
         
         case NODE_EXPR_STMT: {

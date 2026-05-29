@@ -224,6 +224,32 @@ static void register_export(LoadedModule* mod, const char* symbol, const char* a
     mod->constraints.allowed_count++;
 }
 
+// ==================== GESTION DES IMPL EXPORTÉES ====================
+
+static void register_export_impl(LoadedModule* mod, const char* impl_name) {
+    if (!mod || !impl_name) return;
+    
+    // Utiliser la même liste allowed_names mais avec un préfixe pour les impl
+    if (!mod->constraints.allowed_names) {
+        mod->constraints.allowed_names = malloc(32 * sizeof(char*));
+        mod->constraints.allowed_count = 0;
+    }
+    
+    // Vérifier que l'impl n'est pas déjà enregistrée
+    char impl_marker[256];
+    snprintf(impl_marker, sizeof(impl_marker), "__impl:%s", impl_name);
+    
+    for (int i = 0; i < mod->constraints.allowed_count; i++) {
+        if (mod->constraints.allowed_names[i] && 
+            strcmp(mod->constraints.allowed_names[i], impl_marker) == 0) {
+            return;
+        }
+    }
+    
+    mod->constraints.allowed_names[mod->constraints.allowed_count] = strdup(impl_marker);
+    mod->constraints.allowed_count++;
+}
+
 // ==================== RÉSOLUTION DE CHEMIN ====================
 
 char* resolve_module_path(char* current_file, char* import_path) {
@@ -590,9 +616,25 @@ case NODE_IMPL: {
     break;
 }          
                     
-                case NODE_EXPORT:
-                    register_export(mod, stmt->export.name, NULL);
+                case NODE_EXPORT: {
+                    if (stmt->export.name) {
+                        // Export simple : export Func
+                        register_export(mod, stmt->export.name, NULL);
+                    } else if (stmt->export.export_list) {
+                        // Export liste : export { Func1, Func2, impl Struct }
+                        for (int j = 0; j < stmt->export.export_list->count; j++) {
+                            ASTNode* item = stmt->export.export_list->nodes[j];
+                            if (item && item->type == NODE_IDENTIFIER) {
+                                if (item->is_impl) {
+                                    register_export_impl(mod, item->identifier.name);
+                                } else {
+                                    register_export(mod, item->identifier.name, NULL);
+                                }
+                            }
+                        }
+                    }
                     break;
+                }
               
                 case NODE_IMPORT:
                     evaluate_statement(stmt, mod->env, full_path);

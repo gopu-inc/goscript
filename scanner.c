@@ -1,6 +1,6 @@
-#line 1 "scanner.c"
+#line 2 "scanner.c"
 
-#line 3 "scanner.c"
+#line 4 "scanner.c"
 
 #define  YY_INT_ALIGNED short int
 
@@ -683,8 +683,8 @@ extern int yylineno;
 extern char* yytext;
 
 void yyerror(const char* msg);
-#line 686 "scanner.c"
 #line 687 "scanner.c"
+#line 688 "scanner.c"
 
 #define INITIAL 0
 
@@ -909,7 +909,7 @@ YY_DECL
  /*              MOTS-CLÉS                       */
  /* ============================================ */
 
-#line 912 "scanner.c"
+#line 913 "scanner.c"
 
 	while ( /*CONSTCOND*/1 )		/* loops until end-of-file is reached */
 		{
@@ -1873,7 +1873,7 @@ YY_RULE_SETUP
 #line 463 "src/lexer/scanner.l"
 ECHO;
 	YY_BREAK
-#line 1876 "scanner.c"
+#line 1877 "scanner.c"
 case YY_STATE_EOF(INITIAL):
 	yyterminate();
 

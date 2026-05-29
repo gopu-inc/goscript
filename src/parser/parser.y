@@ -92,7 +92,8 @@ ASTNode* program_root;
 %type <node> sysf_expr sh_expr
 %type <node> bracket_access
 %type <node> import_constraints import_options
-%type <node_list> name_list
+%type <node_list> name_list export_list import_impl_list
+%type <node> export_item import_impl_item
 %type <node> dict_expr dict_type
 %type <node_list> dict_entries dict_entry_list
 %type <node> program statement expression block
@@ -301,6 +302,18 @@ import_statement:
     | TOKEN_IMPORT import_path TOKEN_AS TOKEN_IDENTIFIER import_constraints {
         $$ = create_import_node($2, $4, $5);
     }
+    // import time { impl Vector, impl Matrix }
+    | TOKEN_IMPORT import_path TOKEN_LBRACE import_impl_list TOKEN_RBRACE {
+        ASTNode* node = create_import_node($2, NULL, NULL);
+        node->import.impl_list = $4;
+        $$ = node;
+    }
+    // import time as t { impl Vector }
+    | TOKEN_IMPORT import_path TOKEN_AS TOKEN_IDENTIFIER TOKEN_LBRACE import_impl_list TOKEN_RBRACE {
+        ASTNode* node = create_import_node($2, $4, NULL);
+        node->import.impl_list = $6;
+        $$ = node;
+    }
     ;
 
 // Chemin d'import avec dots (ex: time.ft, .client, ..utils.fs)
@@ -363,6 +376,57 @@ name_list:
 export_statement:
     TOKEN_EXPORT TOKEN_IDENTIFIER {
         $$ = create_export_node($2);
+    }
+    // export { Vector, Matrix, impl Math }
+    | TOKEN_EXPORT TOKEN_LBRACE export_list TOKEN_RBRACE {
+        ASTNode* node = create_export_node(NULL);
+        node->export.export_list = $3;
+        $$ = node;
+    }
+    ;
+
+export_list:
+    export_item {
+        $$ = create_node_list();
+        add_to_node_list($$, $1);
+    }
+    | export_list TOKEN_COMMA export_item {
+        add_to_node_list($1, $3);
+        $$ = $1;
+    }
+    ;
+
+export_item:
+    TOKEN_IDENTIFIER {
+        ASTNode* node = create_identifier_node($1);
+        node->is_impl = 0;
+        $$ = node;
+    }
+    // export impl StructName
+    | TOKEN_IMPL TOKEN_IDENTIFIER {
+        ASTNode* node = create_identifier_node($2);
+        node->is_impl = 1;
+        $$ = node;
+    }
+    ;
+
+import_impl_list:
+    import_impl_item {
+        $$ = create_node_list();
+        add_to_node_list($$, $1);
+    }
+    | import_impl_list TOKEN_COMMA import_impl_item {
+        add_to_node_list($1, $3);
+        $$ = $1;
+    }
+    ;
+
+import_impl_item:
+    // import math { impl Vector }
+    TOKEN_IMPL TOKEN_IDENTIFIER {
+        ASTNode* node = create_identifier_node($2);
+        node->is_impl = 1;
+        $$ = node;
     }
     ;
 

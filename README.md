@@ -231,4 +231,4 @@ Contributing & reporting bugs: open an issue or PR on GitHub.
 ---
 
  GOPU inc
-README generated/updated by automation (commit includes Co-authored-by: Copilot)
+README generated/updated by automation (commit includes Co-authored-by: Lentreprise C.M.O)

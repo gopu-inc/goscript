@@ -57,6 +57,7 @@ typedef enum {
     NODE_MATCH_CASE,
     NODE_RETURN,
     NODE_BINARY_OP,
+    NODE_TERNARY,
     NODE_UNARY_OP,
     NODE_NUMBER, 
     NODE_FLOAT,
@@ -382,6 +383,11 @@ struct {
             struct ASTNode* left;
             struct ASTNode* right;
         } binary;
+        struct {
+            struct ASTNode* condition;
+            struct ASTNode* true_expr;
+            struct ASTNode* false_expr;
+        } ternary;
 
         
         /* Opérations unaires */
@@ -632,6 +638,7 @@ ASTNode* create_constraints_node(char* type, ASTNodeList* list);
 ASTNode* merge_constraints(ASTNode* a, ASTNode* b);
 ASTNode* create_expr_statement(ASTNode* expr);
 ASTNode* create_binary_op(ASTNode* left, Operator op, ASTNode* right);
+ASTNode* create_ternary_node(ASTNode* condition, ASTNode* true_expr, ASTNode* false_expr);
 ASTNode* create_unary_op(Operator op, ASTNode* operand);
 ASTNode* create_assign_node(ASTNode* left, ASTNode* right);
 ASTNode* create_assign_op_node(ASTNode* left, Operator op, ASTNode* right);

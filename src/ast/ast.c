@@ -441,6 +441,15 @@ ASTNode* create_binary_op(ASTNode* left, Operator op, ASTNode* right) {
     return node;
 }
 
+ASTNode* create_ternary_node(ASTNode* condition, ASTNode* true_expr, ASTNode* false_expr) {
+    ASTNode* node = malloc(sizeof(ASTNode));
+    node->type = NODE_TERNARY;
+    node->ternary.condition = condition;
+    node->ternary.true_expr = true_expr;
+    node->ternary.false_expr = false_expr;
+    return node;
+}
+
 ASTNode* create_unary_op(Operator op, ASTNode* operand) {
     ASTNode* node = malloc(sizeof(ASTNode));
     node->type = NODE_UNARY_OP;
@@ -801,6 +810,11 @@ void free_ast(ASTNode* node) {
         case NODE_BINARY_OP:
             free_ast(node->binary.left);
             free_ast(node->binary.right);
+            break;
+        case NODE_TERNARY:
+            free_ast(node->ternary.condition);
+            free_ast(node->ternary.true_expr);
+            free_ast(node->ternary.false_expr);
             break;
         case NODE_UNARY_OP:
             free_ast(node->unary.operand);

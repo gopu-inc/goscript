@@ -56,6 +56,7 @@ void yyerror(const char* msg);
 "module"                { return TOKEN_MODULE; }
 "only"                  { return TOKEN_ONLY; }
 "sandbox"               { return TOKEN_SANDBOX; }
+"allow_ffi"            { return TOKEN_ALLOW_FFI; }
 "security"              { return TOKEN_SECURITY; }
 "extends"               { return TOKEN_EXTENDS; }
 "dict"                  { return TOKEN_DICT; }

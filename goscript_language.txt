@@ -2,7 +2,7 @@
                     GOSCRIPT LANGUAGE SPECIFICATION
 ================================================================================
 
-Date: 2026-04-28 10:19:45
+Date: 2026-06-30 17:05:43
 Contient TOUT le code source du langage Goscript
 
 ================================================================================
@@ -543,6 +543,7 @@ ASTNode* program_root;
 %token TOKEN_SYSF TOKEN_SH
 
 
+
 /* Delimiters */
 %token TOKEN_LPAREN TOKEN_RPAREN TOKEN_LBRACE TOKEN_RBRACE
 %token TOKEN_LBRACKET TOKEN_RBRACKET
@@ -578,7 +579,8 @@ ASTNode* program_root;
 %type <node> sysf_expr sh_expr
 %type <node> bracket_access
 %type <node> import_constraints import_options
-%type <node_list> name_list
+%type <node_list> name_list export_list import_impl_list
+%type <node> export_item import_impl_item
 %type <node> dict_expr dict_type
 %type <node_list> dict_entries dict_entry_list
 %type <node> program statement expression block
@@ -787,6 +789,18 @@ import_statement:
     | TOKEN_IMPORT import_path TOKEN_AS TOKEN_IDENTIFIER import_constraints {
         $$ = create_import_node($2, $4, $5);
     }
+    // import time { impl Vector, impl Matrix }
+    | TOKEN_IMPORT import_path TOKEN_LBRACE import_impl_list TOKEN_RBRACE {
+        ASTNode* node = create_import_node($2, NULL, NULL);
+        node->import.impl_list = $4;
+        $$ = node;
+    }
+    // import time as t { impl Vector }
+    | TOKEN_IMPORT import_path TOKEN_AS TOKEN_IDENTIFIER TOKEN_LBRACE import_impl_list TOKEN_RBRACE {
+        ASTNode* node = create_import_node($2, $4, NULL);
+        node->import.impl_list = $6;
+        $$ = node;
+    }
     ;
 
 // Chemin d'import avec dots (ex: time.ft, .client, ..utils.fs)
@@ -850,6 +864,57 @@ export_statement:
     TOKEN_EXPORT TOKEN_IDENTIFIER {
         $$ = create_export_node($2);
     }
+    // export { Vector, Matrix, impl Math }
+    | TOKEN_EXPORT TOKEN_LBRACE export_list TOKEN_RBRACE {
+        ASTNode* node = create_export_node(NULL);
+        node->export.export_list = $3;
+        $$ = node;
+    }
+    ;
+
+export_list:
+    export_item {
+        $$ = create_node_list();
+        add_to_node_list($$, $1);
+    }
+    | export_list TOKEN_COMMA export_item {
+        add_to_node_list($1, $3);
+        $$ = $1;
+    }
+    ;
+
+export_item:
+    TOKEN_IDENTIFIER {
+        ASTNode* node = create_identifier_node($1);
+        node->is_impl = 0;
+        $$ = node;
+    }
+    // export impl StructName
+    | TOKEN_IMPL TOKEN_IDENTIFIER {
+        ASTNode* node = create_identifier_node($2);
+        node->is_impl = 1;
+        $$ = node;
+    }
+    ;
+
+import_impl_list:
+    import_impl_item {
+        $$ = create_node_list();
+        add_to_node_list($$, $1);
+    }
+    | import_impl_list TOKEN_COMMA import_impl_item {
+        add_to_node_list($1, $3);
+        $$ = $1;
+    }
+    ;
+
+import_impl_item:
+    // import math { impl Vector }
+    TOKEN_IMPL TOKEN_IDENTIFIER {
+        ASTNode* node = create_identifier_node($2);
+        node->is_impl = 1;
+        $$ = node;
+    }
     ;
 
 packet_decl:
@@ -900,14 +965,19 @@ param_list:
     }
     ;
 
+/* Dans parser.y */
+
 param:
-    TOKEN_IDENTIFIER {
-        $$ = create_identifier_node($1);
-    }
-    | TOKEN_IDENTIFIER TOKEN_COLON type {
-        $$ = create_param_node($1, $3);
-    }
-    ;
+    TOKEN_IDENTIFIER 
+    { $$ = create_param_node($1, NULL, NULL); }
+|   TOKEN_IDENTIFIER TOKEN_COLON type 
+    { $$ = create_param_node($1, $3, NULL); }
+|   TOKEN_IDENTIFIER TOKEN_ASSIGN expression 
+    { $$ = create_param_node($1, NULL, $3); } /* Version simple : ident = valeur */
+|   TOKEN_IDENTIFIER TOKEN_COLON type TOKEN_ASSIGN expression 
+    { $$ = create_param_node($1, $3, $5); }   /* Version complète : ident: type = valeur */
+;
+
 
 type:
     TOKEN_IDENTIFIER {
@@ -924,12 +994,9 @@ type:
 
 /* Dictionnaire */
 dict_expr:
-    TOKEN_DICT TOKEN_LBRACE dict_entries TOKEN_RBRACE {
-        $$ = create_dict_node($3);
-    }
-    | TOKEN_MAP TOKEN_LBRACE dict_entries TOKEN_RBRACE {
-        $$ = create_dict_node($3);
-    }
+    TOKEN_DICT TOKEN_LBRACE dict_entries TOKEN_RBRACE { $$ = create_dict_node($3); }
+    | TOKEN_MAP TOKEN_LBRACE dict_entries TOKEN_RBRACE { $$ = create_dict_node($3); }
+    | TOKEN_LBRACE dict_entries TOKEN_RBRACE { $$ = create_dict_node($2); }
     ;
 
 dict_entries:
@@ -1773,9 +1840,11 @@ struct {
             char* path;
             char* alias;
             struct ASTNode* constraints;  // Contraintes d'import (only, timeout, etc.)
+            ASTNodeList* impl_list;       // Liste des impl à importer
         } import;
         struct {
             char* name;
+            ASTNodeList* export_list;     // Liste d'export (mix de fonctions et impl)
         } export;
         
         /* Packet */
@@ -1979,11 +2048,14 @@ struct {
             char* name;
         } optional_type;
         
-        /* Paramètres et champs */
+    
+                /* Paramètres et champs */
         struct {
             char* name;
             struct ASTNode* param_type;
+            struct ASTNode* default_value; // <-- Ajoute cette ligne
         } param;
+
         struct {
             char* name;
             struct ASTNode* field_type;
@@ -2033,6 +2105,7 @@ struct {
             struct ASTNode* right;
         } assign_op;
     };
+    int is_impl;  // Flag pour les items export/import d'impl
 } ASTNode;
 /* ==================== Fonctions de création de listes ==================== */
 ASTNodeList* create_node_list(void);
@@ -2076,6 +2149,9 @@ ASTNode* create_struct_extend_node(char* name, char* parent, ASTNodeList* fields
 ASTNode* create_import_node(char* path, char* alias, ASTNode* constraints);
 ASTNode* create_export_node(char* name);
 ASTNode* create_packet_node(char* name, ASTNodeList* statements);
+
+
+// ASTNode* default_value;  // Commented out to avoid multiple definition error
 
 /* Fonctions */
 ASTNode* create_function_node(char* name, ASTNodeList* params, ASTNode* return_type, ASTNodeList* body);
@@ -2162,8 +2238,7 @@ ASTNode* create_optional_type_node(char* name);
 ASTNode* create_muts_node(char* name, ASTNode* type, ASTNode* value);
 ASTNode* create_public_muts_node(char* name, ASTNode* type, ASTNode* value);
 
-/* Paramètres et champs */
-ASTNode* create_param_node(char* name, ASTNode* type);
+ASTNode* create_param_node(char* name, ASTNode* type, ASTNode* default_value);
 ASTNode* create_field_node(char* name, ASTNode* type);
 ASTNode* create_field_init_node(char* name, ASTNode* value);
 
@@ -2197,6 +2272,8 @@ ASTNode* create_f_string_node(char* template);
 ================================================================================
 4. CODE SOURCE - ast.c
 ================================================================================
+
+
 
 #include "ast.h"
 #include <stdio.h>
@@ -2456,13 +2533,15 @@ ASTNode* create_import_node(char* path, char* alias, ASTNode* constraints) {
     node->import.path = strdup(path);
     node->import.alias = alias ? strdup(alias) : NULL;
     node->import.constraints = constraints;
+    node->import.impl_list = NULL;
     return node;
 }
 
 ASTNode* create_export_node(char* name) {
     ASTNode* node = malloc(sizeof(ASTNode));
     node->type = NODE_EXPORT;
-    node->export.name = strdup(name);
+    node->export.name = name ? strdup(name) : NULL;
+    node->export.export_list = NULL;
     return node;
 }
 
@@ -2860,13 +2939,21 @@ ASTNode* create_optional_type_node(char* name) {
     return node;
 }
 
-ASTNode* create_param_node(char* name, ASTNode* type) {
-    ASTNode* node = malloc(sizeof(ASTNode));
-    node->type = NODE_PARAM;
-    node->param.name = strdup(name);
+ASTNode* create_param_node(char* name, ASTNode* type, ASTNode* default_value) {
+    ASTNode* node = (ASTNode*)malloc(sizeof(ASTNode)); 
+    if (!node) return NULL;
+
+    node->type = NODE_PARAM; 
+
+    // Utiliser la bonne syntaxe d'accès à l'union/struct
+    node->param.name = name;
     node->param.param_type = type;
+    node->param.default_value = default_value; 
+
     return node;
 }
+
+
 
 ASTNode* create_field_node(char* name, ASTNode* type) {
     ASTNode* node = malloc(sizeof(ASTNode));
@@ -3261,6 +3348,7 @@ static NnlContext* nnl_stack = NULL;
 #include <sys/wait.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <ctype.h>
 
 typedef struct {
     Value error;
@@ -3547,7 +3635,7 @@ void dump_module_env(LoadedModule* mod) {
 }
 
 // Trouver une implémentation par nom de structure
-ASTNode* find_impl(char* struct_name) {
+ASTNode* find_impl(const char* struct_name) {
     for (int i = 0; i < impl_count; i++) {
         if (strcmp(impl_table[i].struct_name, struct_name) == 0) {
             return impl_table[i].impl_node;
@@ -4290,6 +4378,7 @@ Value call_method(Value* obj, char* method_name, ASTNodeList* args, Environment*
     
     Environment* method_env = create_env(env);
     env_set(method_env, "self", *obj);
+    env_set(method_env, "this", *obj);
     
     if (args) {
         for (int i = 0; i < args->count; i++) {
@@ -5299,32 +5388,46 @@ case NODE_LAMBDA: {
     return (Value){.type = 0};
 }
         // ==================== APPEL DE MÉTHODE ====================
+        // ==================== APPEL DE MÉTHODE (VERSION COMPLÈTE) ====================
 case NODE_METHOD_CALL: {
     Value obj = evaluate_expr(node->method_call.object, env);
+    char* method_name = node->method_call.method;
     
-    // Cas 1: Structure (type 6)
+    // ============================================
+    // CAS 1: STRUCTURE (type 6)
+    // ============================================
     if (obj.type == 6) {
-        char* method_name = node->method_call.method;
-        ASTNode* impl_node = find_impl(obj.struct_val.struct_name);
+        int method_found = 0;
         
+        // 1a. Chercher dans la table des implémentations
+        ASTNode* impl_node = find_impl(obj.struct_val.struct_name);
         if (impl_node) {
             ASTNode* method = find_method(impl_node, method_name);
             if (method) {
+                method_found = 1;
                 Environment* method_env = create_env(env);
+                
+                // Lier self/this et les paramètres
+                env_set(method_env, "self", obj);
+                env_set(method_env, "this", obj);
+                
                 if (method->function.params && method->function.params->count > 0) {
+                    // Premier paramètre = self
                     ASTNode* first_param = method->function.params->nodes[0];
                     env_set(method_env, first_param->identifier.name, obj);
+                    
+                    // Paramètres supplémentaires
                     if (node->method_call.args) {
-                        for (int i = 0; i < node->method_call.args->count && (i + 1) < method->function.params->count; i++) {
+                        for (int i = 0; i < node->method_call.args->count && 
+                             (i + 1) < method->function.params->count; i++) {
                             Value arg_val = evaluate_expr(node->method_call.args->nodes[i], env);
                             ASTNode* param = method->function.params->nodes[i + 1];
                             env_set(method_env, param->identifier.name, arg_val);
                         }
                     }
-                } else {
-                    env_set(method_env, "self", obj);
                 }
                 
+                // Exécuter le corps de la méthode
                 for (int i = 0; i < method->function.body->count; i++) {
                     ASTNode* stmt = method->function.body->nodes[i];
                     if (stmt->type == NODE_RETURN) {
@@ -5337,65 +5440,197 @@ case NODE_METHOD_CALL: {
                 free(method_env);
             }
         }
-    }
-    // Cas 2: Module (type 7)
-    else if (obj.type == 7) {
-        LoadedModule* module = (LoadedModule*)obj.int_val;
-        char* method_name = node->method_call.method;
-        Value* func = env_get(module->env, method_name);
         
-        if (func && func->type == 4) {
-            Environment* func_env = create_env(func->func_val.closure);
+        // 1b. Chercher dans l'environnement (méthodes exportées)
+        if (!method_found) {
+            // Format: Method_post
+            char* method_key = malloc(strlen(obj.struct_val.struct_name) + strlen(method_name) + 2);
+            sprintf(method_key, "%s_%s", obj.struct_val.struct_name, method_name);
             
-            if (node->method_call.args && func->func_val.node->function.params) {
-                int arg_count = node->method_call.args->count;
-                int param_count = func->func_val.node->function.params->count;
-                for (int i = 0; i < arg_count && i < param_count; i++) {
-                    Value arg_val = evaluate_expr(node->method_call.args->nodes[i], env);
-                    ASTNode* param = func->func_val.node->function.params->nodes[i];
-                    env_set(func_env, param->identifier.name, arg_val);
+            // Format: Method::post
+            char* method_full = malloc(strlen(obj.struct_val.struct_name) + strlen(method_name) + 4);
+            sprintf(method_full, "%s::%s", obj.struct_val.struct_name, method_name);
+            
+            Value* func = env_get(env, method_key);
+            if (!func) func = env_get(env, method_full);
+            
+            if (func) {
+                method_found = 1;
+                
+                // ============ FONCTION GOSCRIPT (type 4) ============
+                if (func->type == 4) {
+                    Environment* func_env = create_env(func->func_val.closure);
+                    env_set(func_env, "self", obj);
+                    env_set(func_env, "this", obj);
+                    
+                    if (func->func_val.node->function.params && 
+                        func->func_val.node->function.params->count > 0) {
+                        ASTNode* first_param = func->func_val.node->function.params->nodes[0];
+                        env_set(func_env, first_param->identifier.name, obj);
+                        
+                        if (node->method_call.args) {
+                            for (int i = 0; i < node->method_call.args->count && 
+                                 (i + 1) < func->func_val.node->function.params->count; i++) {
+                                Value arg_val = evaluate_expr(node->method_call.args->nodes[i], env);
+                                ASTNode* param = func->func_val.node->function.params->nodes[i + 1];
+                                env_set(func_env, param->identifier.name, arg_val);
+                            }
+                        }
+                    }
+                    
+                    for (int i = 0; i < func->func_val.node->function.body->count; i++) {
+                        ASTNode* stmt = func->func_val.node->function.body->nodes[i];
+                        if (stmt->type == NODE_RETURN) {
+                            result = evaluate_expr(stmt->return_stmt.value, func_env);
+                            break;
+                        } else {
+                            evaluate_statement(stmt, func_env, NULL);
+                        }
+                    }
+                    free(func_env);
                 }
-            }
-            
-            for (int i = 0; i < func->func_val.node->function.body->count; i++) {
-                ASTNode* stmt = func->func_val.node->function.body->nodes[i];
-                if (stmt->type == NODE_RETURN) {
-                    result = evaluate_expr(stmt->return_stmt.value, func_env);
-                    break;
-                } else {
-                    evaluate_statement(stmt, func_env, NULL);
+                // ============ LAMBDA (type 9) ============
+                else if (func->type == 9) {
+                    Environment* lambda_env = create_env(func->lambda_val.closure);
+                    env_set(lambda_env, "self", obj);
+                    env_set(lambda_env, "this", obj);
+                    
+                    if (func->lambda_val.node->lambda.params && 
+                        func->lambda_val.node->lambda.params->count > 0) {
+                        ASTNode* first_param = func->lambda_val.node->lambda.params->nodes[0];
+                        env_set(lambda_env, first_param->identifier.name, obj);
+                        
+                        if (node->method_call.args) {
+                            for (int i = 0; i < node->method_call.args->count && 
+                                 (i + 1) < func->lambda_val.node->lambda.params->count; i++) {
+                                Value arg_val = evaluate_expr(node->method_call.args->nodes[i], env);
+                                ASTNode* param = func->lambda_val.node->lambda.params->nodes[i + 1];
+                                env_set(lambda_env, param->identifier.name, arg_val);
+                            }
+                        }
+                    }
+                    
+                    for (int i = 0; i < func->lambda_val.node->lambda.body->count; i++) {
+                        ASTNode* stmt = func->lambda_val.node->lambda.body->nodes[i];
+                        if (stmt->type == NODE_RETURN) {
+                            result = evaluate_expr(stmt->return_stmt.value, lambda_env);
+                            break;
+                        } else {
+                            evaluate_statement(stmt, lambda_env, NULL);
+                        }
+                    }
+                    free(lambda_env);
                 }
-            }
-            free(func_env);
-        }
-    }
-    // Cas 3: Fallback (UFCS) pour les types primitifs
-    else {
-        char* method_name = node->method_call.method;
-        Value* func = env_get(env, method_name);
-        
-        if (func && (func->type == 4 || func->type == 5 || func->type == 9)) {
-            Environment* func_env = NULL;
-            if (func->type == 4) {
-                func_env = create_env(func->func_val.closure);
-            } else if (func->type == 9) {
-                func_env = create_env(func->lambda_val.closure);
-            }
-            
-            // Appel de fonction GoScript (type 4 ou 9)
-            if (func_env) {
-                if (func->func_val.node->function.params && func->func_val.node->function.params->count > 0) {
-                    ASTNode* first_param = func->func_val.node->function.params->nodes[0];
-                    env_set(func_env, first_param->identifier.name, obj);
+                // ============ FONCTION C FFI (type 5) ============
+                else if (func->type == 5) {
+                    int arg_count = (node->method_call.args ? node->method_call.args->count : 0) + 1;
+                    Value* args = malloc(arg_count * sizeof(Value));
+                    args[0] = obj;
                     
                     if (node->method_call.args) {
-                        for (int i = 0; i < node->method_call.args->count && (i + 1) < func->func_val.node->function.params->count; i++) {
-                            Value arg_val = evaluate_expr(node->method_call.args->nodes[i], env);
-                            ASTNode* param = func->func_val.node->function.params->nodes[i + 1];
-                            env_set(func_env, param->identifier.name, arg_val);
+                        for (int i = 0; i < node->method_call.args->count; i++) {
+                            args[i + 1] = evaluate_expr(node->method_call.args->nodes[i], env);
+                        }
+                    }
+                    
+                    // Appeler via FFI
+                    result = call_c_function_ffi(
+                        func->cfunc_val.func_ptr, 
+                        args, 
+                        arg_count, 
+                        func->cfunc_val.ret_type, 
+                        func->cfunc_val.arg_types
+                    );
+                    
+                    free(args);
+                }
+                // ============ PROMESSE (type 11) ============
+                else if (func->type == VALUE_TYPE_PROMISE) {
+                    // Une promesse comme méthode ? Traiter comme une exécution async
+                    Promise* p = (Promise*)func->int_val;
+                    result = await_promise(p, env);
+                }
+                // ============ FUTUR (type 12) ============
+                else if (func->type == VALUE_TYPE_FUTURE) {
+                    Future* f = (Future*)func->int_val;
+                    if (f->is_ready) {
+                        result = f->promise->result;
+                    } else {
+                        result = await_promise(f->promise, env);
+                    }
+                }
+            }
+            
+            free(method_key);
+            free(method_full);
+        }
+        
+        // 1c. Méthode spéciale intégrée pour les structures
+        if (!method_found) {
+            // Méthodes intégrées pour toutes les structures
+            if (strcmp(method_name, "to_string") == 0 || strcmp(method_name, "toString") == 0) {
+                char* repr = malloc(4096);
+                sprintf(repr, "%s{", obj.struct_val.struct_name);
+                for (int i = 0; i < obj.struct_val.field_count; i++) {
+                    if (i > 0) strcat(repr, ", ");
+                    if (obj.struct_val.fields[i].name) {
+                        strcat(repr, obj.struct_val.fields[i].name);
+                        strcat(repr, ": ");
+                        
+                        if (obj.struct_val.fields[i].value) {
+                            char val_str[256] = "";
+                            Value* v = obj.struct_val.fields[i].value;
+                            if (v->type == 2) snprintf(val_str, 256, "\"%s\"", v->string_val);
+                            else if (v->type == 0) snprintf(val_str, 256, "%d", v->int_val);
+                            else if (v->type == 1) snprintf(val_str, 256, "%f", v->float_val);
+                            else if (v->type == 3) snprintf(val_str, 256, "%s", v->bool_val ? "true" : "false");
+                            else snprintf(val_str, 256, "?");
+                            strcat(repr, val_str);
                         }
                     }
                 }
+                strcat(repr, "}");
+                result.type = 2;
+                result.string_val = repr;
+                method_found = 1;
+            }
+        }
+        
+        // 1d. Méthode non trouvée
+        if (!method_found) {
+            fprintf(stderr, "Error: Method '%s' not found for struct '%s'\n", 
+                    method_name, obj.struct_val.struct_name);
+            // Retourner une valeur nulle
+            result.type = 0;
+            result.int_val = 0;
+        }
+    }
+    
+    // ============================================
+    // CAS 2: MODULE (type 7)
+    // ============================================
+    else if (obj.type == 7) {
+        LoadedModule* module = (LoadedModule*)obj.int_val;
+        
+        // Chercher dans l'environnement du module
+        Value* func = env_get(module->env, method_name);
+        
+        if (func) {
+            // ============ FONCTION GOSCRIPT (type 4) ============
+            if (func->type == 4) {
+                Environment* func_env = create_env(func->func_val.closure);
+                
+                if (node->method_call.args && func->func_val.node->function.params) {
+                    int arg_count = node->method_call.args->count;
+                    int param_count = func->func_val.node->function.params->count;
+                    
+                    for (int i = 0; i < arg_count && i < param_count; i++) {
+                        Value arg_val = evaluate_expr(node->method_call.args->nodes[i], env);
+                        ASTNode* param = func->func_val.node->function.params->nodes[i];
+                        env_set(func_env, param->identifier.name, arg_val);
+                    }
+                }
+                
                 for (int i = 0; i < func->func_val.node->function.body->count; i++) {
                     ASTNode* stmt = func->func_val.node->function.body->nodes[i];
                     if (stmt->type == NODE_RETURN) {
@@ -5406,9 +5641,138 @@ case NODE_METHOD_CALL: {
                     }
                 }
                 free(func_env);
-            } 
-            // Appel de fonction C FFI (type 5)
+            }
+            // ============ LAMBDA (type 9) ============
+            else if (func->type == 9) {
+                Environment* lambda_env = create_env(func->lambda_val.closure);
+                
+                if (node->method_call.args && func->lambda_val.node->lambda.params) {
+                    int arg_count = node->method_call.args->count;
+                    int param_count = func->lambda_val.node->lambda.params->count;
+                    
+                    for (int i = 0; i < arg_count && i < param_count; i++) {
+                        Value arg_val = evaluate_expr(node->method_call.args->nodes[i], env);
+                        ASTNode* param = func->lambda_val.node->lambda.params->nodes[i];
+                        env_set(lambda_env, param->identifier.name, arg_val);
+                    }
+                }
+                
+                for (int i = 0; i < func->lambda_val.node->lambda.body->count; i++) {
+                    ASTNode* stmt = func->lambda_val.node->lambda.body->nodes[i];
+                    if (stmt->type == NODE_RETURN) {
+                        result = evaluate_expr(stmt->return_stmt.value, lambda_env);
+                        break;
+                    } else {
+                        evaluate_statement(stmt, lambda_env, NULL);
+                    }
+                }
+                free(lambda_env);
+            }
+            // ============ FONCTION C FFI (type 5) ============
             else if (func->type == 5) {
+                int arg_count = node->method_call.args ? node->method_call.args->count : 0;
+                Value* args = malloc(arg_count * sizeof(Value));
+                
+                if (node->method_call.args) {
+                    for (int i = 0; i < arg_count; i++) {
+                        args[i] = evaluate_expr(node->method_call.args->nodes[i], env);
+                    }
+                }
+                
+                result = call_c_function_ffi(
+                    func->cfunc_val.func_ptr, 
+                    args, 
+                    arg_count, 
+                    func->cfunc_val.ret_type, 
+                    func->cfunc_val.arg_types
+                );
+                free(args);
+            }
+            // ============ VALEUR DIRECTE ============
+            else {
+                result = *func;
+            }
+        } else {
+            fprintf(stderr, "Error: Function '%s' not found in module '%s'\n", 
+                    method_name, module->module_name);
+            result.type = 0;
+            result.int_val = 0;
+        }
+    }
+    
+    // ============================================
+    // CAS 3: TYPES PRIMITIFS - UFCS (Unified Function Call Syntax)
+    // ============================================
+    else {
+        Value* func = env_get(env, method_name);
+        
+        if (func) {
+            // ============ FONCTION GOSCRIPT (type 4) ============
+            if (func->type == 4) {
+                Environment* func_env = create_env(func->func_val.closure);
+                
+                // Premier paramètre = l'objet lui-même (self)
+                if (func->func_val.node->function.params && 
+                    func->func_val.node->function.params->count > 0) {
+                    ASTNode* first_param = func->func_val.node->function.params->nodes[0];
+                    env_set(func_env, first_param->identifier.name, obj);
+                    env_set(func_env, "self", obj);
+                    
+                    if (node->method_call.args) {
+                        for (int i = 0; i < node->method_call.args->count && 
+                             (i + 1) < func->func_val.node->function.params->count; i++) {
+                            Value arg_val = evaluate_expr(node->method_call.args->nodes[i], env);
+                            ASTNode* param = func->func_val.node->function.params->nodes[i + 1];
+                            env_set(func_env, param->identifier.name, arg_val);
+                        }
+                    }
+                }
+                
+                for (int i = 0; i < func->func_val.node->function.body->count; i++) {
+                    ASTNode* stmt = func->func_val.node->function.body->nodes[i];
+                    if (stmt->type == NODE_RETURN) {
+                        result = evaluate_expr(stmt->return_stmt.value, func_env);
+                        break;
+                    } else {
+                        evaluate_statement(stmt, func_env, NULL);
+                    }
+                }
+                free(func_env);
+            }
+            // ============ LAMBDA (type 9) ============
+            else if (func->type == 9) {
+                Environment* lambda_env = create_env(func->lambda_val.closure);
+                
+                if (func->lambda_val.node->lambda.params && 
+                    func->lambda_val.node->lambda.params->count > 0) {
+                    ASTNode* first_param = func->lambda_val.node->lambda.params->nodes[0];
+                    env_set(lambda_env, first_param->identifier.name, obj);
+                    env_set(lambda_env, "self", obj);
+                    
+                    if (node->method_call.args) {
+                        for (int i = 0; i < node->method_call.args->count && 
+                             (i + 1) < func->lambda_val.node->lambda.params->count; i++) {
+                            Value arg_val = evaluate_expr(node->method_call.args->nodes[i], env);
+                            ASTNode* param = func->lambda_val.node->lambda.params->nodes[i + 1];
+                            env_set(lambda_env, param->identifier.name, arg_val);
+                        }
+                    }
+                }
+                
+                for (int i = 0; i < func->lambda_val.node->lambda.body->count; i++) {
+                    ASTNode* stmt = func->lambda_val.node->lambda.body->nodes[i];
+                    if (stmt->type == NODE_RETURN) {
+                        result = evaluate_expr(stmt->return_stmt.value, lambda_env);
+                        break;
+                    } else {
+                        evaluate_statement(stmt, lambda_env, NULL);
+                    }
+                }
+                free(lambda_env);
+            }
+            // ============ FONCTION C FFI (type 5) ============
+            else if (func->type == 5) {
+                // L'objet devient le premier argument
                 int arg_count = (node->method_call.args ? node->method_call.args->count : 0) + 1;
                 Value* args = malloc(arg_count * sizeof(Value));
                 args[0] = obj;
@@ -5418,13 +5782,154 @@ case NODE_METHOD_CALL: {
                         args[i + 1] = evaluate_expr(node->method_call.args->nodes[i], env);
                     }
                 }
-                result = call_c_function_ffi(func->cfunc_val.func_ptr, args, arg_count, func->cfunc_val.ret_type, func->cfunc_val.arg_types);
+                
+                result = call_c_function_ffi(
+                    func->cfunc_val.func_ptr, 
+                    args, 
+                    arg_count, 
+                    func->cfunc_val.ret_type, 
+                    func->cfunc_val.arg_types
+                );
                 free(args);
             }
-        } else {
-            fprintf(stderr, "Error: Method '%s' not found for primitive type\n", method_name);
+            // ============ PROMESSE (type 11) ============
+            else if (func->type == VALUE_TYPE_PROMISE) {
+                Promise* p = (Promise*)func->int_val;
+                result = await_promise(p, env);
+            }
+            // ============ FUTUR (type 12) ============
+            else if (func->type == VALUE_TYPE_FUTURE) {
+                Future* f = (Future*)func->int_val;
+                if (f->is_ready) {
+                    result = f->promise->result;
+                } else {
+                    result = await_promise(f->promise, env);
+                }
+            }
+            // ============ AUTRES TYPES ============
+            else {
+                result = *func;
+            }
+        } 
+        // ============ MÉTHODES INTÉGRÉES POUR TYPES PRIMITIFS ============
+        else {
+            int builtin_found = 0;
+            
+            // Méthodes pour les strings (type 2)
+            if (obj.type == 2) {
+                if (strcmp(method_name, "len") == 0 || strcmp(method_name, "length") == 0) {
+                    result.type = 0;
+                    result.int_val = strlen(obj.string_val);
+                    builtin_found = 1;
+                }
+                else if (strcmp(method_name, "upper") == 0) {
+                    char* upper = strdup(obj.string_val);
+                    for (char* p = upper; *p; p++) *p = toupper(*p);
+                    result.type = 2;
+                    result.string_val = upper;
+                    builtin_found = 1;
+                }
+                else if (strcmp(method_name, "lower") == 0) {
+                    char* lower = strdup(obj.string_val);
+                    for (char* p = lower; *p; p++) *p = tolower(*p);
+                    result.type = 2;
+                    result.string_val = lower;
+                    builtin_found = 1;
+                }
+                else if (strcmp(method_name, "trim") == 0) {
+                    char* s = obj.string_val;
+                    while (isspace(*s)) s++;
+                    char* e = s + strlen(s) - 1;
+                    while (e > s && isspace(*e)) e--;
+                    size_t len = e - s + 1;
+                    char* trimmed = malloc(len + 1);
+                    strncpy(trimmed, s, len);
+                    trimmed[len] = '\0';
+                    result.type = 2;
+                    result.string_val = trimmed;
+                    builtin_found = 1;
+                }
+                else if (strcmp(method_name, "split") == 0) {
+                    // split(delimiter) -> array
+                    if (node->method_call.args && node->method_call.args->count > 0) {
+                        Value delim = evaluate_expr(node->method_call.args->nodes[0], env);
+                        if (delim.type == 2 && delim.string_val) {
+                            // Implémentation simplifiée
+                            result.type = 8;
+                            result.array_val.elements = create_node_list();
+                            result.array_val.count = 0;
+                            
+                            char* copy = strdup(obj.string_val);
+                            char* token = strtok(copy, delim.string_val);
+                            while (token) {
+                                ASTNode* elem = create_string_node(token);
+                                add_to_node_list(result.array_val.elements, elem);
+                                result.array_val.count++;
+                                token = strtok(NULL, delim.string_val);
+                            }
+                            free(copy);
+                            builtin_found = 1;
+                        }
+                    }
+                }
+            }
+            // Méthodes pour les tableaux (type 8)
+            else if (obj.type == 8) {
+                if (strcmp(method_name, "len") == 0 || strcmp(method_name, "length") == 0) {
+                    result.type = 0;
+                    result.int_val = obj.array_val.count;
+                    builtin_found = 1;
+                }
+                else if (strcmp(method_name, "push") == 0) {
+                    if (node->method_call.args && node->method_call.args->count > 0) {
+                        Value val = evaluate_expr(node->method_call.args->nodes[0], env);
+                        ASTNode* elem = create_number_node(val.int_val); // Simplifié
+                        if (val.type == 2) {
+                            free(elem);
+                            elem = create_string_node(val.string_val);
+                        }
+                        add_to_node_list(obj.array_val.elements, elem);
+                        obj.array_val.count++;
+                        result = obj;
+                        builtin_found = 1;
+                    }
+                }
+            }
+            // Méthodes pour les dictionnaires (type 10)
+            else if (obj.type == VALUE_TYPE_DICT) {
+                if (strcmp(method_name, "len") == 0 || strcmp(method_name, "length") == 0) {
+                    result.type = 0;
+                    result.int_val = obj.dict_val.count;
+                    builtin_found = 1;
+                }
+                else if (strcmp(method_name, "keys") == 0) {
+                    result.type = 8;
+                    result.array_val.elements = create_node_list();
+                    result.array_val.count = 0;
+                    for (int i = 0; i < obj.dict_val.count; i++) {
+                        Value* key = obj.dict_val.entries[i].key;
+                        ASTNode* elem;
+                        if (key->type == 2) {
+                            elem = create_string_node(key->string_val);
+                        } else {
+                            elem = create_number_node(key->int_val);
+                        }
+                        add_to_node_list(result.array_val.elements, elem);
+                        result.array_val.count++;
+                    }
+                    builtin_found = 1;
+                }
+            }
+            
+            if (!builtin_found) {
+                fprintf(stderr, "Error: Method '%s' not found for type %d\n", 
+                        method_name, obj.type);
+                result.type = 0;
+                result.int_val = 0;
+            }
         }
     }
+    
     break;
 }
         
@@ -5879,11 +6384,30 @@ case NODE_MATCH: {
             );
             
             if (module) {
-                return 0;
-            } else {
-                fprintf(stderr, "Failed to load module: %s\n", node->import.path);
-                return 0;
-            }
+               // Charger les impl spécifiées si la liste n'est pas vide
+               if (node->import.impl_list && node->import.impl_list->count > 0) {
+                   for (int i = 0; i < node->import.impl_list->count; i++) {
+                       ASTNode* impl_item = node->import.impl_list->nodes[i];
+                       if (impl_item && impl_item->type == NODE_IDENTIFIER) {
+                           const char* impl_name = impl_item->identifier.name;
+                            
+                           // Chercher l'impl dans le module chargé
+                           ASTNode* impl_node = find_impl(impl_name);
+                           if (impl_node) {
+                               // L'impl est déjà dans la table globale
+                               // Rien à faire, il est automatiquement disponible
+                           } else {
+                               fprintf(stderr, "Warning: impl %s not found in module %s\n", 
+                                   impl_name, node->import.path);
+                           }
+                       }
+                   }
+               }
+               return 0;
+           } else {
+               fprintf(stderr, "Failed to load module: %s\n", node->import.path);
+               return 0;
+           }
         }
         
         case NODE_EXPR_STMT: {
@@ -6458,6 +6982,32 @@ static void register_export(LoadedModule* mod, const char* symbol, const char* a
     mod->constraints.allowed_count++;
 }
 
+// ==================== GESTION DES IMPL EXPORTÉES ====================
+
+static void register_export_impl(LoadedModule* mod, const char* impl_name) {
+    if (!mod || !impl_name) return;
+    
+    // Utiliser la même liste allowed_names mais avec un préfixe pour les impl
+    if (!mod->constraints.allowed_names) {
+        mod->constraints.allowed_names = malloc(32 * sizeof(char*));
+        mod->constraints.allowed_count = 0;
+    }
+    
+    // Vérifier que l'impl n'est pas déjà enregistrée
+    char impl_marker[256];
+    snprintf(impl_marker, sizeof(impl_marker), "__impl:%s", impl_name);
+    
+    for (int i = 0; i < mod->constraints.allowed_count; i++) {
+        if (mod->constraints.allowed_names[i] && 
+            strcmp(mod->constraints.allowed_names[i], impl_marker) == 0) {
+            return;
+        }
+    }
+    
+    mod->constraints.allowed_names[mod->constraints.allowed_count] = strdup(impl_marker);
+    mod->constraints.allowed_count++;
+}
+
 // ==================== RÉSOLUTION DE CHEMIN ====================
 
 char* resolve_module_path(char* current_file, char* import_path) {
@@ -6787,13 +7337,62 @@ static LoadedModule* load_file_module(const char* full_path, const char* module_
                     break;
                 }
                 
-                case NODE_IMPL:
-                    register_impl(stmt->impl.name, stmt);
-                    break;
+          
+case NODE_IMPL: {
+    // 1. Enregistrer dans la table globale
+    register_impl(stmt->impl.name, stmt);
+    
+    // 2. Exporter chaque méthode comme fonction dans l'environnement
+    if (stmt->impl.methods) {
+        for (int j = 0; j < stmt->impl.methods->count; j++) {
+            ASTNode* method = stmt->impl.methods->nodes[j];
+            if (method->type == NODE_FUNCTION || 
+                method->type == NODE_PUBLIC_FUNCTION) {
+                
+                Value func_val;
+                func_val.type = 4;
+                func_val.func_val.node = method;
+                func_val.func_val.closure = mod->env;
+                
+                // Format: Method_post
+                char* method_key = malloc(strlen(stmt->impl.name) + 
+                                         strlen(method->function.name) + 2);
+                sprintf(method_key, "%s_%s", stmt->impl.name, method->function.name);
+                env_set(mod->env, method_key, func_val);
+                
+                // Format: Method::post
+                char* method_full = malloc(strlen(stmt->impl.name) + 
+                                          strlen(method->function.name) + 4);
+                sprintf(method_full, "%s::%s", stmt->impl.name, method->function.name);
+                env_set(mod->env, method_full, func_val);
+                
+                free(method_key);
+                free(method_full);
+            }
+        }
+    }
+    break;
+}          
                     
-                case NODE_EXPORT:
-                    register_export(mod, stmt->export.name, NULL);
+                case NODE_EXPORT: {
+                    if (stmt->export.name) {
+                        // Export simple : export Func
+                        register_export(mod, stmt->export.name, NULL);
+                    } else if (stmt->export.export_list) {
+                        // Export liste : export { Func1, Func2, impl Struct }
+                        for (int j = 0; j < stmt->export.export_list->count; j++) {
+                            ASTNode* item = stmt->export.export_list->nodes[j];
+                            if (item && item->type == NODE_IDENTIFIER) {
+                                if (item->is_impl) {
+                                    register_export_impl(mod, item->identifier.name);
+                                } else {
+                                    register_export(mod, item->identifier.name, NULL);
+                                }
+                            }
+                        }
+                    }
                     break;
+                }
               
                 case NODE_IMPORT:
                     evaluate_statement(stmt, mod->env, full_path);
@@ -7922,78 +8521,805 @@ void print_ast(ASTNode* node, int depth) {
 11. MAKEFILE
 ================================================================================
 
-/**
- * =========================================================================
- * GPM (Goscript Package Manager) v1.0.0
- * Copyright (c) 2026 Gopu.inc Team
- * =========================================================================
- */
 
-CXX = g++
-CXXFLAGS = -std=c++17 -Wall -Wextra -O2 -march=native
-LDFLAGS = -lcurl -lssl -lcrypto -lz -lpthread -ldl
 
+
+CC = gcc
+CFLAGS = -Wall -g -O0 -I./src -I./src/ast -I./src/interpreter
+LDFLAGS = -lm -ldl -lffi
+
+# Détection automatique de l'architecture
 UNAME_S := $(shell uname -s)
+UNAME_M := $(shell uname -m)
 
+# Pas de -march par défaut, on laisse gcc choisir
 ifeq ($(UNAME_S),Linux)
-    CXXFLAGS += -DPLATFORM_LINUX
+    ifeq ($(UNAME_M),x86_64)
+        MARCH = -march=x86-64
+    else ifeq ($(UNAME_M),i686)
+        MARCH = -march=i686
+    else ifeq ($(UNAME_M),i586)
+        MARCH = -march=i586
+    else ifeq ($(UNAME_M),aarch64)
+        MARCH = -march=armv8-a
+    else ifeq ($(UNAME_M),armv7l)
+        MARCH = -march=armv7-a
+    else ifeq ($(UNAME_M),armv8l)
+        MARCH = -march=armv8-a
+    else
+        MARCH =
+    endif
 else ifeq ($(UNAME_S),Darwin)
-    CXXFLAGS += -DPLATFORM_MACOS -I/usr/local/opt/openssl/include
-    LDFLAGS += -L/usr/local/opt/openssl/lib
+    ifeq ($(UNAME_M),arm64)
+        MARCH = -arch arm64
+    else
+        MARCH = -arch x86_64
+    endif
+else
+    MARCH =
 endif
 
-SRC_DIR = gpm
-BUILD_DIR = build
-BIN_DIR = bin
-INCLUDE_DIRS = -I$(SRC_DIR)
-SOURCES = $(shell find $(SRC_DIR) -name '*.cpp' -type f)
-OBJECTS = $(SOURCES:$(SRC_DIR)/%.cpp=$(BUILD_DIR)/%.o)
-DEPS = $(OBJECTS:.o=.d)
-TARGET = $(BIN_DIR)/gpm
+# Ajouter MARCH aux CFLAGS s'il est défini
+ifneq ($(MARCH),)
+    CFLAGS += $(MARCH)
+endif
 
-.PHONY: all clean install uninstall test debug release help
+# Sources
+SCANNER_C = scanner.c
+PARSER_C = parser.c
+PARSER_H = parser.h
 
-all: $(TARGET)
+SOURCES = $(SCANNER_C) $(PARSER_C) \
+          src/ast/ast.c \
+          src/main.c \
+          src/interpreter/interpreter_env.c \
+          src/interpreter/interpreter_import.c \
+          src/interpreter/interpreter_ffi.c \
+          src/interpreter/interpreter_eval.c
 
-$(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp
-	@mkdir -p $(dir $@)
-	@$(CXX) $(CXXFLAGS) $(INCLUDE_DIRS) -MMD -c $< -o $@
+OBJECTS = scanner.o parser.o ast.o main.o \
+          interpreter_env.o interpreter_import.o \
+          interpreter_ffi.o interpreter_eval.o
 
+TARGET = gd
+
+all: $(SCANNER_C) $(PARSER_C) $(TARGET)
+
+# Scanner - avec suppression du warning de règle non matchée
+$(SCANNER_C): src/lexer/scanner.l
+	flex -o $(SCANNER_C) src/lexer/scanner.l 2>&1 | grep -v "warning, rule cannot be matched" || true
+
+# Parser - avec gestion des conflits (acceptable pour l'instant)
+$(PARSER_C) $(PARSER_H): src/parser/parser.y
+	bison -d -o $(PARSER_C) src/parser/parser.y
+
+# AST
+ast.o: src/ast/ast.c src/ast/ast.h
+	$(CC) $(CFLAGS) -c src/ast/ast.c -o ast.o
+
+# Main
+main.o: src/main.c
+	$(CC) $(CFLAGS) -c src/main.c -o main.o
+
+# Interpreter
+interpreter_env.o: src/interpreter/interpreter_env.c src/interpreter/interpreter.h
+	$(CC) $(CFLAGS) -c src/interpreter/interpreter_env.c -o interpreter_env.o
+
+interpreter_import.o: src/interpreter/interpreter_import.c src/interpreter/interpreter.h
+	$(CC) $(CFLAGS) -c src/interpreter/interpreter_import.c -o interpreter_import.o
+
+interpreter_ffi.o: src/interpreter/interpreter_ffi.c src/interpreter/interpreter.h
+	$(CC) $(CFLAGS) -c src/interpreter/interpreter_ffi.c -o interpreter_ffi.o
+
+interpreter_eval.o: src/interpreter/interpreter_eval.c src/interpreter/interpreter.h
+	$(CC) $(CFLAGS) -c src/interpreter/interpreter_eval.c -o interpreter_eval.o
+
+# Scanner et Parser objects
+scanner.o: $(SCANNER_C) $(PARSER_H)
+	$(CC) $(CFLAGS) -c $(SCANNER_C) -o scanner.o
+
+parser.o: $(PARSER_C) $(PARSER_H)
+	$(CC) $(CFLAGS) -c $(PARSER_C) -o parser.o
+
+# Link
 $(TARGET): $(OBJECTS)
-	@mkdir -p $(BIN_DIR)
-	@$(CXX) $(CXXFLAGS) $^ -o $@ $(LDFLAGS)
-
-install: $(TARGET)
-	@mkdir -p /usr/local/bin /usr/local/lib/goscript /usr/local/lib/gpm
-	@cp $(TARGET) /usr/local/bin/gpm
-
-uninstall:
-	@rm -f /usr/local/bin/gpm
-
-test: $(TARGET)
-	@./$(TARGET) --version
-	@./$(TARGET) --help
+	$(CC) $(CFLAGS) $(OBJECTS) -o $(TARGET) $(LDFLAGS)
 
 clean:
-	@rm -rf $(BUILD_DIR) $(BIN_DIR)
+	rm -f $(SCANNER_C) $(PARSER_C) $(PARSER_H)
+	rm -f $(OBJECTS)
+	rm -f $(TARGET)
 
-debug: CXXFLAGS += -g -O0 -DDEBUG
-debug: all
+install:
+	cp $(TARGET) /usr/local/bin/
+	mkdir -p /usr/local/lib/goscript
+	cp -r lib/* /usr/local/lib/goscript/ 2>/dev/null || true
 
-release: CXXFLAGS += -O3 -DNDEBUG -flto
-release: LDFLAGS += -flto
-release: all
+# Afficher l'architecture détectée
+debug:
+	@echo "OS: $(UNAME_S)"
+	@echo "Arch: $(UNAME_M)"
+	@echo "MARCH: $(MARCH)"
+	@echo "CFLAGS: $(CFLAGS)"
 
-help:
-	@echo "GPM v1.0.0"
-	@echo "Cibles: all install uninstall clean debug release test help"
-
--include $(DEPS)
+.PHONY: all clean install debug
 
 
 ================================================================================
 12. LIBRAIRIE STANDARD - Modules .gjs
 ================================================================================
+
+----------------------------------------
+MODULE: lib/__builtin__.gjs
+----------------------------------------
+module __builtin__
+
+
+/* fonction pour convertir en chiffre antier
+
+structure de de helper
+*/
+struct Cons{                                    
+   widht: int,                                  
+   light: int                                   
+}                                               
+fn ant(a, b) { 
+   /* assertation pour helper */                                 
+   if a == "" || b == "" {                      
+      ret "[" + is not defined + "]"            
+   }                                            
+   c = new Cons{                                
+       widht: 10,                               
+       light: 5                                 
+   }                                          
+   h = c.widht * 2                              
+   cc = c.light // 4                            
+   ret a * b * h * cc                           
+}
+
+pub fn inputln(): string {
+    // Utilisation de -r pour éviter les problèmes avec les backslashes
+    ret sysf("read -r _tmp_var && echo $_tmp_var")
+}
+// Fonction typeod simplifiée - Détection de type fiable
+// Fonction typeod simplifiée
+pub fn typeod(v: any): string {
+    if v == nil { ret "nil" }
+    
+    // Test simple via sysf pour éviter les try/catch imbriqués qui font planter le lexer
+    lt is_bool = sysf("case '" + v + "' in true|false) echo 1;; *) echo 0;; esac")
+    if is_bool == "1" { ret "bool" }
+
+    // Si on peut concaténer avec une chaîne, c'est un type simple (string/int)
+    ret "string" 
+}
+
+pub fn atoi(s: string): int {
+    if s == nil || s == "" {
+        ret 0
+    }
+    ret atoi_c(s)
+}
+
+pub fn str(v: any): string {
+    if v == nil {
+        ret "nil"
+    }
+    // Utilisation de %s pour être plus propre avec printf si dispo, 
+    // sinon echo -n est très bien
+    ret sysf("echo -n \"" + v + "\"")
+}
+
+// Ajout du support void pour les fonctions système
+pub fn exit(code: int): void {
+    sh("exit " + str(code))
+}
+
+// Fonction len universelle pour Goscript
+fn len(obj) {
+    if obj == nil {
+        ret 0
+    }
+
+    // Le langage supporte l'itération sur les chaînes, tableaux et dictionnaires
+    // On utilise une boucle while avec un compteur pour déterminer la taille
+    muts count = 0
+    
+    // En Goscript, l'accès par index fonctionne pour les chaînes et les tableaux
+    // Pour les dictionnaires, l'itération 'for in' est généralement utilisée
+    // Mais voici une approche générique par parcours :
+    
+    try {
+        // Tentative de parcours pour les types itérables
+        for item in obj {
+            count = count + 1
+        }
+    } catch (e) {
+        // Si l'objet n'est pas itérable (ex: int, bool), on retourne 0 ou on gère l'erreur
+        ret 0
+    }
+    
+    ret count
+}
+
+pub fn trim(s: string): string {
+    if s == nil || len(s) == 0 { 
+        ret "" 
+    }
+    
+    muts start_found = false
+    muts res = ""
+    muts trailing_spaces = ""
+    
+    // On utilise 'for in' pour éviter le bug du NODE(17) (indexation)
+    for c in s {
+        if !start_found {
+            // On saute les espaces au début
+            if c == " " || c == "\t" || c == "\n" || c == "\r" {
+                continue
+            }
+            start_found = true
+        }
+        
+        if start_found {
+            if c == " " || c == "\t" || c == "\n" || c == "\r" {
+                // On stocke les espaces temporairement
+                // S'il y a d'autres caractères après, on les ajoutera
+                trailing_spaces = trailing_spaces + c
+            } else {
+                // On ajoute les espaces accumulés précédemment + le caractère actuel
+                res = res + trailing_spaces + c
+                trailing_spaces = ""
+            }
+        }
+    }
+    
+    ret res
+}
+/*
+for c in s {
+        if !start_found {
+            // On saute les espaces au début
+            if c == " " || c == "\t" || c == "\n" || c == "\r" {
+                continue
+            }
+            start_found = true
+        }
+        
+        if start_found {
+            if c == " " || c == "\t" || c == "\n" || c == "\r" {
+                // On stocke les espaces temporairement
+                // S'il y a d'autres caractères après, on les ajoutera
+                trailing_spaces = trailing_spaces + c
+            } else {
+                // On ajoute les espaces accumulés précédemment + le caractère actuel
+                res = res + trailing_spaces + c
+                trailing_spaces = ""
+            }
+        }
+    }
+    
+    ret res
+}
+*/
+
+
+----------------------------------------
+MODULE: lib/__os.gjs
+----------------------------------------
+// Module __os - Informations système via await
+// Pas de FFI, uniquement des commandes shell
+
+// Version de l'OS
+pub fn version(): string {
+    lt v = await "cat /etc/os-release 2>/dev/null | grep VERSION_ID | cut -d= -f2 | tr -d '\"'"
+    if v == nil || v == "" {
+        v = await "uname -r"
+    }
+    ret trim(v)
+}
+
+// Nom de l'OS
+pub fn name(): string {
+    lt n = await "cat /etc/os-release 2>/dev/null | grep NAME | head -1 | cut -d= -f2 | tr -d '\"'"
+    if n == nil || n == "" {
+        n = await "uname -s"
+    }
+    ret trim(n)
+}
+
+// Architecture
+pub fn arch(): string {
+    ret trim(await "uname -m")
+}
+
+// Nom d'hôte
+pub fn hostname(): string {
+    ret trim(await "hostname")
+}
+
+// Utilisateur courant
+pub fn user(): string {
+    ret trim(await "whoami")
+}
+
+// Uptime système
+pub fn uptime(): string {
+    ret trim(await "uptime")
+}
+
+// Date et heure
+pub fn datetime(): string {
+    ret trim(await "date")
+}
+
+// Timestamp Unix
+pub fn timestamp(): int {
+    lt ts = await "date +%s"
+    ret to_int(trim(ts))
+}
+
+// PID du processus courant
+pub fn pid(): int {
+    lt p = await "echo $$"
+    ret to_int(trim(p))
+}
+
+// Variables d'environnement
+pub fn getenv(key: string): string {
+    ret trim(await "echo $" + key)
+}
+
+// Chemins système
+pub fn cwd(): string {
+    ret trim(await "pwd")
+}
+
+pub fn home(): string {
+    ret trim(await "echo $HOME")
+}
+
+pub fn temp(): string {
+    ret trim(await "echo /tmp")
+}
+
+// Fonction helper
+fn trim(s: string): string {
+    if s == nil { ret "" }
+    muts l = len(s)
+    muts st = 0
+    muts en = l - 1
+    while st < l {
+        if s[st] == 10 || s[st] == 13 {
+            st = st + 1
+        } else { break }
+    }
+    while en >= 0 {
+        if s[en] == 10 || s[en] == 13 {
+            en = en - 1
+        } else { break }
+    }
+    if st > en { ret "" }
+    muts res = ""
+    muts i = st
+    while i <= en {
+        res = res + s[i]
+        i = i + 1
+    }
+    ret res
+}
+
+fn to_int(s: string): int {
+    if s == nil { ret 0 }
+    muts res = 0
+    muts i = 0
+    while i < len(s) {
+        muts c = s[i]
+        if c >= 48 && c <= 57 {
+            res = res * 10 + (c - 48)
+        } else { break }
+        i = i + 1
+    }
+    ret res
+}
+
+fn len(s: string): int {
+    if s == nil { ret 0 }
+    muts count = 0
+    muts i = 0
+    loop {
+        if s[i] == nil { break }
+        count = count + 1
+        i = i + 1
+    }
+    ret count
+}
+
+
+----------------------------------------
+MODULE: lib/__str.gjs
+----------------------------------------
+// Module __str - Version ultra-minimaliste
+// Seulement les fonctions qui ne causent pas de segfault
+
+pub fn len(s: string): int {
+    if s == nil { ret 0 }
+    ret strlen_c(s)
+}
+
+pub fn contains(s: string, sub: string): bool {
+    if s == nil || sub == nil { ret false }
+    ret strstr_c(s, sub) != nil
+}
+
+pub fn to_int(s: string): int {
+    if s == nil { ret 0 }
+    ret atoi_c(s)
+}
+
+pub fn to_float(s: string): float {
+    if s == nil { ret 0.0 }
+    ret atof_c(s)
+}
+
+// Pas de to_upper, to_lower, trim, substring pour l'instant
+
+
+----------------------------------------
+MODULE: lib/__str_min.gjs
+----------------------------------------
+pub fn len(s: string): int {
+    if s == nil {
+        ret 0
+    }
+    ret 100  // Valeur factice pour tester
+}
+
+pub fn to_upper(s: string): string {
+    ret s
+}
+
+
+----------------------------------------
+MODULE: lib/b64.gjs
+----------------------------------------
+// lib/b64.gjs
+module b64
+
+// Encode a string to Base64
+pub fn encode(data: string): string {
+    // On passe la string via printf pour éviter le \n final, puis base64
+    ret sysf("printf '" + data + "' | base64")
+}
+
+// Decode a Base64 string
+pub fn decode(data: string): string {
+    // On décode via base64 -d
+    ret sysf("printf '" + data + "' | base64 -d")
+}
+
+
+
+----------------------------------------
+MODULE: lib/c__builtin__.gjs
+----------------------------------------
+// ============================================
+// Built-in Module for Gopu.inc
+// Chargé automatiquement au démarrage
+// ============================================
+
+pub const VERSION = "0.2.0"
+pub const AUTHOR = "Gopu.inc Team"
+pub const PI = 3.141592653589793
+pub const E = 2.718281828459045
+pub const DEBUG = false
+
+// ============================================
+// Assertions
+// ============================================
+pub fn assert(condition: bool, message: string): bool {
+    if !condition {
+        println("[ASSERT FAILED] " + message)
+        ret false
+    }
+    ret true
+}
+
+pub fn assert_eq(a, b, message: string): bool {
+    if a != b {
+        println("[ASSERT FAILED] " + message + " (" + a + " != " + b + ")")
+        ret false
+    }
+    ret true
+}
+
+// ============================================
+// Logging utilities
+// ============================================
+pub fn log(level: string, msg: string) {
+    println("[" + level + "] " + msg)
+}
+
+pub fn info(msg: string) {
+    log("INFO", msg)
+}
+
+pub fn warn(msg: string) {
+    log("WARN", msg)
+}
+
+pub fn error(msg: string) {
+    log("ERROR", msg)
+}
+
+pub fn debug(msg: string) {
+    if DEBUG {
+        log("DEBUG", msg)
+    }
+}
+
+// ============================================
+// Math utilities
+// ============================================
+pub fn abs(x: int): int {
+    if x < 0 {
+        ret -x
+    }
+    ret x
+}
+
+pub fn max(a, b) {
+    if a > b {
+        ret a
+    }
+    ret b
+}
+
+pub fn min(a, b) {
+    if a < b {
+        ret a
+    }
+    ret b
+}
+
+pub fn clamp(x, low, high) {
+    if x < low {
+        ret low
+    }
+    if x > high {
+        ret high
+    }
+    ret x
+}
+
+// ============================================
+// String utilities
+// ============================================
+pub fn is_empty(s: string): bool {
+    ret s == ""
+}
+
+pub fn not_empty(s: string): bool {
+    ret s != ""
+}
+
+pub fn len(s: string): int {
+    muts count = 0
+    for _ in s {
+        count = count + 1
+    }
+    ret count
+}
+
+pub fn contains(s: string, substr: string): bool {
+    muts i = 0
+    muts s_len = len(s)
+    muts sub_len = len(substr)
+    
+    while i <= s_len - sub_len {
+        muts j = 0
+        muts match = true
+        while j < sub_len {
+            if s[i + j] != substr[j] {
+                match = false
+                break
+            }
+            j = j + 1
+        }
+        if match {
+            ret true
+        }
+        i = i + 1
+    }
+    ret false
+}
+
+// ============================================
+// Type utilities
+// ============================================
+pub fn type_of(value) {
+    ret "unknown"
+}
+
+// ============================================
+// Timing utilities
+// ============================================
+pub fn now(): int {
+    ret system("date +%s")
+}
+
+
+----------------------------------------
+MODULE: lib/config.gjs
+----------------------------------------
+module config
+
+struct Parser {
+    Info: string,
+    parse: string,
+    ligne: int,
+    returne: string
+}
+
+fn parser_conf(file: string, search: string): Parser {
+    // Vérification des arguments (utilisation de || pour le OR logique)
+    if file == "" || search == "" {
+        ret new Parser {
+            Info: "error",
+            parse: "0",
+            ligne: 0,
+            returne: "Error: Missing file or search term"
+        }
+    }
+
+    // Exécution de la recherche dynamique
+    lt cmd = "grep '" + search + "' " + file + " | cut -d'=' -f2"
+    lt result = sysf(cmd)
+    
+    // On récupère toujours le nombre total de lignes pour la structure
+    lt nb_lignes = atoi_c(sysf("wc -l < " + file))
+    
+    ret new Parser {
+        Info: "Config: " + file,
+        parse: result,
+        ligne: nb_lignes,
+        returne: "Success"
+    }
+}
+
+
+
+----------------------------------------
+MODULE: lib/crypto.gjs
+----------------------------------------
+// lib/crypto.gjs
+module crypto
+
+// Hash using sha256sum
+pub fn sha256(data: string): string {
+    // On utilise printf pour envoyer la string sans \n, puis sha256sum
+    lt cmd = "printf '" + data + "' | sha256sum | awk '{print $1}'"
+    ret sysf(cmd)
+}
+
+// Hash using md5sum
+pub fn md5(data: string): string {
+    lt cmd = "printf '" + data + "' | md5sum | awk '{print $1}'"
+    ret sysf(cmd)
+}
+
+
+
+----------------------------------------
+MODULE: lib/db.gjs
+----------------------------------------
+/* lib/db.gjs
+*/
+module db
+
+// Ajouter ou mettre à jour une entrée (Format KEY:VALUE)
+pub fn set(file: string, key: string, value: string) {
+    // On supprime l'ancienne clé si elle existe, puis on ajoute la nouvelle
+    // C'est l'équivalent d'un "UPSERT"
+    lt cmd = "touch " + file + "; sed -i '/^" + key + ":/d' " + file + "; echo '" + key + ":" + value + "' >> " + file
+    sysf(cmd)
+}
+
+// Récupérer une valeur par sa clé
+pub fn get(file: string, key: string): string {
+    // On cherche la ligne commençant par key:, puis on coupe après le premier ':'
+    lt cmd = "grep '^" + key + ":' " + file + " | cut -d':' -f2-"
+    ret sysf(cmd)
+}
+
+// Vérifier si une clé existe
+pub fn exists(file: string, key: string): string {
+    ret sysf("grep -q '^" + key + ":' " + file + " && echo 'True' || echo 'False'")
+}
+
+// Supprimer une clé
+pub fn delete(file: string, key: string) {
+    sysf("sed -i '/^" + key + ":/d' " + file)
+}
+
+// Compter le nombre d'entrées
+pub fn count(file: string): string {
+    ret sysf("wc -l < " + file)
+}
+
+// Chercher toutes les lignes contenant un motif (pattern)
+pub fn search(file: string, pattern: string): string {
+    // -i pour ignorer la casse, tr pour mettre sur une seule ligne avec des virgules
+    ret sysf("grep -i '" + pattern + "' " + file + " | tr '\\n' ',' | sed 's/,$//'")
+}
+
+
+
+----------------------------------------
+MODULE: lib/deepseek.gjs
+----------------------------------------
+// ============================================
+// deepseek.gjs - Version ultra simple
+// ============================================
+
+module deepseek
+
+struct Config {
+    api_key: string
+}
+
+pub fn new_config(api_key: string): Config {
+    ret new Config{
+        api_key: api_key
+    }
+}
+
+pub fn ask(api_key: string, question: string): string {
+    lt cmd = "curl -s -X POST 'https://api.deepseek.com/v1/chat/completions' -H 'Content-Type: application/json' -H 'Authorization: Bearer " + api_key + "' -d '{\"model\":\"deepseek-chat\",\"messages\":[{\"role\":\"user\",\"content\":\"" + question + "\"}]}'"
+    
+    lt result = sysf(cmd)
+    ret result
+}
+
+
+----------------------------------------
+MODULE: lib/fs.gjs
+----------------------------------------
+// lib/fs.gjs
+module fs
+
+// Équivalent de fopen/fwrite (Écrase le fichier)
+pub fn write(path: string, content: string) {
+    sysf("echo '" + content + "' > " + path)
+}
+
+// Équivalent de fopen/fwrite (Ajoute à la fin)
+pub fn append(path: string, content: string) {
+    sysf("echo '" + content + "' >> " + path + " >2&/dev/null")
+}
+
+// Équivalent de fread (Lit tout le contenu)
+pub fn read(path: string): string {
+    ret sysf("cat " + path)
+}
+
+// Récupérer la taille du fichier (en octets)
+pub fn size(path: string): string {
+    ret sysf("stat -c %s " + path)
+}
+
+// Vérifier si un fichier existe
+pub fn exists(path: string): string {
+    ret sysf("[ -f " + path + " ] && echo 'True' || echo 'False'")
+}
+
+// Supprimer un fichier (unlink)
+pub fn remove(path: string) {
+    sysf("rm -rf " + path)
+}
+
+
+
 
 ----------------------------------------
 MODULE: lib/gcsv.gjs
@@ -8002,19 +9328,21 @@ module gcsv
 
 import fs
 
-// On utilise []string pour typer le tableau proprement
+// Structure pour représenter une ligne parsée
 struct Row {
-    data: []string, 
+    data: array, // Changé de dict à array
     raw: string
 }
 
+// Le parser principal
 struct CSVParser {
     separator: string,
     file: string,
     header: string
 }
 
-pub fn new_parser(file: string, sep: string): CSVParser {
+fn new_parser(file: string, sep: string): CSVParser {
+    // On récupère la première ligne pour le header
     lt content = sysf("head -n 1 " + file)
     ret new CSVParser {
         separator: sep,
@@ -8023,24 +9351,1397 @@ pub fn new_parser(file: string, sep: string): CSVParser {
     }
 }
 
-pub fn get_field(line: string, index: int, sep: string): string {
+// Fonction pour récupérer une colonne spécifique
+fn get_field(line: string, index: int, sep: string): string {
     lt cmd = "echo '" + line + "' | awk -F'" + sep + "' '{print $" + (index + 1) + "}'"
     ret sysf(cmd)
 }
 
-pub fn count(p: CSVParser): int {
+// Compte le nombre de lignes de données
+fn count(p: CSVParser): int {
     lt c = sysf("wc -l < " + p.file)
-    ret atoi_c(c) - 1
+    // On retire 1 pour ne pas compter le header
+    ret atoi(c) - 1
 }
 
-pub fn read_line(p: CSVParser, line_num: int): Row {
+// Lit une ligne et l'organise
+fn read_line(p: CSVParser, line_num: int): Row {
+    // +1 pour sauter le header (ligne 1 du fichier)
     lt target = line_num + 1
     lt line_content = sysf("sed -n '" + target + "p' " + p.file)
     
     ret new Row {
-        data: [], // Création d'un tableau vide en Goscript
+        data: new array, // Initialisé en tant que tableau
         raw: line_content
     }
+}
+
+
+
+----------------------------------------
+MODULE: lib/gpm.gjs
+----------------------------------------
+import fs
+import ui
+import system
+
+module gpm
+
+lt API_BASE = "https://gsql-badge.onrender.com"
+lt MOD_DIR = "modules"
+
+pub fn init_env() {
+    if (fs::exists(MOD_DIR) == "False") {
+        sysf("mkdir -p " + MOD_DIR)
+    }
+}
+
+fn download_and_extract(url, name) {
+    lt target = name + ".tar.bool"
+    
+    // On télécharge
+    sysf("curl -sL " + url + " -o " + target)
+    
+    // On vérifie l'existence via fs au lieu de sysf stat pour éviter les "0" à l'écran
+    if (fs::exists(target) == "True") {
+        println(ui::cyan("➜ Archive reçue. Installation..."))
+        
+        // Extraction directe dans MOD_DIR (car l'archive contient déjà le dossier 'httplib')
+        sysf("tar -xf " + target + " -C " + MOD_DIR)
+        
+        sysf("rm " + target)
+        ret true
+    }
+    ret false
+}
+
+pub fn install(name, version, release, is_public) {
+    ui::banner("GPM DEPLOY: " + name)
+    
+    lt mode = "private"
+    if (is_public == true) { mode = "public" }
+    
+    lt v = version
+    if (v == "") { v = "1.1.0" }
+    lt r = release
+    if (r == "") { r = "r0" }
+
+    // On commence par x86_64 qui est le binaire valide sur ton serveur
+    lt arch = "x86_64"
+    lt url = API_BASE + "/package/download/" + mode + "/" + name + "/" + v + "/" + r + "/" + arch
+    
+    println(ui::yellow("🔍 Connexion au dépôt Zarch Hub..."))
+    
+    // On tente l'installation sans trop de vérifications sysf pour éviter les messages parasites
+    if (download_and_extract(url, name) == true) {
+        println(ui::green("✅ " + name + " installé avec succès !"))
+        ret true
+    }
+
+    println(ui::red("❌ Erreur : Impossible de récupérer " + name))
+    ret false
+}
+
+
+
+----------------------------------------
+MODULE: lib/groq.gjs
+----------------------------------------
+// ============================================
+// groq.gjs - Version ultra simple
+// ============================================
+
+module groq
+
+struct Config {
+    api_key: string
+}
+
+pub fn new_config(api_key: string): Config {
+    ret new Config{
+        api_key: api_key
+    }
+}
+
+pub fn ask(api_key: string, question: string): string {
+    lt cmd = "curl -s -X POST 'https://api.groq.com/openai/v1/chat/completions' -H 'Content-Type: application/json' -H 'Authorization: Bearer " + api_key + "' -d '{\"model\":\"llama3-8b-8192\",\"messages\":[{\"role\":\"user\",\"content\":\"" + question + "\"}]}'"
+    
+    lt result = sysf(cmd)
+    ret result
+}
+
+
+----------------------------------------
+MODULE: lib/gsql.gjs
+----------------------------------------
+module gsql
+
+import fs
+import json
+import crypto // Optionnel pour le chiffrement
+import ui
+
+
+// Représente une table dans la base de données
+struct Table {
+    name: string,
+    path: string,
+    lines: int
+}
+
+fn Ginit() {
+    println(ui::green("--- [GSQL]: ok susseful ok ---"))
+    ret sysf("mkdir /var/lib/gsql/ 2&>/dev/null") 
+}
+    
+// Crée une nouvelle table (un fichier .gdb)
+fn create_table(db_name: string, table_name: string): Table {
+    lt filepath = "/var/lib/gsql/" + db_name + "_" + table_name + ".gdb"
+    
+    // On initialise le fichier vide (ex: un tableau JSON vide "[]" ou juste un header)
+    fs::write(filepath, "") 
+    
+    ret new Table {
+        name: table_name,
+        path: filepath,
+        lines: 0
+    }
+}
+
+// Insère des données dans la table
+fn insert(tb: Table, data: string): string {
+    // Dans une version avancée, on utiliserait structd ou json
+    // Ici on ajoute simplement une nouvelle ligne au fichier
+    sysf("echo '" + data + "' >> " + tb.path)
+    
+    ret "Success: 1 row inserted"
+}
+
+// Fait une recherche simple (comme un SELECT * WHERE)
+fn select_where(tb: Table, search: string): string {
+    // On réutilise la logique de ton parser !
+    lt result = sysf("grep '" + search + "' " + tb.path)
+    ret result
+}
+
+
+
+----------------------------------------
+MODULE: lib/http.gjs
+----------------------------------------
+// lib/http.gjs
+module http
+import ui
+// Perform a simple HTTP GET request
+pub fn get(url: string): string {
+    lt cmd = "python3 -c \"import urllib.request; print(urllib.request.urlopen('" + url + "').read().decode())\""
+    ret sysf(cmd)
+}
+
+// Start a local HTTP server (Simple version)
+pub fn server(port: int) {
+    println(ui::green("🚀 GoScript Server running on port " + port))
+    
+    // On utilise directement le module http.server de python
+    // C'est la méthode la plus fiable en une ligne
+    lt cmd = "python3 -m http.server " + port
+    
+    sysf(cmd)
+}
+
+
+
+----------------------------------------
+MODULE: lib/io.gjs
+----------------------------------------
+// lib/io.gjs
+module io
+
+// Lire le contenu complet d'un fichier
+pub fn read_file(path: string): string {
+    lt py_code = "print(open('" + path + "', 'r', encoding='utf-8').read(), end='')"
+    ret sysf("python3 -c \"" + py_code + "\"")
+}
+
+// Écrire du contenu (écrase le fichier existant)
+pub fn write_file(path: string, content: string) {
+    // On utilise les triples apostrophes (''') pour englober la variable content
+    // Cela permet à Python de gérer les sauts de ligne nativement sans crasher
+    lt py_code = "open('" + path + "', 'w', encoding='utf-8').write('''" + content + "''')"
+    sysf("python3 -c \"" + py_code + "\"")
+}
+
+// Ajouter du contenu (à la fin du fichier)
+pub fn append_file(path: string, content: string) {
+    lt py_code = "open('" + path + "', 'a', encoding='utf-8').write('''" + content + "''')"
+    sysf("python3 -c \"" + py_code + "\"")
+}
+
+
+
+----------------------------------------
+MODULE: lib/json.gjs
+----------------------------------------
+// lib/json.gjs
+module json
+
+pub fn get(data: string, key: string): string {
+    // On affine le regex pour exclure les accolades à la fin [^",}]
+    lt cmd = "printf '" + data + "' | sed -n 's/.*\"" + key + "\": *\"\\?\\([^\",}]*\\)\"\\?.*/\\1/p' | sed 's/\"//g'"
+    ret sysf(cmd)
+}
+
+pub fn format(data: string): string {
+    lt cmd = "printf '" + data + "' | sed 's/,/,\\n /g; s/{/{\\n /g; s/}/\\n}/g'"
+    ret sysf(cmd)
+}
+
+pub fn is_json(data: string): string {
+    ret sysf("printf '" + data + "' | grep -qE '^[ \t]*[\{\[]' && echo 'True' || echo 'False'")
+}
+
+
+
+----------------------------------------
+MODULE: lib/math.gjs
+----------------------------------------
+// Math utilities for Goscript
+
+// lib/math.gjs
+module math
+
+// Racine carrée
+pub fn sqrt(n: float): string {
+    ret sysf("awk 'BEGIN { print sqrt(" + n + ") }'")
+}
+
+// Puissance (n^p)
+pub fn pow(n: float, p: float): string {
+    ret sysf("awk 'BEGIN { print " + n + " ^ " + p + " }'")
+}
+
+// Arrondi (Round)
+pub fn round(n: float): string {
+    ret sysf("awk 'BEGIN { printf(\"%.0f\", " + n + ") }'")
+}
+
+// Valeur absolue
+pub fn abs(n: float): string {
+    ret sysf("awk 'BEGIN { print (" + n + " < 0) ? -" + n + " : " + n + " }'")
+}
+
+// Générer un nombre aléatoire entre 0 et max
+pub fn random(max: int): string {
+    // Utilise l'heure actuelle comme graine (seed) pour plus de hasard
+    ret sysf("awk 'BEGIN { srand(); print int(rand() * " + max + ") }'")
+}
+
+
+
+----------------------------------------
+MODULE: lib/net.gjs
+----------------------------------------
+// lib/net.gjs
+module net
+
+// Simple HTTP GET using wget (BusyBox friendly)
+pub fn get(url: string): string {
+    // -q: quiet, -O -: output to stdout
+    ret sysf("wget -qO- '" + url + "'")
+}
+
+// Check if a host is alive
+pub fn ping(host: string): string {
+    // -c 1: one packet, -W 1: 1 second timeout
+    ret sysf("ping -c 1 -W 1 " + host + " > /dev/null && echo 'Online' || echo 'Offline'")
+}
+
+// Get local IP address
+pub fn local_ip(): string {
+    ret sysf("hostname -i | awk '{print $1}'")
+}
+
+
+
+----------------------------------------
+MODULE: lib/os.gjs
+----------------------------------------
+// lib/os.gjs
+module os
+
+// Get current working directory
+pub fn getcwd(): string {
+    ret sysf("pwd")
+}
+
+// List files (Compatible BusyBox / Android)
+pub fn list_dir(path: string): string {
+    // ls -1 (une colonne) puis tr pour remplacer \n par ", "
+    ret sysf("ls -1 " + path + " | tr '\\n' ',' | sed 's/,$//'")
+}
+
+// Check if a file or directory exists
+pub fn exists(path: string): string {
+    ret sysf("[ -e '" + path + "' ] && echo 'True' || echo 'False'")
+}
+
+// Get an environment variable
+pub fn getenv(name: string): string {
+    ret sysf("echo $" + name)
+}
+
+// Remove a file or directory
+pub fn remove(path: string) {
+    sysf("rm -rf " + path)
+}
+
+// Create a directory
+pub fn mkdir(path: string) {
+    sysf("mkdir -p " + path)
+}
+
+
+
+----------------------------------------
+MODULE: lib/random.gjs
+----------------------------------------
+// lib/random.gjs
+module random
+
+pub fn is_int(max: int): string {
+    ret sysf("awk -v max=" + max + " 'BEGIN { srand(); print int(rand() * max) }'")
+}
+
+pub fn is_string(length: int): string {
+    ret sysf("cat /dev/urandom | tr -dc 'a-zA-Z0-0' | fold -w " + length + " | head -n 1")
+}
+
+// UUID fait maison (Compatible tout système Linux/BusyBox)
+pub fn uuid(): string {
+    // On génère 16 octets aléatoires et on les formate
+    lt cmd = "hexdump -vn 16 -e '4/1 \"%02x\" \"-\" 2/1 \"%02x\" \"-\" 2/1 \"%02x\" \"-\" 2/1 \"%02x\" \"-\" 6/1 \"%02x\"' /dev/urandom"
+    ret sysf(cmd)
+}
+
+
+
+----------------------------------------
+MODULE: lib/sa.gjs
+----------------------------------------
+import http.transport
+
+fn main() {
+    // Utilisation de la méthode associée via l'impl
+    lt config = transport::TransportConfig::time(45)
+    
+    println("Configuration initiale :")
+    println(config.max_time)
+    
+    // Si tu as implémenté les setters
+    config.enable_ssl(false)
+    
+    println("SSL activé :")
+    println(config.verify_ssl)
+}
+
+
+
+----------------------------------------
+MODULE: lib/slib.gjs
+----------------------------------------
+fn trim(s: string): string {
+    if s == nil { ret "" }
+    muts l = len(s)
+    muts st = 0
+    muts en = l - 1
+    while st < l {
+        if s[st] == 10 || s[st] == 13 {
+            st = st + 1
+        } else { break }
+    }
+    while en >= 0 {
+        if s[en] == 10 || s[en] == 13 {
+            en = en - 1
+        } else { break }
+    }
+    if st > en { ret "" }
+    muts res = ""
+    muts i = st
+    while i <= en {
+        res = res + s[i]
+        i = i + 1
+    }
+    ret res
+}
+
+fn to_int(s: string): int {
+    if s == nil { ret 0 }
+    muts res = 0
+    muts i = 0
+    while i < len(s) {
+        muts c = s[i]
+        if c >= 48 && c <= 57 {
+            res = res * 10 + (c - 48)
+        } else { break }
+        i = i + 1
+    }
+    ret res
+}
+
+fn len(s: string): int {
+    if s == nil { ret 0 }
+    muts count = 0
+    muts i = 0
+    loop {
+        if s[i] == nil { break }
+        count = count + 1
+        i = i + 1
+    }
+    ret count
+}
+
+fn main() {
+   trim("hello")
+}
+
+
+----------------------------------------
+MODULE: lib/string.gjs
+----------------------------------------
+// String utilities
+
+fn to_upper(s: string) -> string {
+    // TODO: Implement
+    ret s
+}
+
+fn to_lower(s: string) -> string {
+    // TODO: Implement
+    ret s
+}
+
+fn length(s: string) -> int {
+    ret len(s)
+}
+
+
+----------------------------------------
+MODULE: lib/structd.gjs
+----------------------------------------
+// ============================================
+// STRUCTD - Module pour structures
+// Version stable sans erreurs de syntaxe
+// ============================================
+
+// Convertir une structure en JSON
+pub fn to_json(obj) {
+    if type_of(obj) == "struct" {
+        muts result = "{"
+        muts fields_list = fields(obj)
+        muts i = 0
+        while i < len(fields_list) {
+            result = result + "\"" + fields_list[i] + "\":" + to_json(get(obj, fields_list[i]))
+            if i < len(fields_list) - 1 {
+                result = result + ","
+            }
+            i = i + 1
+        }
+        ret result + "}"
+    } else if type_of(obj) == "int" {
+        ret obj
+    } else if type_of(obj) == "string" {
+        ret "\"" + obj + "\""
+    } else if type_of(obj) == "bool" {
+        if obj {
+            ret "true"
+        } else {
+            ret "false"
+        }
+    } else if type_of(obj) == "array" {
+        muts result = "["
+        muts i = 0
+        while i < len(obj) {
+            result = result + to_json(obj[i])
+            if i < len(obj) - 1 {
+                result = result + ","
+            }
+            i = i + 1
+        }
+        ret result + "]"
+    } else {
+        ret "null"
+    }
+}
+
+// Cloner une structure
+pub fn clone(obj) {
+    if type_of(obj) == "struct" {
+        ret obj
+    } else if type_of(obj) == "array" {
+        muts result = []
+        muts i = 0
+        while i < len(obj) {
+            result = push(result, clone(obj[i]))
+            i = i + 1
+        }
+        ret result
+    } else {
+        ret obj
+    }
+}
+
+// Comparer deux objets
+pub fn equals(a, b): bool {
+    if type_of(a) != type_of(b) {
+        ret false
+    }
+    ret a == b
+}
+
+// Obtenir les champs d'une structure
+pub fn fields(obj) {
+    ret []
+}
+
+// Obtenir un champ
+pub fn get(obj, field) {
+    ret obj[field]
+}
+
+// Définir un champ
+pub fn set(obj, field, value) {
+    obj[field] = value
+    ret obj
+}
+
+// Afficher une structure
+pub fn dump(obj) {
+    println("=== STRUCTURE DUMP ===")
+    println("Type: " + type_of(obj))
+    println("JSON: " + to_json(obj))
+    println("===================")
+}
+
+info("structd module loaded")
+
+
+----------------------------------------
+MODULE: lib/sys.gjs
+----------------------------------------
+// lib/sys.gjs
+module sys
+
+// Get the list of command line arguments
+pub fn argv(): string {
+    // Returns arguments as a comma-separated string
+    lt py_code = "import sys; print(', '.join(sys.argv))"
+    ret sysf("python3 -c \"" + py_code + "\"")
+}
+
+// Exit the script with a specific status code
+pub fn exit(code: int) {
+    lt py_code = "import sys; sys.exit(" + code + ")"
+    sysf("python3 -c \"" + py_code + "\"")
+}
+
+// Get Python/System platform (linux, darwin, win32)
+pub fn platform(): string {
+    lt py_code = "import sys; print(sys.platform)"
+    ret sysf("python3 -c \"" + py_code + "\"")
+}
+
+// Get Python version powering GoScript's backend
+pub fn version(): string {
+    ver = "0.2.0 (goscript season)"
+    ret ver
+}
+
+
+
+----------------------------------------
+MODULE: lib/system.gjs
+----------------------------------------
+// lib/system.gjs
+import fs
+import db
+import ui
+import time
+
+module system
+
+lt CONFIG_FILE = "system.conf"
+lt LOG_FILE = "activity.log"
+
+pub fn init(app_name: string) {
+    ui::clear()
+    ui::banner(app_name + " BOOTING...")
+    
+    log("INFO", "Application " + app_name + " started.")
+    
+    if (fs::exists(CONFIG_FILE) == "False") {
+        log("WARN", "Config missing. Creating default...")
+        db::set(CONFIG_FILE, "boot_count", "0")
+        db::set(CONFIG_FILE, "last_user", "none")
+    }
+
+    lt count = db::get(CONFIG_FILE, "boot_count")
+    lt new_count = sysf("echo $((" + count + " + 1))")
+    db::set(CONFIG_FILE, "boot_count", new_count)
+}
+
+pub fn log(level: string, message: string) {
+    lt timestamp = time::now()
+    lt entry = "[" + timestamp + "] [" + level + "] " + message
+    
+    fs::append(LOG_FILE, entry)
+    
+    if (level == "ERROR") { println(ui::red(entry)) }
+    if (level == "WARN")  { println(ui::yellow(entry)) }
+    if (level == "INFO")  { println(ui::green(entry)) }
+}
+
+pub fn get_param(key: string): string {
+    ret db::get(CONFIG_FILE, key)
+}
+
+
+
+----------------------------------------
+MODULE: lib/tar.gjs
+----------------------------------------
+// lib/tar.gjs
+module tar
+
+// Pack a directory or file: tar -czf output.tar.gz source
+pub fn pack(source: string, output: string) {
+    println(" Archiving: " + source + " -> " + output)
+    sysf("tar -czf " + output + " " + source)
+}
+
+// Unpack an archive: tar -xzf archive.tar.gz
+pub fn unpack(archive: string, destination: string) {
+    println(" Extracting: " + archive + " to " + destination)
+    // On s'assure que le dossier de destination existe, puis on extrait
+    sysf("mkdir -p " + destination + " && tar -xzf " + archive + " -C " + destination)
+}
+
+
+
+----------------------------------------
+MODULE: lib/test.gjs
+----------------------------------------
+// Import des sous-modules (le parseur lira "http.client" et chargera "lib/http/client.gjs")
+import http
+import http.client
+import http.transport
+
+fn main() {
+    println("=== TEST DU PACKAGE HTTP ===")
+    
+    // Accès au module racine (via __self__.gjs)
+    println("Version HTTP : " + http::VERSION)
+    
+    // Accès aux sous-modules avec ::
+    lt config = transport::new_config(60)
+    println("Timeout configuré : " + config.timeout)
+    
+    println("\nExécution d'une requête GET...")
+    lt response = client::get("https://httpbin.org/get")
+    
+    // Affichage natif
+    println(response)
+    
+    ret 0
+}
+
+
+
+----------------------------------------
+MODULE: lib/test_.gjs
+----------------------------------------
+import http.__self__
+import http.client
+
+fn main() {
+    println("=== TEST DU PACKAGE HTTP ===")
+    
+    // Accès au module racine (via __self__.gjs)
+    println("Version HTTP : " + __self__::VERSION)
+    
+    // Accès aux sous-modules avec ::
+    println("\nExécution d'une requête GET...")
+
+    lt response = client::get("https://www.google.com/url?q=https://httpbin.org/&sa=U&sqi=2&ved=2ahUKEwjAh92GwoGUAxXRXkEAHcvmHNAQFnoECBAQAQ&usg=AOvVaw3K5N0e-erjTFd-w6Beo-zn")    
+    lt res = client::post("https://www.google.com/url?q=https://httpbin.org/&sa=U&sqi=2&ved=2ahUKEwjAh92GwoGUAxXRXkEAHcvmHNAQFnoECBAQAQ&usg=AOvVaw3K5N0e-erjTFd-w6Beo-zn", "meta")
+    println("POST exec ")
+   
+   // Affichage natif
+    println(response)
+    println(res)
+    ret 0
+}
+
+
+
+----------------------------------------
+MODULE: lib/test_dd.gjs
+----------------------------------------
+import deepseek
+
+fn main() {
+    println("=== TEST DEEPSEEK ===\n")
+    
+    lt key = "sk-c21ef26edc184fcfa5124a171fbd6f49"
+    lt response = deepseek::ask(key, "Bonjour")
+    
+    println("Réponse: " + response)
+    
+    ret 0
+}
+
+
+----------------------------------------
+MODULE: lib/test_deep.gjs
+----------------------------------------
+// test_deepseek.gjs
+import deepseek
+
+fn main() {
+    println("=== TEST DEEPSEEK API ===\n")
+    
+    // Votre clé API
+    lt api_key = "votre-cle-api-ici"
+    
+    // Configuration
+    lt cfg = deepseek::new_config(api_key)
+    cfg = deepseek::set_temperature(cfg, 0.8)
+    
+    // Requête simple
+    lt response = deepseek::chat(cfg, "Qu'est-ce que le langage Goscript?")
+    
+    if response.success {
+        println("Réponse: " + response.content)
+        println("Tokens utilisés: " + response.usage_tokens)
+    } else {
+        println("Erreur: " + response.error)
+    }
+    
+    // Version simplifiée
+    lt answer = deepseek::ask(api_key, "Bonjour, qui es-tu?")
+    println(answer)
+    
+    ret 0
+}
+
+
+----------------------------------------
+MODULE: lib/test_deeps.gjs
+----------------------------------------
+import deepseek
+
+fn main() {
+    println("=== TEST DEEPSEEK API ===\n")
+    
+    // Remplace par ta vraie clé API
+    lt api_key = "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    
+    // Test avec ask (simple)
+    println("--- Test ask ---")
+    lt reponse1 = deepseek::ask(api_key, "Bonjour, qui es-tu?")
+    println(reponse1)
+    println("")
+    
+    // Test avec chat (configuration complète)
+    println("--- Test chat ---")
+    lt cfg = deepseek::new_config(api_key)
+    cfg = deepseek::set_temperature(cfg, 0.8)
+    cfg = deepseek::set_max_tokens(cfg, 500)
+    
+    lt resp = deepseek::chat(cfg, "Explique ce qu'est Goscript en une phrase.")
+    
+    if resp.success {
+        println("Reponse: " + resp.content)
+        println("Tokens: " + resp.usage_tokens)
+    } else {
+        println("Erreur: " + resp.error)
+    }
+    
+    ret 0
+}
+
+
+----------------------------------------
+MODULE: lib/test_file.gjs
+----------------------------------------
+// test_gg.gjs - Test du module fs sans f-strings
+import fs
+
+println("=== TEST FS SIMPLE ===\n")
+
+lt test_dir = "/tmp/fs_test"
+lt test_file = test_dir + "/test.txt"
+
+// mkdir
+println("Création: " + test_dir)
+fs::mkdir(test_dir)
+
+// write
+lt content = "Hello from Goscript!"
+println("Écriture: " + test_file)
+fs::write(test_file, content)
+
+// exists
+println("Exists dir: " + fs::is_dir(test_dir))
+println("Exists file: " + fs::is_file(test_file))
+
+// read
+lt read_content = fs::read(test_file)
+println("Contenu: " + read_content)
+
+// size
+lt sz = fs::size(test_file)
+println("Taille: " + sz + " octets")
+
+// ls
+println("\nContenu du dossier:")
+println(fs::ls(test_dir))
+
+// pwd
+lt current = fs::pwd()
+println("\nPWD: " + current)
+
+// basename/dirname
+println("Basename: " + fs::basename(test_file))
+println("Dirname: " + fs::dirname(test_file))
+
+// realpath
+println("Realpath: " + fs::realpath(test_file))
+
+// touch
+fs::touch(test_dir + "/touched.txt")
+println("Touché: " + fs::exists(test_dir + "/touched.txt"))
+
+// cp
+fs::cp(test_file, test_dir + "/copy.txt")
+println("Copié: " + fs::exists(test_dir + "/copy.txt"))
+
+// mv
+fs::mv(test_dir + "/copy.txt", test_dir + "/renamed.txt")
+println("Renommé: " + fs::exists(test_dir + "/renamed.txt"))
+
+// nettoyage
+println("\nNettoyage...")
+fs::rm(test_dir)
+println("Supprimé: " + (!fs::exists(test_dir)))
+
+println("\n=== TEST OK ===")
+
+
+----------------------------------------
+MODULE: lib/test_fs.gjs
+----------------------------------------
+// test_fs.gjs - Test du module fs
+import fs
+
+println("=== TEST DU MODULE FS ===\n")
+
+// Test pwd
+lt current = fs::pwd()
+println("Répertoire courant: " + current)
+
+// Test mkdir
+lt test_dir = "/tmp/fs_test"
+println("\nCréation du dossier: " + test_dir)
+fs::mkdir(test_dir)
+println("Dossier créé: " + fs::is_dir(test_dir))
+
+// Test cd
+println("Changement de répertoire vers: " + test_dir)
+fs::cd(test_dir)
+println("Nouveau répertoire: " + fs::pwd())
+
+// Test write
+lt test_file = "test.txt"
+lt content = "Hello from Goscript!"
+println("\nÉcriture du fichier: " + test_file)
+fs::write(test_file, content)
+println("Fichier créé: " + fs::is_file(test_file))
+
+// Test read
+lt read_content = fs::read(test_file)
+println("Contenu lu: " + read_content)
+
+// Test size
+lt file_size = fs::size(test_file)
+println("Taille: " + file_size + " octets")
+
+// Test append
+fs::append(test_file, "\nDeuxième ligne")
+lt appended = fs::read(test_file)
+println("Après append: " + appended)
+
+// Test basename/dirname
+println("\nBasename: " + fs::basename(test_file))
+println("Dirname: " + fs::dirname(test_file))
+
+// Test realpath
+lt real = fs::realpath(test_file)
+println("Realpath: " + real)
+
+// Test ls
+println("\nListe des fichiers:")
+println(fs::ls("."))
+
+// Test cp
+fs::cp(test_file, "test_copy.txt")
+println("\nCopie créée: " + fs::exists("test_copy.txt"))
+
+// Test mv
+fs::mv("test_copy.txt", "test_renamed.txt")
+println("Renommé: " + fs::exists("test_renamed.txt"))
+
+// Retour au répertoire précédent
+fs::cd(current)
+
+// Test rm (nettoyage)
+println("\nNettoyage...")
+fs::rm(test_dir)
+println("Dossier supprimé: " + !fs::exists(test_dir))
+
+println("\n=== TEST TERMINÉ ===")
+
+
+----------------------------------------
+MODULE: lib/test_fs2.gjs
+----------------------------------------
+// test_fs.gjs - Test ultra simple
+import fs
+
+println("=== TEST FS SIMPLE ===\n")
+
+lt test_dir = "/tmp/fs_test_simple"
+
+// Test mkdir
+println("Création dossier: " + test_dir)
+lt r1 = fs::mkdir(test_dir)
+println("  mkdir: " + r1)
+
+// Test exists
+lt r2 = fs::exists(test_dir)
+println("  exists: " + r2)
+
+// Test is_dir
+lt r3 = fs::is_dir(test_dir)
+println("  is_dir: " + r3)
+
+// Test write
+lt test_file = test_dir + "/test.txt"
+println("\nÉcriture fichier: " + test_file)
+lt r4 = fs::write(test_file, "Hello")
+println("  write: " + r4)
+
+// Test is_file
+lt r5 = fs::is_file(test_file)
+println("  is_file: " + r5)
+
+// Test read
+lt content = fs::read(test_file)
+println("  read: " + content)
+
+// Test ls
+println("\nListe fichiers:")
+lt files = fs::ls(test_dir)
+println(files)
+
+// Test rm
+println("Nettoyage...")
+lt r6 = fs::rm(test_dir)
+println("  rm: " + r6)
+
+println("\n=== TEST TERMINÉ ===")
+
+
+----------------------------------------
+MODULE: lib/test_fs_system.gjs
+----------------------------------------
+// test_fs_system.gjs - Test du module fs avec system_c
+import fs
+
+println("=== TEST FS AVEC SYSTEM_C ===\n")
+
+lt test_dir = "/tmp/fs_system_test"
+lt test_file = test_dir + "/test.txt"
+
+// mkdir
+println("1. Création dossier: " + test_dir)
+lt r1 = fs::mkdir(test_dir)
+println("   mkdir retour: " + r1)
+
+// exists
+println("2. Exists dossier: " + fs::exists(test_dir))
+
+// is_dir
+println("3. Is dir: " + fs::is_dir(test_dir))
+
+// write
+println("\n4. Écriture fichier: " + test_file)
+lt r2 = fs::write(test_file, "Hello from system_c")
+println("   write retour: " + r2)
+
+// is_file
+println("5. Is file: " + fs::is_file(test_file))
+
+// exists file
+println("6. Exists fichier: " + fs::exists(test_file))
+
+// ls
+println("\n7. Liste du dossier:")
+lt r3 = fs::ls(test_dir)
+println("   ls retour: " + r3)
+
+// pwd
+println("\n8. PWD:")
+lt r4 = fs::pwd()
+println("   pwd retour: " + r4)
+
+// touch
+println("\n9. Touch:")
+lt test_file2 = test_dir + "/touched.txt"
+fs::touch(test_file2)
+println("   Touched exists: " + fs::exists(test_file2))
+
+// cp
+println("\n10. Copie:")
+fs::cp(test_file, test_dir + "/copy.txt")
+println("    Copie exists: " + fs::exists(test_dir + "/copy.txt"))
+
+// mv
+println("\n11. Déplacement:")
+fs::mv(test_dir + "/copy.txt", test_dir + "/renamed.txt")
+println("    Renamed exists: " + fs::exists(test_dir + "/renamed.txt"))
+println("    Copy exists: " + fs::exists(test_dir + "/copy.txt"))
+
+// rm
+println("\n12. Nettoyage:")
+fs::rm(test_dir)
+println("    Dossier supprimé: " + (!fs::exists(test_dir)))
+
+println("\n=== TEST TERMINÉ ===")
+
+
+----------------------------------------
+MODULE: lib/test_gg.gjs
+----------------------------------------
+// test_fs.gjs - Test du module fs avec f-strings
+import fs
+
+println(f"=== TEST FS AVEC F-STRINGS ===\n")
+
+lt test_dir = "/tmp/fs_test"
+lt test_file = f"{test_dir}/test.txt"
+
+// mkdir
+println(f"Création: {test_dir}")
+fs::mkdir(test_dir)
+
+// write
+lt content = "Hello from Goscript!"
+println(f"Écriture: {test_file}")
+fs::write(test_file, content)
+
+// exists
+println(f"Exists dir: {fs::is_dir(test_dir)}")
+println(f"Exists file: {fs::is_file(test_file)}")
+
+// read
+lt read_content = fs::read(test_file)
+println(f"Contenu: {read_content}")
+
+// size
+lt sz = fs::size(test_file)
+println(f"Taille: {sz} octets")
+
+// ls
+println(f"\nContenu du dossier:")
+println(fs::ls(test_dir))
+
+// head/tail
+fs::write_lines(test_file, ["ligne1", "ligne2", "ligne3", "ligne4", "ligne5"])
+println(f"\nHead 3: {fs::head(test_file, 3)}")
+println(f"Lines: {fs::count_lines(test_file)}")
+
+// file info
+println(f"\nType: {fs::file_type(test_file)}")
+println(f"Owner: {fs::owner(test_file)}")
+println(f"Perms: {fs::perms(test_file)}")
+
+// pwd
+lt current = fs::pwd()
+println(f"\nPWD: {current}")
+
+// temp file
+lt tmp = fs::mktemp("gs")
+println(f"Temp file: {tmp}")
+fs::write(tmp, "temp content")
+fs::rm(tmp)
+
+// nettoyage
+println(f"\nNettoyage...")
+fs::rm(test_dir)
+println(f"Supprimé: {!fs::exists(test_dir)}")
+
+println(f"\n=== TEST OK ===")
+
+
+----------------------------------------
+MODULE: lib/test_groq.gjs
+----------------------------------------
+import groq
+
+fn main() {
+    println("=== TEST GROQ ===\n")
+    
+    // Remplace par ta clé API Groq
+    lt key = "VOTRE_CLE_API_GROQ"
+    lt response = groq::ask(key, "Bonjour")
+    
+    println("Réponse: " + response)
+    
+    ret 0
+}
+
+
+----------------------------------------
+MODULE: lib/test_json.gjs
+----------------------------------------
+import json
+
+fn main() {
+    println("=== TEST JSON MODULE ===\n")
+    
+    // Exemple de réponse API
+    lt response = "{\"id\":\"chatcmpl-123\",\"model\":\"llama3\",\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"Bonjour! Je suis une IA.\"}}],\"usage\":{\"total_tokens\":42}}"
+    
+    println("1. Parser une réponse complète:")
+    lt content = json::parse_response(response)
+    println("   Content: " + content)
+    println("")
+    
+    println("2. Extraire des valeurs spécifiques:")
+    lt model = json::get(response, "model")
+    lt tokens = json::get(response, "total_tokens")
+    println("   Model: " + model)
+    println("   Tokens: " + tokens)
+    println("")
+    
+    println("3. Vérifier les types:")
+    match json::type_of(response, "choices") {
+        "array" => println("   choices est un array")
+        "object" => println("   choices est un object")
+        "string" => println("   choices est un string")
+        _ => println("   type inconnu")
+    }
+    println("")
+    
+    println("4. Vérifier si une clé existe:")
+    if json::has_key(response, "model") {
+        println("   'model' existe")
+    }
+    if !json::has_key(response, "nonexistent") {
+        println("   'nonexistent' n'existe pas")
+    }
+    println("")
+    
+    println("5. Toutes les clés:")
+    lt keys = json::keys(response)
+    println("   " + keys)
+    
+    ret 0
+}
+
+
+----------------------------------------
+MODULE: lib/test_server.gjs
+----------------------------------------
+import http
+
+
+fn main() {
+   println(http::server(8080))
+}
+
+
+----------------------------------------
+MODULE: lib/test_strlen.gjs
+----------------------------------------
+fn main() {
+    println("=== TEST STRLEN ===\n")
+    
+    lt s = "hello"
+    println("String: " + s)
+    
+    lt l = strlen_c(s)
+    println("Longueur: " + l)
+    
+    ret 0
+}
+
+
+----------------------------------------
+MODULE: lib/test_sysf.gjs
+----------------------------------------
+import ft from "time/ft"
+
+fn main() {
+    println("=== TEST SYSF ===\n")
+    
+    lt result = sysf("echo 'hello world'")
+    ft::sleep(5)
+    println("Resultat: " + result)
+    
+    ret 0
+}
+
+
+----------------------------------------
+MODULE: lib/tet.gjs
+----------------------------------------
+struct P {
+   nom: string,
+   ages: int
+}
+
+fn test() {
+   pri = new p{
+           nom: "paul",
+           ages: 16
+   }
+   ret pri.nom 
+}
+
+fn main() {
+   println(test())
+}
+
+
+----------------------------------------
+MODULE: lib/tewt.gjs
+----------------------------------------
+fn fs(path) {
+   ret system_c(f"ls -la {path}")
+}
+
+fn main() {
+   f = fs(".")
+   println(f)
+}
+
+
+----------------------------------------
+MODULE: lib/time.gjs
+----------------------------------------
+// lib/time.gjs
+module time
+
+// Temps actuel formaté (Ex: 2026-04-24 10:45:30)
+pub fn now(): string {
+    ret sysf("date '+%Y-%m-%d %H:%M:%S'")
+}
+
+// Timestamp Unix (Secondes depuis 1970)
+pub fn timestamp(): string {
+    ret sysf("date +%s")
+}
+
+// Obtenir uniquement l'année ou le jour (utile pour les backups)
+pub fn format(fmt: string): string {
+    // fmt peut être "%d-%m-%Y" par exemple
+    ret sysf("date '+" + fmt + "'")
+}
+
+// Pause de l'exécution
+pub fn sleep(seconds: int) {
+    // On utilise la commande système sleep
+    sysf("sleep " + seconds)
+}
+
+
+
+----------------------------------------
+MODULE: lib/ui.gjs
+----------------------------------------
+// lib/ui.gjs
+module ui
+
+pub fn red(t: string): string { ret "\033[31m" + t + "\033[0m" }
+pub fn green(t: string): string { ret "\033[32m" + t + "\033[0m" }
+pub fn yellow(t: string): string { ret "\033[33m" + t + "\033[0m" }
+pub fn blue(t: string): string { ret "\033[34m" + t + "\033[0m" }
+pub fn bold(t: string): string { ret "\033[1m" + t + "\033[0m" }
+
+pub fn clear() { sysf("clear") }
+
+// Progress Bar - L'astuce des pros en AWK
+pub fn progress_bar(percent: int) {
+    // On passe tout à AWK : il calcule et dessine la ligne d'un coup
+    lt cmd = "awk 'BEGIN { " +
+             "printf \"\\r[%3d%%] \", " + percent + "; " +
+             "for(i=0; i<20; i++) printf (i<" + percent + "/5 ? \"#\" : \"-\"); " +
+             "}'"
+    sysf(cmd)
+}
+
+pub fn banner(title: string) {
+    println("========================================")
+    println("   " + title)
+    println("========================================")
+}
+
+// Create an interactive menu
+pub fn menu(title: string, options: string): string {
+    clear()
+    banner(bold(blue(title)))
+    
+    println(yellow("Please select an option:"))
+    
+    // On utilise AWK pour transformer la liste "Opt1,Opt2" en menu numéroté
+    lt cmd = "echo '" + options + "' | awk -F',' '{for(i=1; i<=NF; i++) printf \"  " + green("%d)") + " %s\\n\", i, $i}'"
+    sysf(cmd)
+    
+    println("\n" + bold("Type a number: "))
+    
+    // Capture de l'entrée utilisateur via read en Bash
+    ret sysf("read choice; echo $choice")
+}
+
+
+
+----------------------------------------
+MODULE: lib/uil.gjs
+----------------------------------------
+import color from "fmt/color"
+
+fn main() {
+   lt col = color::red(" Bonjour ")
+   println(col)
+}
+
+
+----------------------------------------
+MODULE: lib/xzip.gjs
+----------------------------------------
+module xzip
+
+// Compresse une chaîne et la retourne en Base64
+pub fn compress(data: string): string {
+    lt cmd = "python3 -c \"import gzip, base64, sys; print(base64.b64encode(gzip.compress(sys.argv[1].encode())).decode())\" '" + data + "'"
+    ret sysf(cmd)
+}
+
+// Décompresse une chaîne Base64 (compressée en gzip) vers le texte original
+pub fn decompress(b64_data: string): string {
+    lt cmd = "python3 -c \"import gzip, base64, sys; print(gzip.decompress(base64.b64decode(sys.argv[1])).decode())\" '" + b64_data + "'"
+    ret sysf(cmd)
 }
 
 
@@ -10532,24 +13233,33 @@ fn main() {
 
 
 ----------------------------------------
+TEST: sys.gjs
+----------------------------------------
+module sys
+
+
+struct Cmd {
+    one: string
+}
+
+pub impl Cmd {
+    fn factor(this) {
+        lt ase = this.one
+        ret sysf(ase)
+    }
+}
+
+
+----------------------------------------
 TEST: test.gjs
 ----------------------------------------
-import gsql.db // Utilise le chemin exact si nécessaire
+import gsql.db
 
 fn main() {
-    println(">>> Initialisation du moteur GSQL <<<")
-    
-    // On vérifie que le fichier existe avant
-    lt path = "test.gdb"
-    sysf("touch " + path) 
-
-    lt my_db = db::connect(path)
-    
-    if my_db != nil {
-        my_db.insert("user=mauricio,rank=admin")
-        lt c = my_db.count()
-        println("Stats : " + c + " lignes.")
-    }
+    lt my_db = db::open("data.db", 30)
+    lt res = db::query(my_db, "SELECT * FROM users;")
+    println(res)
+    db::close(my_db)
 }
 
 
@@ -10705,8 +13415,8 @@ Mots-clés du langage:
 STATISTIQUES
 ================================================================================
 
-Modules lib/: 1
-Exemples: 160
-Tests: 10
+Modules lib/: 50
+Exemples: 161
+Tests: 11
 
-Taille totale du fichier: 336,327 octets
+Taille totale du fichier: 414,648 octets

@@ -1,7 +1,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
+#include <unistd.h>
+#include <limits.h>
 #include "ast/ast.h"
+#include "bytecode/bytecode.h"
 
 extern ASTNode* program_root;
 extern FILE* yyin;
@@ -54,12 +58,141 @@ void free_script_args(void) {
 
 typedef struct {
     int debug_mode;         // -d, --debug
+    int bytecode_mode;      // --bytecode
+    int dump_bytecode;      // --dump-bytecode
+    int emit_gbc;           // --emit-gbc
+    int emit_native_gbc;    // --emit-native-gbc / --emit-obj
     int repl_mode;          // -i, --interactive
     int show_help;          // -h, --help
     int show_version;       // -v, --version
+    char* output_file;      // -o, --output
     char* filename;         // Fichier à exécuter
     int script_args_start;  // Index où commencent les arguments du script
 } GoscriptOptions;
+
+static int ends_with(const char* s, const char* suffix) {
+    if (!s || !suffix) return 0;
+    size_t sl = strlen(s), su = strlen(suffix);
+    return sl >= su && strcmp(s + sl - su, suffix) == 0;
+}
+
+static char* read_file_text(const char* path, size_t* out_len) {
+    FILE* f = fopen(path, "rb");
+    if (!f) return NULL;
+    fseek(f, 0, SEEK_END);
+    long size = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    if (size < 0) { fclose(f); return NULL; }
+    char* buf = malloc((size_t)size + 1);
+    if (!buf) { fclose(f); return NULL; }
+    size_t n = fread(buf, 1, (size_t)size, f);
+    buf[n] = '\0';
+    if (out_len) *out_len = n;
+    fclose(f);
+    return buf;
+}
+
+static FILE* make_tmp_source(const char* source) {
+    FILE* tmp = tmpfile();
+    if (!tmp) return NULL;
+    fwrite(source, 1, strlen(source), tmp);
+    rewind(tmp);
+    return tmp;
+}
+
+typedef struct {
+    char magic[4];
+    uint32_t version;
+    uint32_t flags;
+    uint64_t source_len;
+    uint64_t bytecode_len;
+} GBCHeader;
+
+static int write_gbc_file(const char* path, const char* source, const char* bytecode_dump, uint32_t flags) {
+    FILE* f = fopen(path, "wb");
+    if (!f) return 0;
+    GBCHeader h = {{'G','B','C','1'}, 1, flags, (uint64_t)strlen(source), bytecode_dump ? (uint64_t)strlen(bytecode_dump) : 0};
+    if (fwrite(&h, sizeof(h), 1, f) != 1) { fclose(f); return 0; }
+    if (h.source_len && fwrite(source, 1, (size_t)h.source_len, f) != h.source_len) { fclose(f); return 0; }
+    if (h.bytecode_len && fwrite(bytecode_dump, 1, (size_t)h.bytecode_len, f) != h.bytecode_len) { fclose(f); return 0; }
+    fclose(f);
+    return 1;
+}
+
+static void fprint_c_string(FILE* f, const char* s) {
+    fputc('"', f);
+    for (const unsigned char* p = (const unsigned char*)s; p && *p; p++) {
+        if (*p == '\\' || *p == '"') fprintf(f, "\\%c", *p);
+        else if (*p == '\n') fprintf(f, "\\n");
+        else if (*p == '\r') fprintf(f, "\\r");
+        else if (*p == '\t') fprintf(f, "\\t");
+        else if (*p < 32 || *p > 126) fprintf(f, "\\x%02x", *p);
+        else fputc(*p, f);
+    }
+    fputc('"', f);
+}
+
+static int emit_native_gbc_object(const char* output, const char* source, const char* runner_path) {
+    char tmp_path[] = "./.goscript_gbc_XXXXXX.c";
+    int fd = mkstemps(tmp_path, 2);
+    if (fd < 0) return 0;
+    FILE* c = fdopen(fd, "w");
+    if (!c) { close(fd); return 0; }
+
+    fprintf(c, "#include <unistd.h>\n#include <stdlib.h>\n#include <stdio.h>\n#include <string.h>\n");
+    fprintf(c, "static const char goscript_runner[] = ");
+    fprint_c_string(c, runner_path && runner_path[0] ? runner_path : "gd");
+    fprintf(c, ";\n");
+    fprintf(c, "static const unsigned char goscript_src[] = {\n");
+    for (size_t i = 0; source[i]; i++) {
+        fprintf(c, "0x%02x,", (unsigned char)source[i]);
+        if ((i + 1) % 16 == 0) fprintf(c, "\n");
+    }
+    fprintf(c, "0x00};\n");
+    fprintf(c,
+        "int main(int argc, char** argv){\n"
+        "  char path[] = \"./.goscript_exec_XXXXXX.gjs\";\n"
+        "  int fd = mkstemps(path, 4); if(fd < 0){perror(\"mkstemps\"); return 1;}\n"
+        "  size_t len = sizeof(goscript_src)-1; if(write(fd, goscript_src, len) != (ssize_t)len){perror(\"write\"); return 1;} close(fd);\n"
+        "  char** nargv = calloc((size_t)argc + 4, sizeof(char*)); if(!nargv) return 1;\n"
+        "  nargv[0] = (char*)goscript_runner; nargv[1] = \"--bytecode\"; nargv[2] = path;\n"
+        "  for(int i=1;i<argc;i++) nargv[i+2] = argv[i];\n"
+        "  execv(goscript_runner, nargv);\n"
+        "  nargv[0] = \"./gd\"; execv(\"./gd\", nargv);\n"
+        "  nargv[0] = \"gd\"; execvp(\"gd\", nargv); perror(\"exec gd\"); return 127;\n"
+        "}\n");
+    fclose(c);
+
+    char cmd[2048];
+    snprintf(cmd, sizeof(cmd), "cc -c -x c '%s' -o '%s'", tmp_path, output);
+    int rc = system(cmd);
+    unlink(tmp_path);
+    return rc == 0;
+}
+
+static int read_gbc_file(const char* path, char** source_out, char** bytecode_out, uint32_t* flags_out) {
+    FILE* f = fopen(path, "rb");
+    if (!f) return 0;
+    GBCHeader h;
+    if (fread(&h, sizeof(h), 1, f) != 1) { fclose(f); return 0; }
+    if (memcmp(h.magic, "GBC1", 4) != 0) { fclose(f); return 0; }
+    char* source = malloc((size_t)h.source_len + 1);
+    char* bc = NULL;
+    if (!source) { fclose(f); return 0; }
+    if (fread(source, 1, (size_t)h.source_len, f) != h.source_len) { free(source); fclose(f); return 0; }
+    source[h.source_len] = '\0';
+    if (h.bytecode_len > 0) {
+        bc = malloc((size_t)h.bytecode_len + 1);
+        if (!bc) { free(source); fclose(f); return 0; }
+        if (fread(bc, 1, (size_t)h.bytecode_len, f) != h.bytecode_len) { free(source); free(bc); fclose(f); return 0; }
+        bc[h.bytecode_len] = '\0';
+    }
+    fclose(f);
+    if (source_out) *source_out = source; else free(source);
+    if (bytecode_out) *bytecode_out = bc; else free(bc);
+    if (flags_out) *flags_out = h.flags;
+    return 1;
+}
 
 /**
  * Parse les options de ligne de commande
@@ -67,48 +200,57 @@ typedef struct {
 GoscriptOptions parse_options(int argc, char** argv) {
     GoscriptOptions opts = {0};
     opts.filename = NULL;
-    opts.script_args_start = argc; // Par défaut, pas d'arguments script
-    
+    opts.script_args_start = argc;
+
     int i = 1;
     while (i < argc) {
-        // Flags de l'interpréteur (préfixés par -)
-        if (strcmp(argv[i], "-d") == 0 || strcmp(argv[i], "--debug") == 0) {
-            opts.debug_mode = 1;
+        char* arg = argv[i];
+        if (strcmp(arg, "--") == 0) { opts.script_args_start = i + 1; break; }
+        if (arg[0] != '-' || strcmp(arg, "-") == 0) {
+            if (!opts.filename) {
+                opts.filename = arg;
+                opts.script_args_start = i + 1;
+            } else {
+                opts.script_args_start = i;
+                break;
+            }
             i++;
+            continue;
         }
-        else if (strcmp(argv[i], "-i") == 0 || strcmp(argv[i], "--interactive") == 0) {
-            opts.repl_mode = 1;
-            i++;
-        }
-        else if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
-            opts.show_help = 1;
-            i++;
-        }
-        else if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--version") == 0) {
-            opts.show_version = 1;
-            i++;
-        }
-        // Séparateur explicite: -- indique la fin des flags GD et le début des args script
-        else if (strcmp(argv[i], "--") == 0) {
-            opts.script_args_start = i + 1;
-            break;
-        }
-        // Premier argument non-flag = nom du fichier
-        else if (argv[i][0] != '-' && opts.filename == NULL) {
-            opts.filename = argv[i];
-            opts.script_args_start = i + 1; // Le reste sont des args pour le script
-            i++;
-        }
-        // Si on a déjà le filename, le reste est pour le script
-        else if (opts.filename != NULL) {
-            opts.script_args_start = i;
-            break;
-        }
+        if (strcmp(arg, "--debug") == 0) opts.debug_mode = 1;
+        else if (strcmp(arg, "--interactive") == 0) opts.repl_mode = 1;
+        else if (strcmp(arg, "--bytecode") == 0) opts.bytecode_mode = 1;
+        else if (strcmp(arg, "--dump-bytecode") == 0) { opts.dump_bytecode = 1; opts.bytecode_mode = 1; }
+        else if (strcmp(arg, "--emit-gbc") == 0) opts.emit_gbc = 1;
+        else if (strcmp(arg, "--emit-native-gbc") == 0 || strcmp(arg, "--emit-obj") == 0) opts.emit_native_gbc = 1;
+        else if (strcmp(arg, "--output") == 0 || strcmp(arg, "-o") == 0) {
+            if (i + 1 < argc) opts.output_file = argv[++i];
+        } else if (strncmp(arg, "-o", 2) == 0 && strlen(arg) > 2) {
+            opts.output_file = arg + 2;
+        } else if (strcmp(arg, "-d") == 0) opts.debug_mode = 1;
+        else if (strcmp(arg, "-i") == 0) opts.repl_mode = 1;
+        else if (strcmp(arg, "-h") == 0) opts.show_help = 1;
+        else if (strcmp(arg, "-v") == 0) opts.show_version = 1;
         else {
-            i++;
+            for (size_t j = 1; arg[j]; j++) {
+                switch (arg[j]) {
+                    case 'd': opts.debug_mode = 1; break;
+                    case 'i': opts.repl_mode = 1; break;
+                    case 'h': opts.show_help = 1; break;
+                    case 'v': opts.show_version = 1; break;
+                    case 'b': opts.bytecode_mode = 1; break;
+                    case 'e': opts.emit_gbc = 1; break;
+                    case 'n': opts.emit_native_gbc = 1; break;
+                    case 'o':
+                        if (arg[j + 1]) { opts.output_file = &arg[j + 1]; j = strlen(arg) - 1; }
+                        else if (i + 1 < argc) { opts.output_file = argv[++i]; }
+                        break;
+                    default: break;
+                }
+            }
         }
+        i++;
     }
-    
     return opts;
 }
 
@@ -120,10 +262,15 @@ void show_help(const char* program_name) {
     printf("Version: 0.2.0\n\n");
     printf("Usage: %s [options] <script.gjs> [script-args...]\n\n", program_name);
     printf("Options:\n");
-    printf("  -d, --debug       Show AST before execution\n");
-    printf("  -i, --interactive Start REPL mode\n");
-    printf("  -h, --help        Show this help message\n");
-    printf("  -v, --version     Show version information\n");
+    printf("  -d, --debug         Show AST before execution\n");
+    printf("  -b, --bytecode       Run through the bytecode VM\n");
+    printf("  -e, --emit-gbc       Emit .gbc package\n");
+    printf("  -n, --emit-native-gbc Emit linkable ELF object named .gbc\n");
+    printf("  -o, --output FILE    Output .gbc path\n");
+    printf("      --dump-bytecode  Print generated bytecode\n");
+    printf("  -i, --interactive    Start REPL mode\n");
+    printf("  -h, --help           Show this help message\n");
+    printf("  -v, --version        Show version information\n");
     printf("  --                 End of GD options, start of script arguments\n\n");
     printf("Examples:\n");
     printf("  %s script.gjs\n", program_name);
@@ -169,29 +316,51 @@ int main(int argc, char** argv) {
         printf("Please provide a file: %s <file.gjs>\n", argv[0]);
         return 1;
     }
-    
+
     // Initialiser les arguments du script
     init_script_args(argc, argv, opts.script_args_start);
-    
-    // Ouvrir le fichier
-    yyin = fopen(opts.filename, "r");
+
+    // Charger le fichier source ou .gbc
+    char* source_text = NULL;
+    char* loaded_bc_dump = NULL;
+    uint32_t gbc_flags = 0;
+    if (ends_with(opts.filename, ".gbc")) {
+        if (!read_gbc_file(opts.filename, &source_text, &loaded_bc_dump, &gbc_flags)) {
+            fprintf(stderr, "Error: Cannot open GBC '%s'\n", opts.filename);
+            free_script_args();
+            return 1;
+        }
+        opts.bytecode_mode = 1;
+    } else {
+        source_text = read_file_text(opts.filename, NULL);
+        if (!source_text) {
+            fprintf(stderr, "Error: Cannot open '%s'\n", opts.filename);
+            free_script_args();
+            return 1;
+        }
+    }
+
+    // Parser depuis la mémoire
+    yyin = make_tmp_source(source_text);
     if (!yyin) {
-        fprintf(stderr, "Error: Cannot open '%s'\n", opts.filename);
+        fprintf(stderr, "Error: Cannot create temp source\n");
+        free(source_text);
+        free(loaded_bc_dump);
         free_script_args();
         return 1;
     }
-    
-    // Parser
+
     int parse_result = yyparse();
     fclose(yyin);
-    
+
     if (parse_result != 0 || !program_root) {
         fprintf(stderr, "Error: Parsing failed\n");
+        free(source_text);
+        free(loaded_bc_dump);
         free_script_args();
         return 1;
     }
-    
-    // Mode debug: afficher l'AST
+
     if (opts.debug_mode) {
         printf("\n╔══════════════════════════════════════════════════════════════╗\n");
         printf("║                         AST DEBUG                           ║\n");
@@ -201,14 +370,64 @@ int main(int argc, char** argv) {
         printf("║                      END AST DEBUG                         ║\n");
         printf("╚══════════════════════════════════════════════════════════════╝\n\n");
     }
-    
+
+    // Générer .gbc container si demandé
+    if (opts.emit_gbc) {
+        char* bc_dump = bc_program_dump(program_root);
+        char* out = opts.output_file;
+        char auto_out[1024];
+        if (!out) {
+            const char* base = strrchr(opts.filename, '/');
+            base = base ? base + 1 : opts.filename;
+            snprintf(auto_out, sizeof(auto_out), "%s.gbc", base);
+            out = auto_out;
+        }
+        if (!write_gbc_file(out, source_text, bc_dump ? bc_dump : "", gbc_flags | (opts.bytecode_mode ? 1u : 0u))) {
+            fprintf(stderr, "Error: Cannot write '%s'\n", out);
+        } else {
+            printf("Wrote %s\n", out);
+        }
+        free(bc_dump);
+    }
+
+    // Générer un objet ELF linkable par lld/ld si demandé.
+    // Exemple: ./gd -n -o app.gbc main.gjs && cc app.gbc -o app
+    if (opts.emit_native_gbc) {
+        char* out = opts.output_file;
+        char auto_out[1024];
+        if (!out) {
+            const char* base = strrchr(opts.filename, '/');
+            base = base ? base + 1 : opts.filename;
+            snprintf(auto_out, sizeof(auto_out), "%s.native.gbc", base);
+            out = auto_out;
+        }
+        char runner_path[PATH_MAX];
+        const char* runner = argv[0];
+        if (realpath(argv[0], runner_path)) runner = runner_path;
+        if (!emit_native_gbc_object(out, source_text, runner)) {
+            fprintf(stderr, "Error: Cannot emit native object '%s'\n", out);
+        } else {
+            printf("Wrote native object %s\n", out);
+            printf("Link: cc %s -o app  # ou clang -fuse-ld=lld %s -o app\n", out, out);
+        }
+    }
+
+    if (opts.emit_gbc || opts.emit_native_gbc) {
+        goto cleanup;
+    }
+
     // Exécuter le programme
-    interpret_program(program_root);
-    
-    // Nettoyage
+    if (opts.bytecode_mode) {
+        interpret_program_bytecode(program_root, opts.dump_bytecode);
+    } else {
+        interpret_program(program_root);
+    }
+
+cleanup:
     free_ast(program_root);
+    free(source_text);
+    free(loaded_bc_dump);
     free_script_args();
-    
     return 0;
 }
 
@@ -570,6 +789,16 @@ void print_ast(ASTNode* node, int depth) {
                 default: printf(" ? "); break;
             }
             print_ast(node->binary.right, 0);
+            printf(")\n");
+            break;
+            
+        case NODE_TERNARY:
+            printf("(");
+            print_ast(node->ternary.condition, 0);
+            printf(" ? ");
+            print_ast(node->ternary.true_expr, 0);
+            printf(" : ");
+            print_ast(node->ternary.false_expr, 0);
             printf(")\n");
             break;
             

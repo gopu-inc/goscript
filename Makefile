@@ -48,13 +48,14 @@ PARSER_H = parser.h
 
 SOURCES = $(SCANNER_C) $(PARSER_C) \
           src/ast/ast.c \
+          src/bytecode/bytecode.c \
           src/main.c \
           src/interpreter/interpreter_env.c \
           src/interpreter/interpreter_import.c \
           src/interpreter/interpreter_ffi.c \
           src/interpreter/interpreter_eval.c
 
-OBJECTS = scanner.o parser.o ast.o main.o \
+OBJECTS = scanner.o parser.o ast.o bytecode.o main.o \
           interpreter_env.o interpreter_import.o \
           interpreter_ffi.o interpreter_eval.o
 
@@ -73,6 +74,10 @@ $(PARSER_C) $(PARSER_H): src/parser/parser.y
 # AST
 ast.o: src/ast/ast.c src/ast/ast.h
 	$(CC) $(CFLAGS) -c src/ast/ast.c -o ast.o
+
+# Bytecode
+bytecode.o: src/bytecode/bytecode.c src/bytecode/bytecode.h src/interpreter/interpreter.h src/ast/ast.h
+	$(CC) $(CFLAGS) -c src/bytecode/bytecode.c -o bytecode.o
 
 # Main
 main.o: src/main.c

@@ -957,7 +957,45 @@ void register_native_c_functions(Environment* env) {
     
     void* recv_ptr = dlsym(libc_handle, "recv");
     if (recv_ptr) register_c_function(env, "recv_c", recv_ptr, "int", 4, "int", "int", "int", "int");
-    
+
+    // ============================================
+    // TUI FUNCTIONS (ncurses)
+    // ============================================
+    void* tui_handle = dlopen("libncursesw.so.6", RTLD_LAZY);
+    if (!tui_handle) tui_handle = dlopen("libncurses.so.6", RTLD_LAZY);
+    if (!tui_handle) tui_handle = dlopen("libncursesw.so", RTLD_LAZY);
+    if (!tui_handle) tui_handle = dlopen("libncurses.so", RTLD_LAZY);
+    if (tui_handle) {
+        void* endwin_ptr = dlsym(tui_handle, "endwin");
+        if (endwin_ptr) register_c_function(env, "tui_end_c", endwin_ptr, "int", 0);
+        void* refresh_ptr = dlsym(tui_handle, "refresh");
+        if (refresh_ptr) register_c_function(env, "tui_refresh_c", refresh_ptr, "int", 0);
+        void* clear_ptr = dlsym(tui_handle, "clear");
+        if (clear_ptr) register_c_function(env, "tui_clear_c", clear_ptr, "int", 0);
+        void* getch_ptr = dlsym(tui_handle, "getch");
+        if (getch_ptr) register_c_function(env, "tui_getch_c", getch_ptr, "int", 0);
+        void* mvaddstr_ptr = dlsym(tui_handle, "mvaddstr");
+        if (mvaddstr_ptr) register_c_function(env, "tui_mvaddstr_c", mvaddstr_ptr, "int", 3, "int", "int", "string");
+        void* addstr_ptr = dlsym(tui_handle, "addstr");
+        if (addstr_ptr) register_c_function(env, "tui_addstr_c", addstr_ptr, "int", 1, "string");
+        void* move_ptr = dlsym(tui_handle, "move");
+        if (move_ptr) register_c_function(env, "tui_move_c", move_ptr, "int", 2, "int", "int");
+        void* init_pair_ptr = dlsym(tui_handle, "init_pair");
+        if (init_pair_ptr) register_c_function(env, "tui_init_pair_c", init_pair_ptr, "int", 3, "int", "int", "int");
+        void* start_color_ptr = dlsym(tui_handle, "start_color");
+        if (start_color_ptr) register_c_function(env, "tui_start_color_c", start_color_ptr, "int", 0);
+    }
+
+    // ============================================
+    // CURL / HTTP helpers
+    // ============================================
+    void* curl_handle = dlopen("libcurl.so.4", RTLD_LAZY);
+    if (!curl_handle) curl_handle = dlopen("libcurl.so", RTLD_LAZY);
+    if (curl_handle) {
+        void* curl_version_ptr = dlsym(curl_handle, "curl_version");
+        if (curl_version_ptr) register_c_function(env, "curl_version_c", curl_version_ptr, "string", 0);
+    }
+
     // ============================================
     // PUTS & PUTCHAR (wrapper functions)
     // ============================================
@@ -1801,6 +1839,13 @@ case NODE_DICT_ACCESS: {
     result.string_val = result_str;
     break;
 }
+        case NODE_TERNARY: {
+            Value cond = evaluate_expr(node->ternary.condition, env);
+            if (cond.type == 3 && cond.bool_val) {
+                return evaluate_expr(node->ternary.true_expr, env);
+            }
+            return evaluate_expr(node->ternary.false_expr, env);
+        }
         // ==================== OPÉRATIONS UNAIRES ====================
         case NODE_UNARY_OP: {
             Value operand = evaluate_expr(node->unary.operand, env);

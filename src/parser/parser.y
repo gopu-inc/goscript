@@ -815,6 +815,7 @@ return_statement:
 expression:
     binary_expr
     | unary_expr
+    | ternary_expr
     | primary_expr
     | expression TOKEN_DOT TOKEN_IDENTIFIER TOKEN_LPAREN argument_list TOKEN_RPAREN {
         // 'expression' est l'objet ($1), 'TOKEN_IDENTIFIER' est la méthode ($3)

@@ -28,3 +28,15 @@ args = "make && echo '=== Build complete ===' && ./gd --version"
 
 [workflows.workflow.metadata]
 outputType = "console"
+
+[[ports]]
+localPort = 19878
+externalPort = 80
+
+[[ports]]
+localPort = 19880
+externalPort = 3000
+
+[[ports]]
+localPort = 19885
+externalPort = 3001

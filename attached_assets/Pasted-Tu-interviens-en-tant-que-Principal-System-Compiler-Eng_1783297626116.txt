@@ -1,0 +1,42 @@
+Tu interviens en tant que "Principal System & Compiler Engineer". Ton objectif est de réécrire, étendre et industrialiser l'implémentation en C d'un langage de programmation nommé "Goscript". Ce langage est destiné à être la colonne vertébrale des futurs outils de l'entreprise gopu.inc (hébergés sur github.com/gopu-inc), et son moteur d'exécution doit être suffisamment robuste, rapide et sécurisé pour propulser le projet critique nommé "bit".
+​L'architecture actuelle utilise Flex (scanner.l) pour l'analyse lexicale, Bison (parser.y) pour l'analyse syntaxique, et un évaluateur AST (Abstract Syntax Tree) en C pur (eval.c). Nous devons opérer une transition majeure vers une Stack Virtual Machine avec un vrai Garbage Collector, tout en ajoutant des fonctionnalités syntaxiques de haut niveau.
+​DIRECTIVES DE GÉNÉRATION
+Tu dois générer du code C natif (C99/C11), extrêmement documenté, optimisé pour la performance (cache CPU, minimisation des allocations), et "Memory Safe" (compatible avec les analyses Valgrind et AddressSanitizer). Fournis les implémentations complètes, les headers (.h), et le code source (.c).
+​CHANTIER 1 : FRONT-END (LEXER, PARSER & AST)
+​Objectif : Implémenter une syntaxe déclarative fluide inspirée des frameworks web modernes.
+​Décorateurs et Annotations :
+​Modifie le scanner.l pour introduire des états exclusifs (%x DECORATOR) capables de parser des structures comme @app::server(port=8080).
+​Mets à jour parser.y pour permettre aux déclarations de fonctions, de classes ou de blocs d'accepter une liste chaînée de nœuds AST_DECORATOR.
+​Method Chaining & Pattern Builder :
+​Adapte la grammaire pour supporter l'évaluation fluide : .route.get("/", config=true) { ... }.post().
+​Modifie la structure de l'AST pour que les appels de méthodes puissent facilement remonter l'instance parente (this/self) si la méthode retourne l'objet lui-même.
+​Closures et Blocs Anonymes :
+​Assure-toi que les blocs { fn() } passés en paramètres de méthodes soient parsés comme des expressions lambda (closures) capturant leur environnement lexical.
+​CHANTIER 2 : GESTION DE LA MÉMOIRE (GARBAGE COLLECTOR)
+​Objectif : Remplacer les malloc/free ad-hoc par un GC de niveau industriel pour éviter les fuites lors du fonctionnement de serveurs web de longue durée.
+​Architecture Memory Pool & Arena :
+​Conçois un allocateur par arène (Arena Allocator) pour les nœuds de l'AST (dont la durée de vie s'arrête après la compilation en bytecode).
+​Conçois un Memory Pool pour les objets d'exécution (Value : strings, arrays, hashmaps, instances).
+​Algorithme Mark-and-Sweep (Tri-color) :
+​Écris la structure GCObject avec un header contenant des bits de marquage (Blanc, Gris, Noir) et un pointeur vers l'objet suivant.
+​Roots Scanning : Implémente la fonction qui traverse les "racines" : la table des globales, la pile d'exécution actuelle (Stack), et les fermetures (closures). Note : Fournis une méthode C robuste pour scanner la C-Stack ou gère une Shadow Stack explicite dans la VM.
+​Sweep Phase : Implémente la logique de libération de la mémoire des objets non atteints.
+​CHANTIER 3 : MOTEUR D'EXÉCUTION (STACK VIRTUAL MACHINE)
+​Objectif : Abandonner l'évaluation récursive de l'AST (Tree-walk interpreter) au profit d'une compilation en Bytecode pour des performances multipliées par 10.
+​Conception du Jeu d'Instructions (ISA) :
+​Définis un enum OpCode avec des instructions de pile (ex: OP_PUSH, OP_POP, OP_LOAD_LOCAL, OP_STORE_GLOBAL), des opérations mathématiques (OP_ADD, OP_MUL), et du contrôle de flux (OP_JUMP, OP_JUMP_IF_FALSE, OP_CALL, OP_RETURN).
+​Représentation des Valeurs (NaN-Boxing) :
+​Pour économiser de la mémoire et optimiser le cache CPU, implémente le "NaN-Boxing" ou le "Pointer Tagging". Un type Value Goscript doit tenir sur 64 bits (double précision IEEE 754), où les pointeurs, booléens et entiers sont encodés dans les bits de mantisse des valeurs NaN.
+​La Boucle d'Exécution (Dispatch) :
+​Écris la fonction vm_run() centrale. Utilise le pattern "Direct Threaded Code" (avec des computed gotos via les extensions GCC/Clang &&label) pour un dispatch des opcodes ultra-rapide.
+​CHANTIER 4 : FFI, IPC ET SÉCURITÉ (HARDWARE ABSTRACTION LAYER)
+​Objectif : Rendre l'écosystème "bit" multiplateforme et indestructible face aux plantages des librairies C externes.
+​Couche HAL Multiplateforme :
+​Implémente une API de chargement dynamique unifiée (gs_dlopen, gs_dlsym).
+​Utilise des macros #ifdef _WIN32 (pour LoadLibrary, GetProcAddress) et #elif defined(__unix__) (pour dlopen, dlsym).
+​Sandboxing des Appels Natifs (FFI) :
+​Écris un gestionnaire de signaux (sigaction sur POSIX, AddVectoredExceptionHandler sur Windows).
+​Utilise setjmp/longjmp pour intercepter les SIGSEGV ou exceptions de violation d'accès survenant pendant un appel FFI, afin d'empêcher le runtime Goscript de crasher, en remontant l'erreur sous forme de "Goscript Native Exception".
+​Bibliothèques Standard (Core Modules) :
+​Fournis l'implémentation C de base pour un module net/socket (supportant TCP/UDP asynchrone, prêt pour Socket.io).
+​Fournis un header natif tensor.h qui prépare l'intégration d'OpenBLAS ou GGML pour les calculs de Machine Learning de gopu.inc.

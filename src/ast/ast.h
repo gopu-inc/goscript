@@ -93,7 +93,8 @@ typedef enum {
     NODE_STRUCT_EXTENDS,
     NODE_MATCH_STRUCT,
     NODE_MODULE,
-    NODE_ASSIGN_OP
+    NODE_ASSIGN_OP,
+    NODE_DECORATOR       /* @name(args...) ou @ns::name(args...) */
 } NodeType;
 
 /* Opérateurs */
@@ -304,6 +305,7 @@ struct {
             int is_main;
             int is_async;
             int is_public;
+            ASTNodeList* decorators; /* Liste de décorateurs @name(...) */
         } function;
         struct {
     struct ASTNode* expr;
@@ -599,6 +601,9 @@ ASTNode* create_packet_node(char* name, ASTNodeList* statements);
 
 
 // ASTNode* default_value;  // Commented out to avoid multiple definition error
+
+/* Décorateurs */
+ASTNode* create_decorator_node(char* name, char* ns, ASTNodeList* args);
 
 /* Fonctions */
 ASTNode* create_function_node(char* name, ASTNodeList* params, ASTNode* return_type, ASTNodeList* body);

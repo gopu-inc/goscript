@@ -40,6 +40,7 @@ ASTNode* program_root;
 %token TOKEN_UNDERSCORE
 %token TOKEN_SWITCH
 %token TOKEN_USE
+%token TOKEN_AT            /* Décorateur : @app::server(port=8080) */
 
 /* Operators */
 %token TOKEN_PLUS TOKEN_MINUS TOKEN_MULTIPLY TOKEN_DIVIDE TOKEN_MODULO
@@ -112,6 +113,8 @@ ASTNode* program_root;
 %type <node> async_expr await_expr spawn_expr
 %type <node> async_function_decl
 %type <string> import_path_tail
+%type <node_list> decorator_list
+%type <node> decorator
 
 %type <node> f_string
 %start program
@@ -436,6 +439,46 @@ packet_decl:
     }
     ;
 
+/* ============================================================
+ *  DÉCORATEURS  @app::server(port=8080)  @deprecated  @test
+ * ============================================================ */
+
+decorator_list:
+    decorator {
+        $$ = create_node_list();
+        add_to_node_list($$, $1);
+    }
+    | decorator_list decorator {
+        add_to_node_list($1, $2);
+        $$ = $1;
+    }
+    ;
+
+decorator:
+    /* @name */
+    TOKEN_AT TOKEN_IDENTIFIER {
+        $$ = create_decorator_node($2, NULL, NULL);
+    }
+    /* @name(args...) */
+    | TOKEN_AT TOKEN_IDENTIFIER TOKEN_LPAREN argument_list TOKEN_RPAREN {
+        $$ = create_decorator_node($2, NULL, $4);
+    }
+    /* @ns::name */
+    | TOKEN_AT TOKEN_IDENTIFIER TOKEN_DOUBLE_COLON TOKEN_IDENTIFIER {
+        char* full = malloc(strlen($2) + strlen($4) + 3);
+        sprintf(full, "%s::%s", $2, $4);
+        $$ = create_decorator_node(full, NULL, NULL);
+        free(full);
+    }
+    /* @ns::name(args...) */
+    | TOKEN_AT TOKEN_IDENTIFIER TOKEN_DOUBLE_COLON TOKEN_IDENTIFIER TOKEN_LPAREN argument_list TOKEN_RPAREN {
+        char* full = malloc(strlen($2) + strlen($4) + 3);
+        sprintf(full, "%s::%s", $2, $4);
+        $$ = create_decorator_node(full, NULL, $6);
+        free(full);
+    }
+    ;
+
 function_decl:
     TOKEN_FN TOKEN_IDENTIFIER TOKEN_LPAREN param_list TOKEN_RPAREN return_type TOKEN_LBRACE statement_list TOKEN_RBRACE {
         $$ = create_function_node($2, $4, $6, $8);
@@ -461,6 +504,15 @@ function_decl:
         ASTNode* return_stmt = create_return_node($8);
         add_to_node_list(body, return_stmt);
         $$ = create_function_node($2, $4, $6, body);
+    }
+    /* Formes avec décorateurs */
+    | decorator_list TOKEN_FN TOKEN_IDENTIFIER TOKEN_LPAREN param_list TOKEN_RPAREN return_type TOKEN_LBRACE statement_list TOKEN_RBRACE {
+        $$ = create_function_node($3, $5, $7, $9);
+        $$->function.decorators = $1;
+    }
+    | decorator_list TOKEN_PUB TOKEN_FN TOKEN_IDENTIFIER TOKEN_LPAREN param_list TOKEN_RPAREN return_type TOKEN_LBRACE statement_list TOKEN_RBRACE {
+        $$ = create_public_function_node($4, $6, $8, $10);
+        $$->function.decorators = $1;
     }
     ;
 

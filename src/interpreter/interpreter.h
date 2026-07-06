@@ -187,6 +187,9 @@ void register_c_function(Environment* env, char* name, void* func_ptr, char* ret
 void* load_c_library(char* path);
 void call_c_function(Value* cfunc, Value* args, int arg_count, Value* result);
 
+// Fonctions réseau + DB natives (interpreter_net.c)
+void register_net_functions(Environment* env);
+
 // Fonctions d'affichage
 void print_value(Value val, int newline);
 

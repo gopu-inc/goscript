@@ -13,7 +13,40 @@ void yyerror(const char* msg);
 %option noyywrap
 %option yylineno
 
+/* État exclusif pour les décorateurs @app::server(port=8080) */
+%x DECORATOR
+
 %%
+
+ /* ============================================ */
+ /*   DÉCORATEURS  @name  ou  @ns::name(...)     */
+ /* ============================================ */
+
+"@"                     { BEGIN(DECORATOR); return TOKEN_AT; }
+
+<DECORATOR>[a-zA-Z_][a-zA-Z0-9_]* {
+    yylval.string = strdup(yytext);
+    return TOKEN_IDENTIFIER;
+}
+<DECORATOR>"::"         { return TOKEN_DOUBLE_COLON; }
+<DECORATOR>"("          { return TOKEN_LPAREN; }
+<DECORATOR>")"          { BEGIN(INITIAL); return TOKEN_RPAREN; }
+<DECORATOR>"="          { return TOKEN_ASSIGN; }
+<DECORATOR>","          { return TOKEN_COMMA; }
+<DECORATOR>[0-9]+       { yylval.number = atoi(yytext); return TOKEN_NUMBER; }
+<DECORATOR>[0-9]+\.[0-9]+ { yylval.float_val = atof(yytext); return TOKEN_FLOAT; }
+<DECORATOR>\"(\\.|[^"\\])*\" {
+    int len = strlen(yytext);
+    char* s = malloc(len - 1);
+    int i, j = 0;
+    for (i = 1; i < len - 1; i++) s[j++] = yytext[i];
+    s[j] = '\0';
+    yylval.string = s;
+    return TOKEN_STRING;
+}
+<DECORATOR>[ \t]+       { /* ignorer les espaces */ }
+<DECORATOR>"\n"         { BEGIN(INITIAL); }
+<DECORATOR>.            { BEGIN(INITIAL); yyless(0); }
 
  /* ============================================ */
  /*              MOTS-CLÉS                       */
@@ -25,8 +58,10 @@ void yyerror(const char* msg);
 "spawn"                 { return TOKEN_SPAWN; }
 "fn"                    { return TOKEN_FN; }
 "lt"                    { return TOKEN_LET; }
+"let"                   { return TOKEN_LET; }     /* alias backward-compat */
 "cn"                    { return TOKEN_CONST; }
 "ret"                   { return TOKEN_RETURN; }
+"return"                { return TOKEN_RETURN; }  /* alias backward-compat */
 "if"                    { return TOKEN_IF; }
 "else"                  { return TOKEN_ELSE; }
 "for"                   { return TOKEN_FOR; }

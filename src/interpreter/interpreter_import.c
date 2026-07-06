@@ -7,6 +7,7 @@
 #include <string.h>
 #include <limits.h>
 #include <dirent.h>
+#include <errno.h>
 
 extern ASTNode* program_root;
 extern int yyparse(void);
@@ -268,9 +269,17 @@ char* resolve_module_path(char* current_file, char* import_path) {
         "../../lib",
         "../../modules",
         "./lib/std",
+        "./lib/net",
+        "./lib/db",
+        "../lib/net",
+        "../lib/db",
+        "../../lib/net",
+        "../../lib/db",
         "./src",
         "/usr/local/lib/goscript",
         "/usr/local/lib/goscript/std",
+        "/usr/local/lib/goscript/net",
+        "/usr/local/lib/goscript/db",
         "/usr/lib/goscript",
         ".",
         "..",
@@ -436,7 +445,10 @@ static LoadedModule* load_file_module(const char* full_path, const char* module_
     LoadedModule* existing = find_module_by_path(full_path);
     if (existing) {
         if (existing->status == MODULE_STATUS_LOADING) {
-            fprintf(stderr, "[Goscript] Circular import detected: %s\n", module_name);
+            fprintf(stderr, "\033[31m[Goscript] Erreur : import circulaire détecté !\033[0m\n");
+            fprintf(stderr, "  Module \"%s\" est déjà en cours de chargement.\n", module_name);
+            fprintf(stderr, "  Chemin : %s\n", full_path);
+            fprintf(stderr, "  Conseil : vérifiez que vos modules ne s'importent pas mutuellement.\n");
             return NULL;
         }
         existing->ref_count++;
@@ -450,7 +462,10 @@ static LoadedModule* load_file_module(const char* full_path, const char* module_
     // Lire le fichier
     FILE* f = fopen(full_path, "r");
     if (!f) {
-        fprintf(stderr, "[Goscript] Cannot open file: %s\n", full_path);
+        fprintf(stderr, "\033[31m[Goscript] Erreur : impossible d'ouvrir le module\033[0m\n");
+        fprintf(stderr, "  Module  : \"%s\"\n", module_name);
+        fprintf(stderr, "  Chemin  : %s\n", full_path);
+        fprintf(stderr, "  Cause   : %s\n", strerror(errno));
         mod->status = MODULE_STATUS_ERROR;
         return NULL;
     }
@@ -709,7 +724,12 @@ LoadedModule* load_module(ModuleRegistry* reg, Environment* parent_env,
     // 1. Résoudre le chemin
     char* full_path = resolve_module_path(current_file, import_path);
     if (!full_path) {
-        fprintf(stderr, "[Goscript] Module not found: %s\n", import_path);
+        fprintf(stderr, "\033[31m[Goscript] Erreur : module introuvable\033[0m\n");
+        fprintf(stderr, "  Module  : \"%s\"\n", import_path);
+        if (current_file && current_file[0])
+            fprintf(stderr, "  Depuis  : %s\n", current_file);
+        fprintf(stderr, "  Chemin cherché dans : ./lib/, ./modules/, ./lib/net/, ./lib/db/, etc.\n");
+        fprintf(stderr, "  Conseil : vérifiez l'orthographe du module ou installez-le avec gpm.\n");
         return NULL;
     }
     

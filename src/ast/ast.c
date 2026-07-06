@@ -294,6 +294,23 @@ ASTNode* create_packet_node(char* name, ASTNodeList* statements) {
     return node;
 }
 
+ASTNode* create_decorator_node(char* name, char* ns, ASTNodeList* args) {
+    ASTNode* node = malloc(sizeof(ASTNode));
+    node->type = NODE_DECORATOR;
+    /* On réutilise le champ function.name pour le nom du décorateur
+     * et function.params pour les arguments */
+    node->function.name       = strdup(name);
+    node->function.params     = args;
+    node->function.body       = NULL;
+    node->function.return_type = NULL;
+    node->function.is_main    = 0;
+    node->function.is_async   = 0;
+    node->function.is_public  = 0;
+    node->function.decorators = NULL;
+    (void)ns;  /* réservé pour future extension */
+    return node;
+}
+
 ASTNode* create_function_node(char* name, ASTNodeList* params, ASTNode* return_type, ASTNodeList* body) {
     ASTNode* node = malloc(sizeof(ASTNode));
     node->type = NODE_FUNCTION;
@@ -303,6 +320,8 @@ ASTNode* create_function_node(char* name, ASTNodeList* params, ASTNode* return_t
     node->function.body = body;
     node->function.is_main = 0;
     node->function.is_public = 0;
+    node->function.is_async = 0;
+    node->function.decorators = NULL;
     return node;
 }
 

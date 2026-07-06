@@ -28,6 +28,11 @@ static ImplEntry* impl_table = NULL;
 static int impl_count = 0;
 static int impl_capacity = 0;
 
+/* Valeur de retour de la dernière instruction `ret` rencontrée.
+ * Stockée ici pour permettre la propagation depuis des blocs imbriqués
+ * (ret à l'intérieur d'un if, while, for…). */
+static Value g_return_value;
+
 typedef struct NnlContext {
     char* label;
     jmp_buf env;
@@ -1127,7 +1132,8 @@ Value call_method(Value* obj, char* method_name, ASTNodeList* args, Environment*
             result = evaluate_expr(stmt->return_stmt.value, method_env);
             break;
         } else {
-            evaluate_statement(stmt, method_env, NULL);  // Ajoutez NULL comme current_file
+            int rv = evaluate_statement(stmt, method_env, NULL);
+            if (rv == 1) { result = g_return_value; break; }
         }
     }
     
@@ -2222,10 +2228,11 @@ case NODE_METHOD_CALL: {
                             result = evaluate_expr(stmt->return_stmt.value, func_env);
                             break;
                         } else {
-                            evaluate_statement(stmt, func_env, NULL);
+                            int rv = evaluate_statement(stmt, func_env, NULL);
+                            if (rv == 1) { result = g_return_value; break; }
                         }
                     }
-                    free(func_env);
+                    if (result.type != 9) free(func_env);
                 }
                 // ============ LAMBDA (type 9) ============
                 else if (func->type == 9) {
@@ -2375,10 +2382,11 @@ case NODE_METHOD_CALL: {
                         result = evaluate_expr(stmt->return_stmt.value, func_env);
                         break;
                     } else {
-                        evaluate_statement(stmt, func_env, NULL);
+                        int rv = evaluate_statement(stmt, func_env, NULL);
+                        if (rv == 1) { result = g_return_value; break; }
                     }
                 }
-                free(func_env);
+                if (result.type != 9) free(func_env);
             }
             // ============ LAMBDA (type 9) ============
             else if (func->type == 9) {
@@ -2472,10 +2480,11 @@ case NODE_METHOD_CALL: {
                         result = evaluate_expr(stmt->return_stmt.value, func_env);
                         break;
                     } else {
-                        evaluate_statement(stmt, func_env, NULL);
+                        int rv = evaluate_statement(stmt, func_env, NULL);
+                        if (rv == 1) { result = g_return_value; break; }
                     }
                 }
-                free(func_env);
+                if (result.type != 9) free(func_env);
             }
             // ============ LAMBDA (type 9) ============
             else if (func->type == 9) {
@@ -2693,10 +2702,12 @@ case NODE_METHOD_CALL: {
                 result = evaluate_expr(stmt->return_stmt.value, func_env);
                 break;
             } else {
-                evaluate_statement(stmt, func_env, NULL);
+                int rv = evaluate_statement(stmt, func_env, NULL);
+                if (rv == 1) { result = g_return_value; break; }
             }
         }
-        free(func_env);
+        /* Ne pas libérer func_env si une lambda est retournée : elle capture cet env */
+        if (result.type != 9) free(func_env);
     } 
     else if (func && func->type == 5) {
         int arg_count = node->call.args ? node->call.args->count : 0;
@@ -2726,14 +2737,15 @@ case NODE_METHOD_CALL: {
                 }
             }
             
-            // Exécution du corps de la lambda
+            /* Exécution du corps de la lambda */
             for (int i = 0; i < lambda_node->lambda.body->count; i++) {
                 ASTNode* stmt = lambda_node->lambda.body->nodes[i];
                 if (stmt->type == NODE_RETURN) {
                     result = evaluate_expr(stmt->return_stmt.value, lambda_env);
                     break;
                 } else {
-                    evaluate_statement(stmt, lambda_env, NULL);
+                    int rv = evaluate_statement(stmt, lambda_env, NULL);
+                    if (rv == 1) { result = g_return_value; break; }
                 }
             }
             free(lambda_env);
@@ -2785,8 +2797,8 @@ int evaluate_statement(ASTNode* node, Environment* env, char* current_file) {
         }
         
         case NODE_RETURN: {
-            Value val = evaluate_expr(node->return_stmt.value, env);
-            return 1;  // retourne 1 pour indiquer un return
+            g_return_value = evaluate_expr(node->return_stmt.value, env);
+            return 1;  /* retourne 1 pour indiquer un return */
         }
         
         case NODE_IF: {
@@ -3164,6 +3176,7 @@ void interpret_program(ASTNode* program) {
     Environment* global = create_env(NULL);
     init_interpreter();
     register_native_c_functions(global);
+    register_net_functions(global);
     
     // ============================================
     // CHARGEMENT AUTOMATIQUE DU MODULE BUILTIN

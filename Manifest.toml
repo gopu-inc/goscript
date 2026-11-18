@@ -1,0 +1,13 @@
+# Manifest Goscript
+[metadata]
+name = "mon-paquet"
+version = "0.1.0"
+release = "r0"
+arch = "x86_64"
+description = "Paquet Goscript"
+author = ""
+license = "MIT"
+main = "main.gjs"
+files = ["__self__.gjs", "main.gjs"]
+
+[dependencies]

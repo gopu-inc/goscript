@@ -21,6 +21,7 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <string.h>
+#include <strings.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -180,6 +181,47 @@ static int gs_tcp_server(int port) {
     return hid;
 }
 
+/* Bind a TCP listener to a specific address (for example 127.0.0.1). */
+static int gs_tcp_server_host(const char* host, int port) {
+    if (!host || !host[0]) return -1;
+    char service[16];
+    snprintf(service, sizeof(service), "%d", port);
+
+    struct addrinfo hints, *results = NULL, *rp;
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_flags = AI_NUMERICSERV;
+
+    int rc = getaddrinfo(host, service, &hints, &results);
+    if (rc != 0) {
+        fprintf(stderr, "[net] gs_tcp_server_host: %s\n", gai_strerror(rc));
+        return -1;
+    }
+
+    int fd = -1;
+    for (rp = results; rp; rp = rp->ai_next) {
+        fd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
+        if (fd < 0) continue;
+        int opt = 1;
+        setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+        if (bind(fd, rp->ai_addr, rp->ai_addrlen) == 0 && listen(fd, 128) == 0)
+            break;
+        close(fd);
+        fd = -1;
+    }
+    freeaddrinfo(results);
+
+    if (fd < 0) {
+        perror("[net] gs_tcp_server_host: bind/listen");
+        return -1;
+    }
+
+    int hid = alloc_handle(GS_HANDLE_SOCKET, NULL, fd);
+    if (hid < 0) { close(fd); return -1; }
+    return hid;
+}
+
 /*
  * gs_tcp_accept(server_hid) → client_hid (-1 si erreur)
  * Accepte une connexion entrante (bloquant).
@@ -204,6 +246,7 @@ static int gs_tcp_accept(int server_hid) {
 
 /* Buffer statique pour gs_tcp_recv (thread-unsafe, adapté aux scripts séquentiels) */
 static char gs_recv_buf[65536];
+static char gs_http_recv_buf[65536];
 
 /*
  * gs_tcp_send(hid, message) → octets envoyés (-1 si erreur)
@@ -212,7 +255,13 @@ static int gs_tcp_send(int hid, const char* message) {
     GsHandle* h = get_handle(hid, GS_HANDLE_SOCKET);
     if (!h || !message) return -1;
     int len = (int)strlen(message);
-    int sent = (int)send(h->fd, message, len, 0);
+    int sent = 0;
+    while (sent < len) {
+        ssize_t n = send(h->fd, message + sent, (size_t)(len - sent), 0);
+        if (n < 0 && errno == EINTR) continue;
+        if (n <= 0) return sent > 0 ? sent : -1;
+        sent += (int)n;
+    }
     return sent;
 }
 
@@ -228,6 +277,52 @@ static const char* gs_tcp_recv(int hid, int maxlen) {
     if (n <= 0) { gs_recv_buf[0] = '\0'; return gs_recv_buf; }
     gs_recv_buf[n] = '\0';
     return gs_recv_buf;
+}
+
+/* Receive HTTP headers and the body declared by Content-Length. */
+static const char* gs_tcp_recv_http(int hid, int maxlen) {
+    GsHandle* h = get_handle(hid, GS_HANDLE_SOCKET);
+    if (!h) return NULL;
+    if (maxlen <= 0 || maxlen >= (int)sizeof(gs_http_recv_buf))
+        maxlen = (int)sizeof(gs_http_recv_buf) - 1;
+
+    int total = 0;
+    int content_length = -1;
+    size_t body_start = 0;
+    gs_http_recv_buf[0] = '\0';
+
+    while (total < maxlen) {
+        ssize_t n = recv(h->fd, gs_http_recv_buf + total, (size_t)(maxlen - total), 0);
+        if (n < 0 && errno == EINTR) continue;
+        if (n <= 0) break;
+        total += (int)n;
+        gs_http_recv_buf[total] = '\0';
+
+        char* header_end = strstr(gs_http_recv_buf, "\r\n\r\n");
+        if (!header_end) continue;
+        body_start = (size_t)(header_end - gs_http_recv_buf) + 4;
+
+        if (content_length < 0) {
+            content_length = 0;
+            char* line = strstr(gs_http_recv_buf, "\r\n");
+            if (line) line += 2;
+            while (line && line < header_end) {
+                char* line_end = strstr(line, "\r\n");
+                if (!line_end || line_end > header_end) line_end = header_end;
+                if ((size_t)(line_end - line) >= 15 && strncasecmp(line, "Content-Length:", 15) == 0) {
+                    content_length = atoi(line + 15);
+                    if (content_length < 0) content_length = 0;
+                    break;
+                }
+                line = line_end < header_end ? line_end + 2 : NULL;
+            }
+        }
+
+        if ((size_t)total >= body_start + (size_t)content_length) break;
+    }
+
+    gs_http_recv_buf[total] = '\0';
+    return gs_http_recv_buf;
 }
 
 /*
@@ -930,9 +1025,11 @@ void register_net_functions(Environment* env) {
     /* ---- TCP ---- */
     REG("gs_tcp_connect",   gs_tcp_connect,   "int", 2, "string", "string");
     REG("gs_tcp_server",    gs_tcp_server,    "int", 1, "int");
+    REG("gs_tcp_server_host", gs_tcp_server_host, "int", 2, "string", "int");
     REG("gs_tcp_accept",    gs_tcp_accept,    "int", 1, "int");
     REG("gs_tcp_send",      gs_tcp_send,      "int", 2, "int", "string");
     REG("gs_tcp_recv",      gs_tcp_recv,      "string", 2, "int", "int");
+    REG("gs_tcp_recv_http", gs_tcp_recv_http, "string", 2, "int", "int");
     REG("gs_tcp_close",     gs_tcp_close,     "int", 1, "int");
     REG("gs_tcp_set_timeout", gs_tcp_set_timeout, "int", 2, "int", "int");
     REG("gs_tcp_peer_addr", gs_tcp_peer_addr, "string", 1, "int");

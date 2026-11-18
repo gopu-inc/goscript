@@ -15,6 +15,7 @@ typedef struct NnlContext NnlContext;
 typedef struct Value {
     int type;
     union {
+        void* ptr_val;
         int int_val;
         double float_val;
         char* string_val;
@@ -189,6 +190,7 @@ void call_c_function(Value* cfunc, Value* args, int arg_count, Value* result);
 
 // Fonctions réseau + DB natives (interpreter_net.c)
 void register_net_functions(Environment* env);
+void register_gpm_functions(Environment* env);
 
 // Fonctions d'affichage
 void print_value(Value val, int newline);

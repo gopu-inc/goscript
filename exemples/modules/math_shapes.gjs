@@ -1,7 +1,7 @@
 // Module: math_shapes
 // Fournit des structures géométriques avec leurs implémentations
 
-module math_shapes
+golem math_shapes
 
 struct Point {
     x: float,

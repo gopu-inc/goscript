@@ -39,6 +39,16 @@ ASTNode* create_sh_node(ASTNode* command) {
     node->sysf.capture_output = 0;
     return node;
 }
+
+ASTNode* create_with_node(ASTNode* resource, char* name, ASTNode* body) {
+    ASTNode* node = calloc(1, sizeof(ASTNode));
+    if (!node) return NULL;
+    node->type = NODE_WITH;
+    node->with_stmt.resource = resource;
+    node->with_stmt.name = strdup(name ? name : "resource");
+    node->with_stmt.body = body;
+    return node;
+}
 ASTNode* create_pattern_array(ASTNodeList* elements) {
     ASTNode* node = malloc(sizeof(ASTNode));
     node->type = NODE_PATTERN_ARRAY;
@@ -240,6 +250,15 @@ ASTNode* create_program_node(ASTNodeList* statements) {
     ASTNode* node = malloc(sizeof(ASTNode));
     node->type = NODE_PROGRAM;
     node->program.statements = statements;
+    return node;
+}
+
+ASTNode* create_module_node(char* name) {
+    ASTNode* node = malloc(sizeof(ASTNode));
+    if (!node) return NULL;
+    node->type = NODE_MODULE;
+    node->module.name = strdup(name ? name : "");
+    node->module.module = NULL;
     return node;
 }
 
@@ -772,10 +791,18 @@ void free_ast(ASTNode* node) {
     if (!node) return;
     
     switch (node->type) {
+        case NODE_MODULE:
+            free(node->module.name);
+            break;
         case NODE_MUTS:
             free(node->muts_decl.name);
             if (node->muts_decl.var_type) free_ast(node->muts_decl.var_type);
             if (node->muts_decl.value) free_ast(node->muts_decl.value);
+            break;
+        case NODE_WITH:
+            free(node->with_stmt.name);
+            free_ast(node->with_stmt.resource);
+            free_ast(node->with_stmt.body);
             break;
         case NODE_PATTERN_ARRAY:
             if (node->pattern_array.elements) {
@@ -847,6 +874,9 @@ void free_ast(ASTNode* node) {
                 free(node->call.args->nodes);
                 free(node->call.args);
             }
+            break;
+        case NODE_EXPR_STMT:
+            free_ast(node->expr_stmt.expr);
             break;
         default:
             break;

@@ -981,6 +981,8 @@ done:
 static void bc_setup_globals(Environment* global, ASTNode* program) {
     init_interpreter();
     register_native_c_functions(global);
+    register_net_functions(global);
+    register_gpm_functions(global);
 
     ModuleRegistry* reg = get_module_registry();
     char* builtin_path = resolve_module_path(NULL, "__builtin__");

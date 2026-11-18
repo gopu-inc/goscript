@@ -100,6 +100,13 @@ typedef struct GsTensor {
     struct GsTensor* grad;              /* Gradient (si requires_grad) */
     int              requires_grad;
 
+    /* Internal autograd edges; operation outputs retain their inputs. */
+    int              grad_op;
+    int              grad_axis;
+    struct GsTensor* grad_input_a;
+    struct GsTensor* grad_input_b;
+    struct GsTensor* storage_owner;
+
     /* GC */
     int ref_count;
 } GsTensor;
@@ -113,6 +120,13 @@ typedef enum {
     GS_TENSOR_BACKEND_GGML    = 2,
     GS_TENSOR_BACKEND_CUDA    = 3
 } GsTensorBackend;
+
+enum {
+    GS_AUTOGRAD_NONE = 0,
+    GS_AUTOGRAD_ADD, GS_AUTOGRAD_SUB, GS_AUTOGRAD_MUL, GS_AUTOGRAD_DIV,
+    GS_AUTOGRAD_NEG, GS_AUTOGRAD_RELU, GS_AUTOGRAD_SIGMOID, GS_AUTOGRAD_TANH,
+    GS_AUTOGRAD_SUM, GS_AUTOGRAD_MEAN, GS_AUTOGRAD_MATMUL
+};
 
 /* ============================================================
  *  INITIALISATION
@@ -326,6 +340,7 @@ char* gs_tensor_to_string(const GsTensor* t);  /* Alloué, à libérer */
 void gs_tensor_backward(GsTensor* loss);
 void gs_tensor_zero_grad(GsTensor* t);
 GsTensor* gs_tensor_detach(const GsTensor* t);
+const char* gs_tensor_last_error(void);
 
 /* ============================================================
  *  INTÉGRATION GGML (LLM — Large Language Models)

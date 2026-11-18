@@ -1,4 +1,4 @@
-module greetings
+golem greetings
 
 pub const HELLO = "Hello"
 pub const WORLD = "World"

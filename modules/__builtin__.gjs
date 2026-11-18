@@ -1,4 +1,4 @@
-module __builtin__
+golem __builtin__
 
 pub fn inputln(): string {
     // Utilisation de -r pour éviter les problèmes avec les backslashes

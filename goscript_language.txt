@@ -64,7 +64,7 @@ void yyerror(const char* msg);
 "from"                  { return TOKEN_FROM; }
 "pub"                   { return TOKEN_PUB; }
 "new"                   { return TOKEN_NEW; }
-"module"                { return TOKEN_MODULE; }
+^[ \t]*"golem"/[ \t]+ { return TOKEN_GOLEM; }
 "only"                  { return TOKEN_ONLY; }
 "sandbox"               { return TOKEN_SANDBOX; }
 "allow_ffi"            { return TOKEN_ALLOW_FFI; }
@@ -521,7 +521,7 @@ ASTNode* program_root;
 %token TOKEN_NEW TOKEN_UNSAFE
 %token TOKEN_NNL TOKEN_JMP
 /* Tokens - Ajoutez ces lignes */
-%token TOKEN_MODULE TOKEN_ONLY TOKEN_TIMEOUT TOKEN_SANDBOX TOKEN_ALLOW_FFI
+%token TOKEN_GOLEM TOKEN_ONLY TOKEN_TIMEOUT TOKEN_SANDBOX TOKEN_ALLOW_FFI
 %token TOKEN_ASYNC TOKEN_AWAIT TOKEN_SPAWN
 %token TOKEN_LAMBDA
 %token TOKEN_EXTENDS
@@ -572,7 +572,7 @@ ASTNode* program_root;
 /* Non-terminals */
 %type <node> switch_statement ternary_expr
 %type <node> try_statement catch_block finally_block throw_statement
-%type <node> module_decl 
+%type <node> golem_decl
 %type <node> continue_statement
 %type <node> use_statement
 %type <string> import_path use_path
@@ -653,7 +653,7 @@ statement:
     | continue_statement
     | nnl_statement
     | jmp_statement
-    | module_decl
+    | golem_decl
     | try_statement
     | throw_statement
     | packet_decl
@@ -1264,8 +1264,8 @@ enum_variants:
     }
     ; 
 
-module_decl:
-    TOKEN_MODULE TOKEN_IDENTIFIER {
+golem_decl:
+    TOKEN_GOLEM TOKEN_IDENTIFIER {
         // Créer un nœud nil pour éviter l'erreur
         $$ = create_expr_statement(create_nil_node());
     }
@@ -8954,7 +8954,7 @@ debug:
 ----------------------------------------
 MODULE: lib/__builtin__.gjs
 ----------------------------------------
-module __builtin__
+golem __builtin__
 
 
 /* fonction pour convertir en chiffre antier
@@ -9286,7 +9286,7 @@ pub fn to_upper(s: string): string {
 MODULE: lib/b64.gjs
 ----------------------------------------
 // lib/b64.gjs
-module b64
+golem b64
 
 // Encode a string to Base64
 pub fn encode(data: string): string {
@@ -9454,7 +9454,7 @@ pub fn now(): int {
 ----------------------------------------
 MODULE: lib/config.gjs
 ----------------------------------------
-module config
+golem config
 
 struct Parser {
     Info: string,
@@ -9495,7 +9495,7 @@ fn parser_conf(file: string, search: string): Parser {
 MODULE: lib/crypto.gjs
 ----------------------------------------
 // lib/crypto.gjs
-module crypto
+golem crypto
 
 // Hash using sha256sum
 pub fn sha256(data: string): string {
@@ -9517,7 +9517,7 @@ MODULE: lib/db.gjs
 ----------------------------------------
 /* lib/db.gjs
 */
-module db
+golem db
 
 // Ajouter ou mettre à jour une entrée (Format KEY:VALUE)
 pub fn set(file: string, key: string, value: string) {
@@ -9564,7 +9564,7 @@ MODULE: lib/deepseek.gjs
 // deepseek.gjs - Version ultra simple
 // ============================================
 
-module deepseek
+golem deepseek
 
 struct Config {
     api_key: string
@@ -9588,7 +9588,7 @@ pub fn ask(api_key: string, question: string): string {
 MODULE: lib/fs.gjs
 ----------------------------------------
 // lib/fs.gjs
-module fs
+golem fs
 
 // Équivalent de fopen/fwrite (Écrase le fichier)
 pub fn write(path: string, content: string) {
@@ -9626,7 +9626,7 @@ pub fn remove(path: string) {
 ----------------------------------------
 MODULE: lib/gcsv.gjs
 ----------------------------------------
-module gcsv
+golem gcsv
 
 import fs
 
@@ -9687,7 +9687,7 @@ import fs
 import ui
 import system
 
-module gpm
+golem gpm
 
 lt API_BASE = "https://gsql-badge.onrender.com"
 lt MOD_DIR = "modules"
@@ -9753,7 +9753,7 @@ MODULE: lib/groq.gjs
 // groq.gjs - Version ultra simple
 // ============================================
 
-module groq
+golem groq
 
 struct Config {
     api_key: string
@@ -9776,7 +9776,7 @@ pub fn ask(api_key: string, question: string): string {
 ----------------------------------------
 MODULE: lib/gsql.gjs
 ----------------------------------------
-module gsql
+golem gsql
 
 import fs
 import json
@@ -9832,7 +9832,7 @@ fn select_where(tb: Table, search: string): string {
 MODULE: lib/http.gjs
 ----------------------------------------
 // lib/http.gjs
-module http
+golem http
 import ui
 // Perform a simple HTTP GET request
 pub fn get(url: string): string {
@@ -9857,7 +9857,7 @@ pub fn server(port: int) {
 MODULE: lib/io.gjs
 ----------------------------------------
 // lib/io.gjs
-module io
+golem io
 
 // Lire le contenu complet d'un fichier
 pub fn read_file(path: string): string {
@@ -9885,7 +9885,7 @@ pub fn append_file(path: string, content: string) {
 MODULE: lib/json.gjs
 ----------------------------------------
 // lib/json.gjs
-module json
+golem json
 
 pub fn get(data: string, key: string): string {
     // On affine le regex pour exclure les accolades à la fin [^",}]
@@ -9910,7 +9910,7 @@ MODULE: lib/math.gjs
 // Math utilities for Goscript
 
 // lib/math.gjs
-module math
+golem math
 
 // Racine carrée
 pub fn sqrt(n: float): string {
@@ -9944,7 +9944,7 @@ pub fn random(max: int): string {
 MODULE: lib/net.gjs
 ----------------------------------------
 // lib/net.gjs
-module net
+golem net
 
 // Simple HTTP GET using wget (BusyBox friendly)
 pub fn get(url: string): string {
@@ -9969,7 +9969,7 @@ pub fn local_ip(): string {
 MODULE: lib/os.gjs
 ----------------------------------------
 // lib/os.gjs
-module os
+golem os
 
 // Get current working directory
 pub fn getcwd(): string {
@@ -10008,7 +10008,7 @@ pub fn mkdir(path: string) {
 MODULE: lib/random.gjs
 ----------------------------------------
 // lib/random.gjs
-module random
+golem random
 
 pub fn is_int(max: int): string {
     ret sysf("awk -v max=" + max + " 'BEGIN { srand(); print int(rand() * max) }'")
@@ -10231,7 +10231,7 @@ info("structd module loaded")
 MODULE: lib/sys.gjs
 ----------------------------------------
 // lib/sys.gjs
-module sys
+golem sys
 
 // Get the list of command line arguments
 pub fn argv(): string {
@@ -10269,7 +10269,7 @@ import db
 import ui
 import time
 
-module system
+golem system
 
 lt CONFIG_FILE = "system.conf"
 lt LOG_FILE = "activity.log"
@@ -10312,7 +10312,7 @@ pub fn get_param(key: string): string {
 MODULE: lib/tar.gjs
 ----------------------------------------
 // lib/tar.gjs
-module tar
+golem tar
 
 // Pack a directory or file: tar -czf output.tar.gz source
 pub fn pack(source: string, output: string) {
@@ -10943,7 +10943,7 @@ fn main() {
 MODULE: lib/time.gjs
 ----------------------------------------
 // lib/time.gjs
-module time
+golem time
 
 // Temps actuel formaté (Ex: 2026-04-24 10:45:30)
 pub fn now(): string {
@@ -10973,7 +10973,7 @@ pub fn sleep(seconds: int) {
 MODULE: lib/ui.gjs
 ----------------------------------------
 // lib/ui.gjs
-module ui
+golem ui
 
 pub fn red(t: string): string { ret "\033[31m" + t + "\033[0m" }
 pub fn green(t: string): string { ret "\033[32m" + t + "\033[0m" }
@@ -11032,7 +11032,7 @@ fn main() {
 ----------------------------------------
 MODULE: lib/xzip.gjs
 ----------------------------------------
-module xzip
+golem xzip
 
 // Compresse une chaîne et la retourne en Base64
 pub fn compress(data: string): string {
@@ -11740,7 +11740,7 @@ fn main() {
 ----------------------------------------
 EXEMPLE: exemples/greetings.gjs
 ----------------------------------------
-module greetings
+golem greetings
 
 pub const HELLO = "Hello"
 pub const WORLD = "World"
@@ -11911,7 +11911,7 @@ fn main() {
 ----------------------------------------
 EXEMPLE: exemples/math.gjs
 ----------------------------------------
-module math
+golem math
 
 pub const PI = 3.14159
 pub const E = 2.71828
@@ -11956,7 +11956,7 @@ println(result)
 ----------------------------------------
 EXEMPLE: exemples/simple.gjs
 ----------------------------------------
-module simple
+golem simple
 
 pub cn MSG = "Hello from simple module!"
 
@@ -12143,7 +12143,7 @@ export {
 EXEMPLE: exemples/sys.gjs
 ----------------------------------------
 // lib/sys.gjs
-module sys
+golem sys
 
 pub fn exec(cmd) {
     ret sh(cmd)
@@ -13384,7 +13384,7 @@ import gpm
 import fs
 import ui
 
-module gpm
+golem gpm
 
 // Configuration du Zarch Hub
 cn API_BASE = "https://gsql-badge.onrender.com"
@@ -13537,7 +13537,7 @@ fn main() {
 ----------------------------------------
 TEST: sys.gjs
 ----------------------------------------
-module sys
+golem sys
 
 
 struct Cmd {

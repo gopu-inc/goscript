@@ -1,5 +1,5 @@
 // lib/sys.gjs
-module sys
+golem sys
 
 pub fn exec(cmd) {
     ret sh(cmd)

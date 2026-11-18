@@ -57,6 +57,8 @@ SOURCES = $(SCANNER_C) $(PARSER_C) \
 	src/ast/ast.c \
 	src/bytecode/bytecode.c \
 	src/gc/gc.c \
+	src/tensor.c \
+	src/nn.c \
 	src/vm/vm.c \
 	src/hal/hal.c \
 	src/ffi/ffi_sandbox.c \
@@ -65,17 +67,27 @@ SOURCES = $(SCANNER_C) $(PARSER_C) \
 	src/interpreter/interpreter_import.c \
 	src/interpreter/interpreter_ffi.c \
 	src/interpreter/interpreter_eval.c \
-	src/interpreter/interpreter_net.c
+	src/interpreter/interpreter_net.c \
+	src/interpreter/interpreter_gpm.c
 
 OBJECTS = scanner.o parser.o ast.o bytecode.o \
-	gc.o vm.o hal.o ffi_sandbox.o \
+	gc.o tensor.o nn.o vm.o hal.o ffi_sandbox.o \
 	main.o \
 	interpreter_env.o interpreter_import.o \
-	interpreter_ffi.o interpreter_eval.o interpreter_net.o
+	interpreter_ffi.o interpreter_eval.o interpreter_net.o interpreter_gpm.o
 
 TARGET = gd
+PREFIX ?= /usr/local
+DESTDIR ?=
+INSTALL_ROOT = $(DESTDIR)$(PREFIX)
 
-all: $(SCANNER_C) $(PARSER_C) $(TARGET)
+all: $(SCANNER_C) $(PARSER_C) $(TARGET) gbc gld
+
+gbc: $(TARGET)
+	ln -sf $(TARGET) gbc
+
+gld: $(TARGET)
+	ln -sf $(TARGET) gld
 
 # Scanner - avec suppression du warning de règle non matchée
 $(SCANNER_C): src/lexer/scanner.l
@@ -96,6 +108,12 @@ bytecode.o: src/bytecode/bytecode.c src/bytecode/bytecode.h src/interpreter/inte
 # GC tri-couleur
 gc.o: src/gc/gc.c src/gc/gc.h
 	$(CC) $(CFLAGS) -c src/gc/gc.c -o gc.o
+
+tensor.o: src/tensor.c src/tensor.h src/interpreter/interpreter.h
+	$(CC) $(CFLAGS) -c src/tensor.c -o tensor.o
+
+nn.o: src/nn.c src/nn.h src/tensor.h
+	$(CC) $(CFLAGS) -c src/nn.c -o nn.o
 
 # Stack VM + NaN-boxing
 vm.o: src/vm/vm.c src/vm/vm.h src/gc/gc.h src/ast/ast.h
@@ -129,6 +147,9 @@ interpreter_eval.o: src/interpreter/interpreter_eval.c src/interpreter/interpret
 interpreter_net.o: src/interpreter/interpreter_net.c src/interpreter/interpreter.h
 	$(CC) $(CFLAGS) -c src/interpreter/interpreter_net.c -o interpreter_net.o
 
+interpreter_gpm.o: src/interpreter/interpreter_gpm.c src/interpreter/interpreter.h
+	$(CC) $(CFLAGS) -c src/interpreter/interpreter_gpm.c -o interpreter_gpm.o
+
 # Scanner et Parser objects
 scanner.o: $(SCANNER_C) $(PARSER_H)
 	$(CC) $(CFLAGS) -c $(SCANNER_C) -o scanner.o
@@ -144,11 +165,16 @@ clean:
 	rm -f $(SCANNER_C) $(PARSER_C) $(PARSER_H)
 	rm -f $(OBJECTS)
 	rm -f $(TARGET)
+	rm -f gbc
+	rm -f gld
 
 install:
-	cp $(TARGET) /usr/local/bin/
-	mkdir -p /usr/local/lib/goscript
-	cp -r lib/* /usr/local/lib/goscript/ 2>/dev/null || true
+	install -d $(INSTALL_ROOT)/bin $(INSTALL_ROOT)/lib/goscript
+	install -m 755 $(TARGET) $(INSTALL_ROOT)/bin/$(TARGET)
+	install -m 755 golem $(INSTALL_ROOT)/bin/golem
+	cp -a lib/. $(INSTALL_ROOT)/lib/goscript/
+	cp -a modules/. $(INSTALL_ROOT)/lib/goscript/
+	install -m 644 lib/__builtin__.gjs $(INSTALL_ROOT)/lib/goscript/__builtin__.gjs
 
 # Afficher l'architecture détectée
 debug:
@@ -157,4 +183,4 @@ debug:
 	@echo "MARCH: $(MARCH)"
 	@echo "CFLAGS: $(CFLAGS)"
 
-.PHONY: all clean install debug
+.PHONY: all clean install debug gbc gld

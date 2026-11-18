@@ -17,14 +17,14 @@ Principales caractéristiques
 - Typage dynamique au runtime
 - Syntaxe familière (fonctions `fn`, `struct`, `impl`, `match`, `async/await`)
 - Intégration système native (`sysf`, `sh`, FFI, `unsafe`)
-- Gestion d'environnement (`genv`) et gestion de packages (`gpm` / `gpm.gjs`)
+- Gestion d'environnement (`genv`) et gestionnaire de paquets Goscript (`golem`)
 - Support pour éditeurs (grammars, snippets, VSCode extension via `package.json`)
 
 Dossier clés du dépôt
 - `src/` : code C (parser, interpreter, AST)
 - `lib/` : librairie standard et modules `.gjs`
 - `exemples/` : scripts d'exemple
-- `gpm/`, `genv/` : outils d'écosystème
+- `lib/golem/` : gestionnaire de paquets Goscript
 - `grammars/`, `vim/`, `syntaxes/` : intégration éditeurs
 
 ---
@@ -130,7 +130,7 @@ Le répertoire `lib/` contient les modules natifs et wrappers utiles:
 
 Créer un module:
 ```gjs
-module math
+golem math
 pub fn add(a, b) { ret a + b }
 ```
 
@@ -221,7 +221,7 @@ Contributing & reporting bugs: open an issue or PR on GitHub.
 ./src/       # C source: parser, interpreter
 ./lib/       # standard library in .gjs
 ./exemples/  # many sample scripts
-./gpm/        # package manager implementation
+./lib/golem/ # Golem package manager module
 ./genv/       # environment manager
 ./grammars/   # editor grammars
 ```

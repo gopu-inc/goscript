@@ -18,6 +18,8 @@ void yyerror(const char* msg);
 
 %%
 
+^#![^\n]*             { /* Ignorer le shebang du lanceur golem. */ }
+
  /* ============================================ */
  /*   DÉCORATEURS  @name  ou  @ns::name(...)     */
  /* ============================================ */
@@ -53,6 +55,7 @@ void yyerror(const char* msg);
  /* ============================================ */
 
 "async"                 { return TOKEN_ASYNC; }
+"with"                  { return TOKEN_WITH; }
 "use"                   { return TOKEN_USE; }
 "await"                 { return TOKEN_AWAIT; }
 "spawn"                 { return TOKEN_SPAWN; }
@@ -75,6 +78,7 @@ void yyerror(const char* msg);
 "import"                { return TOKEN_IMPORT; }
 "export"                { return TOKEN_EXPORT; }
 "packet"                { return TOKEN_PACKET; }
+^[ \t]*"golem"/[ \t]+ { return TOKEN_GOLEM; }
 "struct"                { return TOKEN_STRUCT; }
 "enm"                   { return TOKEN_ENUM; }
 "impl"                  { return TOKEN_IMPL; }
@@ -88,7 +92,6 @@ void yyerror(const char* msg);
 "from"                  { return TOKEN_FROM; }
 "pub"                   { return TOKEN_PUB; }
 "new"                   { return TOKEN_NEW; }
-"module"                { return TOKEN_MODULE; }
 "only"                  { return TOKEN_ONLY; }
 "sandbox"               { return TOKEN_SANDBOX; }
 "allow_ffi"            { return TOKEN_ALLOW_FFI; }

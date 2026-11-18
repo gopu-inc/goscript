@@ -1,6 +1,6 @@
 
 
-module pkg
+golem pkg
 
 struct gpg {
     mail: string,

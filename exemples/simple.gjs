@@ -1,4 +1,4 @@
-module simple
+golem simple
 
 pub cn MSG = "Hello from simple module!"
 

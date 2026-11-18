@@ -1,4 +1,4 @@
-module math
+golem math
 
 pub const PI = 3.14159
 pub const E = 2.71828

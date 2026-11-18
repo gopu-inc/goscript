@@ -198,7 +198,7 @@ static void add_submodule(LoadedModule* parent, LoadedModule* child) {
     
     Value mod_val;
     mod_val.type = 7;
-    mod_val.int_val = (int)child;
+    mod_val.ptr_val = child;
     
     env_set(parent->env, short_name, mod_val);
 }
@@ -292,15 +292,7 @@ char* resolve_module_path(char* current_file, char* import_path) {
 
     // Cas spécial: __builtin__
     if (strcmp(import_path, "__builtin__") == 0) {
-        char special_path[PATH_MAX];
-        snprintf(special_path, PATH_MAX, "/usr/local/lib/goscript/__builtin__.gjs");
-        if (access(special_path, F_OK) == 0) {
-            char real_path[PATH_MAX];
-            if (realpath(special_path, real_path)) {
-                return strdup(real_path);
-            }
-        }
-        
+        /* Prefer the source tree's builtins; the installed copy may be stale. */
         for (int i = 0; search_paths[i]; i++) {
             char with_ext[PATH_MAX];
             snprintf(with_ext, PATH_MAX, "%s/__builtin__.gjs", search_paths[i]);
@@ -309,6 +301,15 @@ char* resolve_module_path(char* current_file, char* import_path) {
                 if (realpath(with_ext, real_path)) {
                     return strdup(real_path);
                 }
+            }
+        }
+
+        char special_path[PATH_MAX];
+        snprintf(special_path, PATH_MAX, "/usr/local/lib/goscript/__builtin__.gjs");
+        if (access(special_path, F_OK) == 0) {
+            char real_path[PATH_MAX];
+            if (realpath(special_path, real_path)) {
+                return strdup(real_path);
             }
         }
         
@@ -515,6 +516,10 @@ static LoadedModule* load_file_module(const char* full_path, const char* module_
     
     // Enregistrer les fonctions natives
     register_native_c_functions(mod->env);
+    // Les modules doivent pouvoir appeler les primitives réseau dans leur
+    // propre environnement, comme l'environnement global de l'interpréteur.
+    register_net_functions(mod->env);
+    register_gpm_functions(mod->env);
     
     // Évaluer le contenu du module (remplit mod->env)
     ASTNode* module_ast = program_root;  // <-- GARDER UNE RÉFÉRENCE
@@ -652,11 +657,14 @@ case NODE_IMPL: {
                 }
               
                 case NODE_IMPORT:
-                    evaluate_statement(stmt, mod->env, full_path);
+                    evaluate_statement(stmt, mod->env, (char*)full_path);
                     break;
                 // ----------------------------------------------
                     
                 default:
+                    /* Execute package/module initialization statements just as
+                     * Python executes the body of __init__.py. */
+                    evaluate_statement(stmt, mod->env, (char*)full_path);
                     break;
             }
 
@@ -705,6 +713,8 @@ static LoadedModule* load_package_module(const char* dir_path, const char* modul
         if (mod) {
             mod->status = MODULE_STATUS_LOADED;
             register_native_c_functions(mod->env);
+            register_net_functions(mod->env);
+            register_gpm_functions(mod->env);
         }
     }
     
@@ -729,7 +739,7 @@ LoadedModule* load_module(ModuleRegistry* reg, Environment* parent_env,
         if (current_file && current_file[0])
             fprintf(stderr, "  Depuis  : %s\n", current_file);
         fprintf(stderr, "  Chemin cherché dans : ./lib/, ./modules/, ./lib/net/, ./lib/db/, etc.\n");
-        fprintf(stderr, "  Conseil : vérifiez l'orthographe du module ou installez-le avec gpm.\n");
+        fprintf(stderr, "  Conseil : vérifiez l'orthographe du module ou installez-le avec golem.\n");
         return NULL;
     }
     
@@ -755,7 +765,7 @@ LoadedModule* load_module(ModuleRegistry* reg, Environment* parent_env,
         
         Value module_val;
         module_val.type = 7;
-        module_val.int_val = (int)mod;
+        module_val.ptr_val = mod;
         env_set(parent_env, env_name, module_val);
         
         // 4. Gérer la hiérarchie parent-enfant

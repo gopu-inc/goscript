@@ -6,6 +6,8 @@
 *.app
 gpm
 gpm.exe
+/gbc
+/gld
 *.a
 *.so
 *.dylib

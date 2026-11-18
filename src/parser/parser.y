@@ -33,8 +33,9 @@ ASTNode* program_root;
 %token TOKEN_NEW TOKEN_UNSAFE
 %token TOKEN_NNL TOKEN_JMP
 /* Tokens - Ajoutez ces lignes */
-%token TOKEN_MODULE TOKEN_ONLY TOKEN_TIMEOUT TOKEN_SANDBOX TOKEN_ALLOW_FFI
+%token TOKEN_GOLEM TOKEN_ONLY TOKEN_TIMEOUT TOKEN_SANDBOX TOKEN_ALLOW_FFI
 %token TOKEN_ASYNC TOKEN_AWAIT TOKEN_SPAWN
+%token TOKEN_WITH
 %token TOKEN_LAMBDA
 %token TOKEN_EXTENDS
 %token TOKEN_UNDERSCORE
@@ -85,7 +86,7 @@ ASTNode* program_root;
 /* Non-terminals */
 %type <node> switch_statement ternary_expr
 %type <node> try_statement catch_block finally_block throw_statement
-%type <node> module_decl 
+%type <node> golem_decl
 %type <node> continue_statement
 %type <node> use_statement
 %type <string> import_path use_path
@@ -112,6 +113,7 @@ ASTNode* program_root;
 %type <node> lambda_expr 
 %type <node> async_expr await_expr spawn_expr
 %type <node> async_function_decl
+%type <node> with_statement
 %type <string> import_path_tail
 %type <node_list> decorator_list
 %type <node> decorator
@@ -168,7 +170,7 @@ statement:
     | continue_statement
     | nnl_statement
     | jmp_statement
-    | module_decl
+    | golem_decl
     | try_statement
     | throw_statement
     | packet_decl
@@ -187,9 +189,15 @@ statement:
     | while_statement
     | loop_statement
     | match_statement
+    | with_statement
     | return_statement
     | expression {
         $$ = create_expr_statement($1);
+    }
+    ;
+with_statement:
+    TOKEN_WITH expression TOKEN_AS TOKEN_IDENTIFIER TOKEN_COLON statement {
+        $$ = create_with_node($2, $4, $6);
     }
     ;
 sysf_expr:
@@ -828,10 +836,9 @@ enum_variants:
     }
     ; 
 
-module_decl:
-    TOKEN_MODULE TOKEN_IDENTIFIER {
-        // Créer un nœud nil pour éviter l'erreur
-        $$ = create_expr_statement(create_nil_node());
+golem_decl:
+    TOKEN_GOLEM TOKEN_IDENTIFIER {
+        $$ = create_module_node($2);
     }
     ;
 

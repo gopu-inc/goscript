@@ -1,4 +1,4 @@
-module utils
+golem utils
 
 pub const VERSION = "1.0"
 

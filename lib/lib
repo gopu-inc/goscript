@@ -1,6 +1,6 @@
 // lib/__builtin__.gjs - Module built-in
 
-module __builtin__
+golem __builtin__
 
 // ============================================
 // STRUCTURE TYPES

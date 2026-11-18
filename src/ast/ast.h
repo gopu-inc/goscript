@@ -94,7 +94,8 @@ typedef enum {
     NODE_MATCH_STRUCT,
     NODE_MODULE,
     NODE_ASSIGN_OP,
-    NODE_DECORATOR       /* @name(args...) ou @ns::name(args...) */
+    NODE_DECORATOR,      /* @name(args...) ou @ns::name(args...) */
+    NODE_WITH
 } NodeType;
 
 /* Opérateurs */
@@ -464,6 +465,12 @@ struct {
         struct {
             struct ASTNode* expr;
         } expr_stmt;
+
+        struct {
+            struct ASTNode* resource;
+            char* name;
+            struct ASTNode* body;
+        } with_stmt;
         
         /* Accès membres */
         struct {
@@ -592,6 +599,7 @@ ASTNode* create_use_node(char* path, ASTNodeList* symbols);
 
 /* ==================== Nœuds principaux ==================== */
 ASTNode* create_program_node(ASTNodeList* statements);
+ASTNode* create_module_node(char* name);
 
 ASTNode* create_struct_extend_node(char* name, char* parent, ASTNodeList* fields);
 /* Imports et exports */
@@ -717,6 +725,7 @@ void free_ast(ASTNode* node);
 void print_ast(ASTNode* node, int depth);
 
 ASTNode* create_f_string_node(char* template);
+ASTNode* create_with_node(ASTNode* resource, char* name, ASTNode* body);
 
 
 #endif /* AST_H */

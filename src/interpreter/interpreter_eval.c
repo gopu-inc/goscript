@@ -6,6 +6,8 @@
 #include "interpreter.h"
 #include <dlfcn.h>
 #include <ffi.h>
+#include "../tensor.h"
+#include "../nn.h"
 
 
 
@@ -42,6 +44,33 @@ typedef struct NnlContext {
 
 // Pile de contextes
 static NnlContext* nnl_stack = NULL;
+
+typedef struct { int kind; void* ptr; } GoscriptMLHandle;
+static GoscriptMLHandle ml_handles[1024];
+static int ml_store(int kind, void* ptr) { if(!ptr)return 0;for(int i=1;i<1024;i++) if(!ml_handles[i].ptr){ml_handles[i].kind=kind;ml_handles[i].ptr=ptr;return i;} return 0; }
+static GsTensor* ml_tensor(int id){return id>0&&id<1024&&ml_handles[id].kind==1?(GsTensor*)ml_handles[id].ptr:NULL;}
+static GsDense* ml_model(int id){return id>0&&id<1024&&ml_handles[id].kind==2?(GsDense*)ml_handles[id].ptr:NULL;}
+static int ml_tensor_zeros(int r,int c){GsTensor*t=gs_tensor_zeros(2,(int64_t[]){r,c},GS_FLOAT32);return ml_store(1,t);}
+static int ml_tensor_rand(int r,int c){GsTensor*t=gs_tensor_rand(2,(int64_t[]){r,c},GS_FLOAT32);return ml_store(1,t);}
+static int ml_tensor_set(int id,int r,int c,double v){GsTensor*t=ml_tensor(id);if(!t||r<0||c<0||r>=t->shape[0]||c>=t->shape[1])return 0;gs_tensor_set_f64(t,(int64_t[]){r,c},v);return 1;}
+static double ml_tensor_get(int id,int r,int c){GsTensor*t=ml_tensor(id);return t?gs_tensor_get_f64(t,(int64_t[]){r,c}):0;}
+static int ml_tensor_binary(int a,int b,int op){GsTensor*x=ml_tensor(a),*y=ml_tensor(b);GsTensor*z=op==0?gs_tensor_add(x,y):op==1?gs_tensor_mul(x,y):gs_tensor_matmul(x,y);return ml_store(1,z);}
+static int ml_tensor_add(int a,int b){return ml_tensor_binary(a,b,0);}
+static int ml_tensor_mul(int a,int b){return ml_tensor_binary(a,b,1);}
+static int ml_tensor_matmul(int a,int b){return ml_tensor_binary(a,b,2);}
+static int ml_tensor_relu(int id){return ml_store(1,gs_tensor_relu(ml_tensor(id)));}
+static int ml_tensor_sigmoid(int id){return ml_store(1,gs_tensor_sigmoid(ml_tensor(id)));}
+static int ml_tensor_require_grad(int id){GsTensor*t=ml_tensor(id);if(!t)return 0;t->requires_grad=1;return 1;}
+static int ml_tensor_backward(int id){GsTensor*t=ml_tensor(id);if(!t)return 0;gs_tensor_backward(t);return gs_tensor_last_error()[0]?0:1;}
+static int ml_tensor_grad(int id){GsTensor*t=ml_tensor(id);if(!t||!t->grad)return 0;gs_tensor_retain(t->grad);return ml_store(1,t->grad);}
+static int ml_release(int id){if(id<=0||id>=1024||!ml_handles[id].ptr)return 0;if(ml_handles[id].kind==1)gs_tensor_release(ml_handles[id].ptr);else if(ml_handles[id].kind==2){gs_dense_free(ml_handles[id].ptr);free(ml_handles[id].ptr);}ml_handles[id].ptr=NULL;ml_handles[id].kind=0;return 1;}
+static int ml_tensor_save(int id,const char*path){return gs_tensor_save(ml_tensor(id),path);}
+static int ml_model_create(int in,int out){GsDense*m=calloc(1,sizeof(*m));if(!m||!gs_dense_init(m,in,out)){free(m);return 0;}return ml_store(2,m);}
+static int ml_model_forward(int id,int x){GsDense*m=ml_model(id);return ml_store(1,m?gs_dense_forward(m,ml_tensor(x),GS_ACT_LINEAR):NULL);}
+static int ml_model_forward_activation(int id,int x,int activation){GsDense*m=ml_model(id);if(activation<0||activation>3)return 0;return ml_store(1,m?gs_dense_forward(m,ml_tensor(x),(GsActivation)activation):NULL);}
+static double ml_model_train_file(int id,const char*path,int in,int out,int epochs,double lr){GsDense*m=ml_model(id);GsDataset*d=gs_dataset_load_numeric(path,in,out);if(!m||!d)return -1;double loss=gs_train_dense_dataset(m,d,epochs,lr);gs_dataset_free(d);return loss;}
+static double ml_model_train_text(int id,const char*text,int in,int out,int epochs,double lr){if(!text)return -1;char path[]="/tmp/goscript-ml-XXXXXX";int fd=mkstemp(path);if(fd<0)return -1;FILE*f=fdopen(fd,"w");if(!f){close(fd);unlink(path);return -1;}size_t n=strlen(text);int ok=fwrite(text,1,n,f)==n&&fflush(f)==0;fclose(f);double value=ok?ml_model_train_file(id,path,in,out,epochs,lr):-1;unlink(path);return value;}
+static int ml_model_save(int id,const char*path){GsDense*m=ml_model(id);return m?gs_dense_save_model(m,path):0;}
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -493,6 +522,28 @@ void print_value(Value val, int newline) {
 
 void register_native_c_functions(Environment* env) {
     init_libc();
+
+    gs_tensor_init(GS_TENSOR_BACKEND_NAIVE);
+    register_c_function(env, "tensor_zeros", (void*)ml_tensor_zeros, "int", 2, "int", "int");
+    register_c_function(env, "tensor_rand", (void*)ml_tensor_rand, "int", 2, "int", "int");
+    register_c_function(env, "tensor_set", (void*)ml_tensor_set, "int", 4, "int", "int", "int", "double");
+    register_c_function(env, "tensor_get", (void*)ml_tensor_get, "double", 3, "int", "int", "int");
+    register_c_function(env, "tensor_add", (void*)ml_tensor_add, "int", 2, "int", "int");
+    register_c_function(env, "tensor_mul", (void*)ml_tensor_mul, "int", 2, "int", "int");
+    register_c_function(env, "tensor_matmul", (void*)ml_tensor_matmul, "int", 2, "int", "int");
+    register_c_function(env, "tensor_relu", (void*)ml_tensor_relu, "int", 1, "int");
+    register_c_function(env, "tensor_sigmoid", (void*)ml_tensor_sigmoid, "int", 1, "int");
+    register_c_function(env, "tensor_require_grad", (void*)ml_tensor_require_grad, "int", 1, "int");
+    register_c_function(env, "tensor_backward", (void*)ml_tensor_backward, "int", 1, "int");
+    register_c_function(env, "tensor_grad", (void*)ml_tensor_grad, "int", 1, "int");
+    register_c_function(env, "tensor_release", (void*)ml_release, "int", 1, "int");
+    register_c_function(env, "tensor_save", (void*)ml_tensor_save, "int", 2, "int", "string");
+    register_c_function(env, "model_create", (void*)ml_model_create, "int", 2, "int", "int");
+    register_c_function(env, "model_forward", (void*)ml_model_forward, "int", 2, "int", "int");
+    register_c_function(env, "model_forward_activation", (void*)ml_model_forward_activation, "int", 3, "int", "int", "int");
+    register_c_function(env, "model_train_file", (void*)ml_model_train_file, "double", 6, "int", "string", "int", "int", "int", "double");
+    register_c_function(env, "model_train_text", (void*)ml_model_train_text, "double", 6, "int", "string", "int", "int", "int", "double");
+    register_c_function(env, "model_save_native", (void*)ml_model_save, "int", 2, "int", "string");
     
     if (!libc_handle) {
         fprintf(stderr, "Warning: libc handle not available\n");
@@ -1303,8 +1354,6 @@ if (node->binary.op == OP_ASSIGN) {
         else if (container.type == 10) {
             int found = 0;
             
-            printf("DEBUG: Modifying dictionary, looking for key\n");
-            
             // Chercher la clé existante
             for (int i = 0; i < container.dict_val.count; i++) {
                 Value* k = container.dict_val.entries[i].key;
@@ -1312,7 +1361,6 @@ if (node->binary.op == OP_ASSIGN) {
                 // Utiliser la fonction de comparaison
                 if (values_equal(*k, idx)) {
                     // Modifier la valeur existante
-                    printf("DEBUG: Found key, updating value\n");
                     if (right_val.type == 2) {
                         if (container.dict_val.entries[i].value->string_val) 
                             free(container.dict_val.entries[i].value->string_val);
@@ -1328,14 +1376,11 @@ if (node->binary.op == OP_ASSIGN) {
             
             // Si la clé n'existe pas, l'ajouter
             if (!found) {
-                printf("DEBUG: Key not found, adding new entry\n");
-                
                 // Agrandir le tableau si nécessaire
                 if (container.dict_val.count >= container.dict_val.capacity) {
                     container.dict_val.capacity = container.dict_val.capacity == 0 ? 8 : container.dict_val.capacity * 2;
                     container.dict_val.entries = realloc(container.dict_val.entries,
                         container.dict_val.capacity * sizeof(*container.dict_val.entries));
-                    printf("DEBUG: Reallocated to capacity %d\n", container.dict_val.capacity);
                 }
                 
                 // Ajouter la nouvelle clé
@@ -1357,13 +1402,10 @@ if (node->binary.op == OP_ASSIGN) {
                 }
                 
                 container.dict_val.count++;
-                printf("DEBUG: Added entry, count = %d\n", container.dict_val.count);
             }
             
             // CRUCIAL: Sauvegarder le dictionnaire modifié dans l'environnement
             if (array_access->array_access.array->type == NODE_IDENTIFIER) {
-                printf("DEBUG: Saving dictionary back to variable '%s'\n", 
-                       array_access->array_access.array->identifier.name);
                 env_set(env, array_access->array_access.array->identifier.name, container);
             }
             else if (array_access->array_access.array->type == NODE_MEMBER_ACCESS) {
@@ -2120,7 +2162,7 @@ case NODE_LAMBDA: {
     Value obj = evaluate_expr(node->static_access.object, env);
     
     if (obj.type == 7) {
-        LoadedModule* mod = (LoadedModule*)obj.int_val;
+        LoadedModule* mod = (LoadedModule*)obj.ptr_val;
         
         Value* val = env_get(mod->env, node->static_access.member);
         if (val) {
@@ -2355,7 +2397,7 @@ case NODE_METHOD_CALL: {
     // CAS 2: MODULE (type 7)
     // ============================================
     else if (obj.type == 7) {
-        LoadedModule* module = (LoadedModule*)obj.int_val;
+        LoadedModule* module = (LoadedModule*)obj.ptr_val;
         
         // Chercher dans l'environnement du module
         Value* func = env_get(module->env, method_name);
@@ -2619,6 +2661,41 @@ case NODE_METHOD_CALL: {
                         }
                     }
                 }
+                else if (strcmp(method_name, "split_once") == 0) {
+                    if (node->method_call.args && node->method_call.args->count > 0) {
+                        Value delim = evaluate_expr(node->method_call.args->nodes[0], env);
+                        if (delim.type == 2 && delim.string_val && delim.string_val[0]) {
+                            char* found = strstr(obj.string_val, delim.string_val);
+                            result.type = 8;
+                            result.array_val.elements = create_node_list();
+                            result.array_val.count = 0;
+                            if (found) {
+                                size_t left_len = (size_t)(found - obj.string_val);
+                                char* left = malloc(left_len + 1);
+                                memcpy(left, obj.string_val, left_len);
+                                left[left_len] = '\0';
+                                add_to_node_list(result.array_val.elements, create_string_node(left));
+                                free(left);
+                                add_to_node_list(result.array_val.elements,
+                                    create_string_node(found + strlen(delim.string_val)));
+                            } else {
+                                add_to_node_list(result.array_val.elements, create_string_node(obj.string_val));
+                                add_to_node_list(result.array_val.elements, create_string_node(""));
+                            }
+                            result.array_val.count = 2;
+                            builtin_found = 1;
+                        }
+                    }
+                }
+                else if (strcmp(method_name, "contains") == 0) {
+                    if (node->method_call.args && node->method_call.args->count > 0) {
+                        Value needle = evaluate_expr(node->method_call.args->nodes[0], env);
+                        result.type = 3;
+                        result.bool_val = needle.type == 2 && needle.string_val &&
+                            strstr(obj.string_val, needle.string_val) != NULL;
+                        builtin_found = 1;
+                    }
+                }
             }
             // Méthodes pour les tableaux (type 8)
             else if (obj.type == 8) {
@@ -2682,8 +2759,74 @@ case NODE_METHOD_CALL: {
         
         // ==================== APPEL DE FONCTION ====================
         case NODE_CALL: {
+    // Bison peut représenter `value.method(args)` comme un appel dont la
+    // cible est un accès membre. Le réorienter vers le chemin des méthodes.
+    if (node->call.callee && node->call.callee->type == NODE_MEMBER_ACCESS) {
+        ASTNode method_call = {0};
+        method_call.type = NODE_METHOD_CALL;
+        method_call.method_call.object = node->call.callee->member.object;
+        method_call.method_call.method = node->call.callee->member.member;
+        method_call.method_call.args = node->call.args;
+        return evaluate_expr(&method_call, env);
+    }
+
     char* func_name = node->call.callee->identifier.name;
     Value* func = env_get(env, func_name);
+
+    /* open(path) reads and closes the file before returning its contents. */
+    if (strcmp(func_name, "open") == 0) {
+        if (!node->call.args || node->call.args->count != 1) {
+            fprintf(stderr, "Error: open() expects exactly one path\n");
+            result.type = 2;
+            result.string_val = strdup("");
+            return result;
+        }
+        Value path = evaluate_expr(node->call.args->nodes[0], env);
+        if (path.type != 2 || !path.string_val) {
+            fprintf(stderr, "Error: open() path must be a string\n");
+            result.type = 2;
+            result.string_val = strdup("");
+            return result;
+        }
+        FILE* file = fopen(path.string_val, "rb");
+        if (!file) {
+            perror(path.string_val);
+            result.type = 2;
+            result.string_val = strdup("");
+            return result;
+        }
+        if (fseek(file, 0, SEEK_END) != 0) {
+            fclose(file);
+            result.type = 2;
+            result.string_val = strdup("");
+            return result;
+        }
+        long length = ftell(file);
+        if (length < 0 || fseek(file, 0, SEEK_SET) != 0) {
+            fclose(file);
+            result.type = 2;
+            result.string_val = strdup("");
+            return result;
+        }
+        result.string_val = malloc((size_t)length + 1);
+        if (!result.string_val) { fclose(file); return result; }
+        size_t read_count = fread(result.string_val, 1, (size_t)length, file);
+        fclose(file);
+        result.string_val[read_count] = '\0';
+        result.type = 2;
+        return result;
+    }
+
+    if (strcmp(func_name, "type_of") == 0 && node->call.args && node->call.args->count == 1) {
+        Value value = evaluate_expr(node->call.args->nodes[0], env);
+        const char* name = value.type == 0 ? "int" : value.type == 1 ? "float" :
+                           value.type == 2 ? "string" : value.type == 3 ? "bool" :
+                           value.type == 8 ? "array" : value.type == VALUE_TYPE_DICT ? "dict" :
+                           value.type == 4 || value.type == 9 ? "function" : "unknown";
+        result.type = 2;
+        result.string_val = strdup(name);
+        return result;
+    }
     
     if (func && func->type == 4) {
         Environment* func_env = create_env(func->func_val.closure);
@@ -2789,6 +2932,14 @@ case NODE_METHOD_CALL: {
 }
 int evaluate_statement(ASTNode* node, Environment* env, char* current_file) {
     switch (node->type) {
+        case NODE_WITH: {
+            Value resource = evaluate_expr(node->with_stmt.resource, env);
+            Environment* scope = create_env(env);
+            env_set(scope, node->with_stmt.name, resource);
+            int status = evaluate_statement(node->with_stmt.body, scope, current_file);
+            free(scope);
+            return status;
+        }
         case NODE_LET:
         case NODE_CONST: {
             Value val = evaluate_expr(node->var_decl.value, env);
@@ -3177,6 +3328,7 @@ void interpret_program(ASTNode* program) {
     init_interpreter();
     register_native_c_functions(global);
     register_net_functions(global);
+    register_gpm_functions(global);
     
     // ============================================
     // CHARGEMENT AUTOMATIQUE DU MODULE BUILTIN

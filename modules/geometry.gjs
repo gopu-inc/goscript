@@ -1,4 +1,4 @@
-module geometry
+golem geometry
 
 struct Rectangle {
     width: int,

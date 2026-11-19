@@ -97,4 +97,37 @@ if encoded_query == "openv%20package%2Btest" {
     print("    FAIL URL encoding returned " + encoded_query)
 }
 
+// Test 9 : JSON array items, including nested values and delimiters in strings
+print("[9] JSON array items ...")
+let registry_results = "{\"results\":[{\"name\":\"first\",\"description\":\"a, b\"},{\"name\":\"second\",\"metadata\":{\"versions\":[1,2]}}]}"
+let first_result = gpm_json_array_item(registry_results, "results", 0)
+let second_result = gpm_json_array_item(registry_results, "results", 1)
+if gpm_json_get(first_result, "name") == "first" && gpm_json_get(second_result, "name") == "second" {
+    print("    OK  extracts objects without splitting nested JSON")
+} else {
+    print("    FAIL array item extraction returned " + first_result + " / " + second_result)
+}
+if gpm_json_array_item(registry_results, "results", 2) == "" {
+    print("    OK  out-of-range item is empty")
+} else {
+    print("    FAIL out-of-range item was not empty")
+}
+
+// Test 10 : terminal color detection
+print("[10] Terminal color detection ...")
+let color_enabled = gpm_tui_number(gpm_tui_color_enabled(0))
+if color_enabled == "0" || color_enabled == "1" {
+    print("    OK  color detection returned " + color_enabled)
+} else {
+    print("    FAIL unexpected color detection value " + color_enabled)
+}
+
+// Test 11 : TUI string repetition
+print("[11] TUI string repetition ...")
+if gpm_tui_repeat("-", 4) == "----" {
+    print("    OK  repeated text correctly")
+} else {
+    print("    FAIL repeated text is incorrect")
+}
+
 print("=== Fin tests FFI ===")

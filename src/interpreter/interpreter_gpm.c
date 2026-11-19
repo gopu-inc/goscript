@@ -92,11 +92,89 @@ static char *gpm_json_get(const char *json,const char *key) {
     while((p=strchr(p,'"'))){p++;if(strncmp(p,key,kl)==0&&p[kl]=='"'){const char*q=p+kl+1;while(isspace((unsigned char)*q))q++;if(*q!=':'){continue;}q++;while(isspace((unsigned char)*q))q++;if(*q=='"'){q++;size_t cap=strlen(q)+1;char*out=malloc(cap);if(!out)return strdup("");size_t i=0;while(*q&&*q!='"'){if(*q=='\\'&&q[1]){q++;switch(*q){case 'n':out[i++]='\n';break;case 'r':out[i++]='\r';break;case 't':out[i++]='\t';break;default:out[i++]=*q;}}else out[i++]=*q;q++;}out[i]=0;return out;}const char*e=q;while(*e&&*e!=','&&*e!='}'&&!isspace((unsigned char)*e))e++;return strndup(q,(size_t)(e-q));} }
     return strdup("");
 }
+static const char *gpm_json_key_value(const char *json,const char *key){
+    if(!json||!key)return NULL;
+    size_t key_len=strlen(key);
+    for(const char*p=json;*p;){
+        if(*p!='"'){p++;continue;}
+        const char*start=++p;
+        int escaped=0;
+        while(*p){
+            if(escaped){escaped=0;p++;continue;}
+            if(*p=='\\'){escaped=1;p++;continue;}
+            if(*p=='"')break;
+            p++;
+        }
+        if(!*p)return NULL;
+        const char*end=p++;
+        if((size_t)(end-start)!=key_len||memcmp(start,key,key_len)!=0)continue;
+        while(isspace((unsigned char)*p))p++;
+        if(*p++!=':')continue;
+        while(isspace((unsigned char)*p))p++;
+        return p;
+    }
+    return NULL;
+}
+static const char *gpm_json_value_end(const char *start){
+    if(!start||!*start)return NULL;
+    if(*start=='"'){
+        int escaped=0;
+        for(const char*p=start+1;*p;p++){
+            if(escaped){escaped=0;continue;}
+            if(*p=='\\'){escaped=1;continue;}
+            if(*p=='"')return p+1;
+        }
+        return NULL;
+    }
+    if(*start=='{'||*start=='['){
+        int depth=0,in_string=0,escaped=0;
+        for(const char*p=start;*p;p++){
+            if(in_string){
+                if(escaped)escaped=0;
+                else if(*p=='\\')escaped=1;
+                else if(*p=='"')in_string=0;
+                continue;
+            }
+            if(*p=='"'){in_string=1;continue;}
+            if(*p=='{'||*p=='[')depth++;
+            else if(*p=='}'||*p==']'){
+                if(--depth==0)return p+1;
+                if(depth<0)return NULL;
+            }
+        }
+        return NULL;
+    }
+    const char*p=start;
+    while(*p&&*p!=','&&*p!=']'&&*p!='}'&&!isspace((unsigned char)*p))p++;
+    return p==start?NULL:p;
+}
+static char *gpm_json_array_item(const char *json,const char *key,int index){
+    if(index<0)return strdup("");
+    const char*p=gpm_json_key_value(json,key);
+    if(!p||*p!='[')return strdup("");
+    p++;
+    int current=0;
+    while(*p){
+        while(isspace((unsigned char)*p)||*p==',')p++;
+        if(*p==']'||!*p)return strdup("");
+        const char*end=gpm_json_value_end(p);
+        if(!end)return strdup("");
+        if(current==index)return strndup(p,(size_t)(end-p));
+        current++;
+        p=end;
+        while(isspace((unsigned char)*p))p++;
+        if(*p==']'||!*p)return strdup("");
+        if(*p!=',')return strdup("");
+        p++;
+    }
+    return strdup("");
+}
 static char *gpm_json_quote(const char *s){const unsigned char*p=(const unsigned char*)nz(s);size_t cap=strlen((const char*)p)*6+3;char*out=malloc(cap);if(!out)return strdup("\"\"");size_t n=0;out[n++]='"';for(;*p;p++){if(*p=='"'||*p=='\\'){out[n++]='\\';out[n++]=(char)*p;}else if(*p=='\n'){out[n++]='\\';out[n++]='n';}else if(*p=='\r'){out[n++]='\\';out[n++]='r';}else if(*p=='\t'){out[n++]='\\';out[n++]='t';}else if(*p<32){n+=(size_t)snprintf(out+n,cap-n,"\\u%04x",*p);}else out[n++]=(char)*p;}out[n++]='"';out[n]=0;return out;}
 static char *gpm_url_encode(const char *input){static const char hex[]="0123456789ABCDEF";const unsigned char*p=(const unsigned char*)nz(input);size_t len=strlen((const char*)p);if(len>(SIZE_MAX-1)/3)return strdup("");char*out=malloc(len*3+1);if(!out)return strdup("");size_t n=0;for(;*p;p++){if(isalnum(*p)||*p=='-'||*p=='_'||*p=='.'||*p=='~')out[n++]=(char)*p;else{out[n++]='%';out[n++]=hex[*p>>4];out[n++]=hex[*p&15];}}out[n]=0;return out;}
-static char *gpm_tui_repeat(const char *text,int count){text=nz(text);if(count<0||count>4096)return strdup("");size_t step=strlen(text);if(step==0||count>(int)(SIZE_MAX-1)/((int)step))return strdup("");size_t len=step*(size_t)count;char*out=malloc(len+1);if(!out)return strdup("");for(size_t i=0;i<(size_t)count;i++)memcpy(out+i*step,text,step);out[len]=0;return out;}
+static char *gpm_tui_repeat(const char *text,int count){text=nz(text);if(count<0||count>4096)return strdup("");size_t step=strlen(text);if(step==0||(size_t)count>(SIZE_MAX-1)/step)return strdup("");size_t len=step*(size_t)count;char*out=malloc(len+1);if(!out)return strdup("");for(size_t i=0;i<(size_t)count;i++)memcpy(out+i*step,text,step);out[len]=0;return out;}
 static int gpm_tui_width(void){struct winsize ws={0};if(ioctl(STDOUT_FILENO,TIOCGWINSZ,&ws)==0&&ws.ws_col>0)return (int)ws.ws_col;const char*columns=getenv("COLUMNS");if(columns){char*end=NULL;long value=strtol(columns,&end,10);if(end!=columns&&value>0&&value<=4096)return (int)value;}return 80;}
 static char *gpm_tui_rgb(int red,int green,int blue,const char *text){if(red<0||red>255||green<0||green>255||blue<0||blue>255)return strdup(nz(text));char prefix[32];snprintf(prefix,sizeof(prefix),"\033[38;2;%d;%d;%dm",red,green,blue);size_t n=strlen(prefix)+strlen(nz(text))+5;char*out=malloc(n);if(!out)return strdup(nz(text));snprintf(out,n,"%s%s\033[0m",prefix,nz(text));return out;}
+static int gpm_tui_color_enabled(int unused){(void)unused;const char*no_color=getenv("NO_COLOR");const char*term=getenv("TERM");return !no_color&&(!term||strcmp(term,"dumb"))&&isatty(STDOUT_FILENO);}
 static char *gpm_tui_bg_rgb(int red,int green,int blue,const char *text){if(red<0||red>255||green<0||green>255||blue<0||blue>255)return strdup(nz(text));char prefix[32];snprintf(prefix,sizeof(prefix),"\033[48;2;%d;%d;%dm",red,green,blue);size_t n=strlen(prefix)+strlen(nz(text))+5;char*out=malloc(n);if(!out)return strdup(nz(text));snprintf(out,n,"%s%s\033[0m",prefix,nz(text));return out;}
 static char *gpm_tui_truncate(const char *text,int width){text=nz(text);if(width<=0)return strdup("");size_t n=strlen(text);if(n<=((size_t)width))return strdup(text);if(width==1)return strdup(".");if(width==2)return strdup("..");if(n>(((size_t)width)-3))n=((size_t)width)-3;char*out=malloc(n+4);if(!out)return strdup("");memcpy(out,text,n);memcpy(out+n,"...",4);return out;}
 static char *gpm_tui_number(int value){char*out=malloc(32);if(!out)return strdup("");snprintf(out,32,"%d",value);return out;}
@@ -208,7 +286,7 @@ static int gpm_path_exists(const char *path){struct stat st;return path&&*path&&
 static int gpm_valid_component(const char *s){if(!s||!*s||!strcmp(s,".")||!strcmp(s,".."))return 0;for(const unsigned char*p=(const unsigned char*)s;*p;p++)if(!(isalnum(*p)||*p=='-'||*p=='_'||*p=='.'||*p=='@'))return 0;return 1;}
 static char *gpm_manifest_get(const char *path,const char *key){char*data=gpm_read_file(path);char section[128]="";char*save=NULL;for(char*line=strtok_r(data,"\n",&save);line;line=strtok_r(NULL,"\n",&save)){while(isspace((unsigned char)*line))line++;if(*line=='['){char*end=strchr(line,']');if(end){*end=0;snprintf(section,sizeof(section),"%s",line+1);}continue;}if(strcmp(section,"metadata"))continue;char*eq=strchr(line,'=');if(!eq)continue;*eq=0;char*k=line;while(*k&&isspace((unsigned char)*k))k++;char*ke=k+strlen(k);while(ke>k&&isspace((unsigned char)ke[-1]))*--ke=0;if(strcmp(k,key))continue;char*v=eq+1;while(isspace((unsigned char)*v))v++;char*e=v+strlen(v);while(e>v&&isspace((unsigned char)e[-1]))*--e=0;if(e-v>=2&&((*v=='"'&&e[-1]=='"')||(*v=='\''&&e[-1]=='\''))){v++;e[-1]=0;}char*out=strdup(v);free(data);return out;}free(data);return strdup("");}
 static char *gpm_manifest_dependencies(const char *path){char*data=gpm_read_file(path);size_t cap=256,len=0;char*out=malloc(cap);if(!out){free(data);return strdup("");}out[0]=0;char section[128]="";char*save=NULL;for(char*line=strtok_r(data,"\n",&save);line;line=strtok_r(NULL,"\n",&save)){while(isspace((unsigned char)*line))line++;if(*line=='['){char*e=strchr(line,']');if(e){*e=0;snprintf(section,sizeof(section),"%s",line+1);}continue;}if(strcmp(section,"dependencies"))continue;char*eq=strchr(line,'=');if(!eq)continue;*eq=0;char*k=line;char*ke=k+strlen(k);while(ke>k&&isspace((unsigned char)ke[-1]))*--ke=0;while(isspace((unsigned char)*k))k++;char*v=eq+1;while(isspace((unsigned char)*v))v++;char*ve=v+strlen(v);while(ve>v&&isspace((unsigned char)ve[-1]))*--ve=0;if(ve-v>=2&&*v=='"'&&ve[-1]=='"'){v++;ve[-1]=0;}size_t add=strlen(k)+strlen(v)+2;if(len+add+1>cap){cap=(len+add+1)*2;char*n=realloc(out,cap);if(!n)break;out=n;}len+=(size_t)snprintf(out+len,cap-len,"%s|%s\n",k,v);}free(data);return out;}
-static char *gpm_list_packages(const char *path){DIR*d=opendir(path);if(!d)return strdup("");size_t cap=256,len=0;char*out=malloc(cap);if(!out){closedir(d);return strdup("");}out[0]=0;struct dirent*e;while((e=readdir(d))){if(e->d_name[0]=='.')continue;size_t add=strlen(e->d_name)+2;if(len+add>cap){cap=(len+add)*2;char*n=realloc(out,cap);if(!n)break;out=n;}len+=(size_t)snprintf(out+len,cap-len,"%s\n",e->d_name);}closedir(d);return out;}
+static char *gpm_list_packages(const char *path){DIR*d=opendir(path);if(!d)return strdup("");size_t cap=256,len=0;char*out=malloc(cap);if(!out){closedir(d);return strdup("");}out[0]=0;struct dirent*e;while((e=readdir(d))){if(e->d_name[0]=='.')continue;size_t path_len=strlen(path),name_len=strlen(e->d_name);char*full=malloc(path_len+name_len+2);if(!full)break;snprintf(full,path_len+name_len+2,"%s/%s",path,e->d_name);struct stat st;int is_package=lstat(full,&st)==0&&S_ISDIR(st.st_mode);free(full);if(!is_package)continue;size_t add=name_len+2;if(len+add>cap){cap=(len+add)*2;char*n=realloc(out,cap);if(!n)break;out=n;}len+=(size_t)snprintf(out+len,cap-len,"%s\n",e->d_name);}closedir(d);return out;}
 static char *gpm_list_dir(const char *path){DIR*d=opendir(nz(path));if(!d)return strdup("");size_t cap=256,len=0;char*out=malloc(cap);if(!out){closedir(d);return strdup("");}out[0]=0;struct dirent*e;while((e=readdir(d))){if(!strcmp(e->d_name,".")||!strcmp(e->d_name,".."))continue;size_t add=strlen(e->d_name)+(len?2:1);if(len+add>cap){cap=(len+add)*2;char*n=realloc(out,cap);if(!n)break;out=n;}if(len)out[len++]=',';size_t n=strlen(e->d_name);memcpy(out+len,e->d_name,n);len+=n;out[len]=0;}closedir(d);return out;}
 static char *gpm_find_executable(const char *name){if(!name||!*name)return strdup("");if(strchr(name,'/'))return access(name,X_OK)==0?strdup(name):strdup("");const char*path=getenv("PATH");if(!path)return strdup("");char*copy=strdup(path);if(!copy)return strdup("");char*save=NULL;for(char*dir=strtok_r(copy,":",&save);dir;dir=strtok_r(NULL,":",&save)){size_t n=strlen(dir)+strlen(name)+2;char*c=malloc(n);if(!c)break;snprintf(c,n,"%s/%s",*dir?dir:".",name);if(access(c,X_OK)==0){free(copy);return c;}free(c);}free(copy);return strdup("");}
 static char *gpm_argv(void){size_t cap=256,len=0;char*out=malloc(cap);if(!out)return strdup("");out[0]=0;for(int i=0;i<goscript_argc;i++){const char*a=goscript_argv&&goscript_argv[i]?goscript_argv[i]:"";size_t n=strlen(a)+(i?2:1);if(len+n>=cap){cap=(len+n+1)*2;char*p=realloc(out,cap);if(!p){free(out);return strdup("");}out=p;}if(i){out[len++]=',';out[len++]=' ';}size_t z=strlen(a);memcpy(out+len,a,z);len+=z;out[len]=0;}return out;}
@@ -233,7 +311,7 @@ void register_gpm_functions(Environment *env){
 #define R(name,fn,ret,n,...) register_c_function(env,name,(void*)fn,ret,n,##__VA_ARGS__)
  R("gpm_http_get",gpm_http_get,"string",2,"string","string");R("gpm_http_get_response",gpm_http_get_response,"string",2,"string","string");R("gpm_http_post_json",gpm_http_post_json,"string",3,"string","string","string");
  R("gpm_http_download",gpm_http_download,"int",3,"string","string","string");R("gpm_http_upload",gpm_http_upload,"int",7,"string","string","string","string","string","string","string");
- R("gpm_json_get",gpm_json_get,"string",2,"string","string");R("gpm_sha256_file",gpm_sha256_file,"string",1,"string");R("gpm_archive_extract",gpm_archive_extract,"int",2,"string","string");R("gpm_archive_build",gpm_archive_build,"int",2,"string","string");
+ R("gpm_json_get",gpm_json_get,"string",2,"string","string");R("gpm_json_array_item",gpm_json_array_item,"string",3,"string","string","int");R("gpm_sha256_file",gpm_sha256_file,"string",1,"string");R("gpm_archive_extract",gpm_archive_extract,"int",2,"string","string");R("gpm_archive_build",gpm_archive_build,"int",2,"string","string");
  R("gpm_mkdirs",gpm_mkdirs,"int",1,"string");R("gpm_remove_tree",gpm_remove_tree,"int",1,"string");R("gpm_home",gpm_home,"string",0);R("gpm_read_file",gpm_read_file,"string",1,"string");R("gpm_write_file",gpm_write_file,"int",2,"string","string");
  R("gpm_move",gpm_move,"int",2,"string","string");R("gpm_valid_component",gpm_valid_component,"int",1,"string");R("gpm_manifest_get",gpm_manifest_get,"string",2,"string","string");
  R("gpm_path_exists",gpm_path_exists,"int",1,"string");
@@ -241,7 +319,7 @@ void register_gpm_functions(Environment *env){
  R("gpm_manifest_dependencies",gpm_manifest_dependencies,"string",1,"string");R("gpm_list_packages",gpm_list_packages,"string",1,"string");
  R("gpm_json_quote",gpm_json_quote,"string",1,"string");
  R("gpm_url_encode",gpm_url_encode,"string",1,"string");
- R("gpm_tui_repeat",gpm_tui_repeat,"string",2,"string","int");R("gpm_tui_width",gpm_tui_width,"int",0);R("gpm_tui_rgb",gpm_tui_rgb,"string",4,"int","int","int","string");R("gpm_tui_bg_rgb",gpm_tui_bg_rgb,"string",4,"int","int","int","string");R("gpm_tui_truncate",gpm_tui_truncate,"string",2,"string","int");
+ R("gpm_tui_repeat",gpm_tui_repeat,"string",2,"string","int");R("gpm_tui_width",gpm_tui_width,"int",0);R("gpm_tui_rgb",gpm_tui_rgb,"string",4,"int","int","int","string");R("gpm_tui_bg_rgb",gpm_tui_bg_rgb,"string",4,"int","int","int","string");R("gpm_tui_truncate",gpm_tui_truncate,"string",2,"string","int");R("gpm_tui_color_enabled",gpm_tui_color_enabled,"int",1,"int");
  R("gpm_tui_number",gpm_tui_number,"string",1,"int");
  R("gpm_write_secret",gpm_write_secret,"int",2,"string","string");
  R("gs_fs_read",gpm_read_file,"string",1,"string");R("gs_fs_write",gpm_write_file,"int",2,"string","string");R("gs_fs_append",gpm_append_file,"int",2,"string","string");

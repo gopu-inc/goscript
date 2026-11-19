@@ -8,8 +8,11 @@
 #include <string.h>
 #include <stdlib.h>
 
-#ifdef GS_PLATFORM_UNIX
+#ifdef GS_PLATFORM_LINUX
     #include <sys/sysinfo.h>
+#endif
+
+#ifdef GS_PLATFORM_UNIX
     #include <sys/utsname.h>
     #include <unistd.h>
     #include <fcntl.h>
@@ -66,7 +69,11 @@ void gs_sysinfo(GSSysInfo* info) {
 #elif defined(GS_PLATFORM_MACOS)
     info->os_name   = "macos";
     info->cpu_count = (int)sysconf(_SC_NPROCESSORS_ONLN);
-    info->arch      = sizeof(void*) == 8 ? "x86_64" : "arm64";
+    struct utsname un;
+    if (uname(&un) == 0) {
+        info->arch = strstr(un.machine, "arm64") || strstr(un.machine, "aarch64")
+            ? "arm64" : "x86_64";
+    }
     /* Pour macOS, on lirait sysctlbyname pour la RAM */
 
 #elif defined(GS_PLATFORM_WINDOWS)

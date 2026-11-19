@@ -16,6 +16,7 @@
 *.yaml diff=yaml
 *.yml diff=yaml
 *.sh diff=shell
+golem-launcher.sh text eol=lf
 
 # ============================================
 # COMPILER SOURCE - Vendored (excluded from stats)

@@ -155,6 +155,10 @@ jobs:
           STAGE="$(cygpath -u "$RUNNER_TEMP")/goscript-smoke"
           make install PREFIX="$STAGE"
           "$STAGE/bin/gd.exe" --version
+          if grep -q $'\r' "$STAGE/bin/golem"; then
+            echo "Installed Golem launcher contains Windows CRLF line endings." >&2
+            exit 1
+          fi
           mv "$STAGE/bin/golem" "$STAGE/bin/golem.sh"
           "$STAGE/bin/golem.sh" help
 

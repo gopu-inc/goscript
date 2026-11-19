@@ -1,5 +1,5 @@
 ROOT := $(abspath ../..)
-PACKAGES := b64 config crypto db error fmt fs gcsv gsql http httplib io json math net nn os random s256 sqlite std strings tar tensor time ui urllib xzip
+PACKAGES := b64 config crypto db error fmt fs gcsv gsql http httplib io json math net nn os random s256 sqlite std strings tar tensor time tui ui urllib xzip
 
 .PHONY: build
 
@@ -51,6 +51,7 @@ sync:
 	cp "$(ROOT)/lib/tar.gjs" tar/__self__.gjs
 	cp "$(ROOT)/lib/tensor.gjs" tensor/__self__.gjs
 	cp "$(ROOT)/lib/time.gjs" time/__self__.gjs
+	cp "$(ROOT)/lib/tui.gjs" tui/__self__.gjs
 	cp "$(ROOT)/lib/ui.gjs" ui/__self__.gjs
 	cp "$(ROOT)/lib/urllib/request.gjs" urllib/request.gjs
 	cp "$(ROOT)/lib/urllib/server.gjs" urllib/server.gjs

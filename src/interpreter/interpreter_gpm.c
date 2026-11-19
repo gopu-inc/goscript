@@ -19,6 +19,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <strings.h>
+#include <sys/ioctl.h>
 #include <zlib.h>
 
 #define GPM_RESPONSE_LIMIT (16u * 1024u * 1024u)
@@ -26,6 +27,7 @@ extern int goscript_argc;
 extern char **goscript_argv;
 static char *gpm_read_file(const char *path);
 static int gpm_archive_extract(const char *archive,const char *dest);
+static char *gpm_json_get(const char *json,const char *key);
 
 static char *run_capture(char *const argv[], int *status) {
     int p[2]; if (pipe(p) != 0) return NULL;
@@ -52,11 +54,13 @@ static char *run_capture(char *const argv[], int *status) {
 static int run_quiet(char *const argv[]) { int s = 0; char *out = run_capture(argv, &s); free(out); return s == 0; }
 static const char *nz(const char *s) { return s ? s : ""; }
 
-static char *gpm_http_get(const char *url, const char *token) {
-    char *argv[12]; int n=0; argv[n++]="curl"; argv[n++]="--fail"; argv[n++]="--silent"; argv[n++]="--show-error"; argv[n++]="--location"; argv[n++]="--max-time"; argv[n++]="60";
+static char *gpm_http_get_impl(const char *url,const char *token,int include_error_body) {
+    char *argv[12];int n=0;argv[n++]="curl";if(!include_error_body)argv[n++]="--fail";argv[n++]="--silent";argv[n++]="--show-error";argv[n++]="--location";argv[n++]="--max-time";argv[n++]="60";
     char auth[4096]; if (token && *token) { snprintf(auth,sizeof(auth),"Authorization: Bearer %s",token); argv[n++]="--header"; argv[n++]=auth; }
     argv[n++]=(char*)nz(url); argv[n]=NULL; int status=0; char *body=run_capture(argv,&status); if(status!=0){free(body);return strdup("");} return body?body:strdup("");
 }
+static char *gpm_http_get(const char *url,const char *token){return gpm_http_get_impl(url,token,0);}
+static char *gpm_http_get_response(const char *url,const char *token){return gpm_http_get_impl(url,token,1);}
 static char *gpm_http_post_json(const char *url,const char *body,const char *token) {
     char *argv[14]; int n=0; char auth[4096]; argv[n++]="curl";argv[n++]="--fail";argv[n++]="--silent";argv[n++]="--show-error";argv[n++]="--location";argv[n++]="--max-time";argv[n++]="60";argv[n++]="--header";argv[n++]="Content-Type: application/json";
     if(token&&*token){snprintf(auth,sizeof(auth),"Authorization: Bearer %s",token);argv[n++]="--header";argv[n++]=auth;}
@@ -66,10 +70,21 @@ static int gpm_http_download(const char *url,const char *path,const char *token)
     char *argv[14];int n=0;char auth[4096];argv[n++]="curl";argv[n++]="--fail";argv[n++]="--silent";argv[n++]="--show-error";argv[n++]="--location";argv[n++]="--max-time";argv[n++]="300";if(token&&*token){snprintf(auth,sizeof(auth),"Authorization: Bearer %s",token);argv[n++]="--header";argv[n++]=auth;}argv[n++]="--output";argv[n++]=(char*)nz(path);argv[n++]=(char*)nz(url);argv[n]=NULL;return run_quiet(argv);
 }
 static int gpm_http_upload(const char *url,const char *path,const char *filename,const char *token,const char *version,const char *release,const char *arch) {
-    char *argv[24];int n=0;char auth[4096],filearg[8192],varg[4096],rarg[4096],aarg[4096];argv[n++]="curl";argv[n++]="--fail";argv[n++]="--silent";argv[n++]="--show-error";argv[n++]="--location";argv[n++]="--max-time";argv[n++]="600";
+    char *argv[24];int n=0;char auth[4096],filearg[8192],varg[4096],rarg[4096],aarg[4096];argv[n++]="curl";argv[n++]="--silent";argv[n++]="--show-error";argv[n++]="--location";argv[n++]="--max-time";argv[n++]="600";argv[n++]="--write-out";argv[n++]="\n__GOLEM_STATUS__%{http_code}";
     if(token&&*token){snprintf(auth,sizeof(auth),"Authorization: Bearer %s",token);argv[n++]="--header";argv[n++]=auth;}
     snprintf(filearg,sizeof(filearg),"file=@%s;filename=%s",nz(path),nz(filename));snprintf(varg,sizeof(varg),"version=%s",nz(version));snprintf(rarg,sizeof(rarg),"release=%s",nz(release));snprintf(aarg,sizeof(aarg),"arch=%s",nz(arch));
-    argv[n++]="--form";argv[n++]=filearg;argv[n++]="--form";argv[n++]=varg;argv[n++]="--form";argv[n++]=rarg;argv[n++]="--form";argv[n++]=aarg;argv[n++]=(char*)nz(url);argv[n]=NULL;return run_quiet(argv);
+    argv[n++]="--form";argv[n++]=filearg;argv[n++]="--form";argv[n++]=varg;argv[n++]="--form";argv[n++]=rarg;argv[n++]="--form";argv[n++]=aarg;argv[n++]=(char*)nz(url);argv[n]=NULL;
+    int command_status=0;char*response=run_capture(argv,&command_status);
+    if(command_status!=0||!response){free(response);fprintf(stderr,"golem: upload failed; check the network and registry URL\n");return 0;}
+    char*marker=strstr(response,"\n__GOLEM_STATUS__");
+    if(!marker){fprintf(stderr,"golem: registry returned an unreadable upload response\n");free(response);return 0;}
+    *marker=0;long http_code=strtol(marker+strlen("\n__GOLEM_STATUS__"),NULL,10);
+    if(http_code>=200&&http_code<300){free(response);return 1;}
+    char*message=gpm_json_get(response,"error");char*owner=gpm_json_get(response,"owner");
+    if(*message&&*owner)fprintf(stderr,"golem: %s (owner: %s, HTTP %ld)\n",message,owner,http_code);
+    else if(*message)fprintf(stderr,"golem: %s (HTTP %ld)\n",message,http_code);
+    else fprintf(stderr,"golem: publish rejected by registry (HTTP %ld)\n",http_code);
+    free(message);free(owner);free(response);return 0;
 }
 static char *gpm_json_get(const char *json,const char *key) {
     if(!json||!key)return strdup("");
@@ -78,6 +93,13 @@ static char *gpm_json_get(const char *json,const char *key) {
     return strdup("");
 }
 static char *gpm_json_quote(const char *s){const unsigned char*p=(const unsigned char*)nz(s);size_t cap=strlen((const char*)p)*6+3;char*out=malloc(cap);if(!out)return strdup("\"\"");size_t n=0;out[n++]='"';for(;*p;p++){if(*p=='"'||*p=='\\'){out[n++]='\\';out[n++]=(char)*p;}else if(*p=='\n'){out[n++]='\\';out[n++]='n';}else if(*p=='\r'){out[n++]='\\';out[n++]='r';}else if(*p=='\t'){out[n++]='\\';out[n++]='t';}else if(*p<32){n+=(size_t)snprintf(out+n,cap-n,"\\u%04x",*p);}else out[n++]=(char)*p;}out[n++]='"';out[n]=0;return out;}
+static char *gpm_url_encode(const char *input){static const char hex[]="0123456789ABCDEF";const unsigned char*p=(const unsigned char*)nz(input);size_t len=strlen((const char*)p);if(len>(SIZE_MAX-1)/3)return strdup("");char*out=malloc(len*3+1);if(!out)return strdup("");size_t n=0;for(;*p;p++){if(isalnum(*p)||*p=='-'||*p=='_'||*p=='.'||*p=='~')out[n++]=(char)*p;else{out[n++]='%';out[n++]=hex[*p>>4];out[n++]=hex[*p&15];}}out[n]=0;return out;}
+static char *gpm_tui_repeat(const char *text,int count){text=nz(text);if(count<0||count>4096)return strdup("");size_t step=strlen(text);if(step==0||count>(int)(SIZE_MAX-1)/((int)step))return strdup("");size_t len=step*(size_t)count;char*out=malloc(len+1);if(!out)return strdup("");for(size_t i=0;i<(size_t)count;i++)memcpy(out+i*step,text,step);out[len]=0;return out;}
+static int gpm_tui_width(void){struct winsize ws={0};if(ioctl(STDOUT_FILENO,TIOCGWINSZ,&ws)==0&&ws.ws_col>0)return (int)ws.ws_col;const char*columns=getenv("COLUMNS");if(columns){char*end=NULL;long value=strtol(columns,&end,10);if(end!=columns&&value>0&&value<=4096)return (int)value;}return 80;}
+static char *gpm_tui_rgb(int red,int green,int blue,const char *text){if(red<0||red>255||green<0||green>255||blue<0||blue>255)return strdup(nz(text));char prefix[32];snprintf(prefix,sizeof(prefix),"\033[38;2;%d;%d;%dm",red,green,blue);size_t n=strlen(prefix)+strlen(nz(text))+5;char*out=malloc(n);if(!out)return strdup(nz(text));snprintf(out,n,"%s%s\033[0m",prefix,nz(text));return out;}
+static char *gpm_tui_bg_rgb(int red,int green,int blue,const char *text){if(red<0||red>255||green<0||green>255||blue<0||blue>255)return strdup(nz(text));char prefix[32];snprintf(prefix,sizeof(prefix),"\033[48;2;%d;%d;%dm",red,green,blue);size_t n=strlen(prefix)+strlen(nz(text))+5;char*out=malloc(n);if(!out)return strdup(nz(text));snprintf(out,n,"%s%s\033[0m",prefix,nz(text));return out;}
+static char *gpm_tui_truncate(const char *text,int width){text=nz(text);if(width<=0)return strdup("");size_t n=strlen(text);if(n<=((size_t)width))return strdup(text);if(width==1)return strdup(".");if(width==2)return strdup("..");if(n>(((size_t)width)-3))n=((size_t)width)-3;char*out=malloc(n+4);if(!out)return strdup("");memcpy(out,text,n);memcpy(out+n,"...",4);return out;}
+static char *gpm_tui_number(int value){char*out=malloc(32);if(!out)return strdup("");snprintf(out,32,"%d",value);return out;}
 static char *gpm_sha256_file(const char *path){char *argv[]={"sha256sum","--",(char*)nz(path),NULL};int st=0;char*out=run_capture(argv,&st);if(st||!out){free(out);return strdup("");}char*sp=strchr(out,' ');if(sp)*sp=0;return out;}
 static char *gpm_hash_file(const char *path,const char *algorithm){const char*tool=!strcmp(nz(algorithm),"md5")?"md5sum":"sha256sum";char*argv[]={(char*)tool,"--",(char*)nz(path),NULL};int st=0;char*out=run_capture(argv,&st);if(st||!out){free(out);return strdup("");}char*sp=strchr(out,' ');if(sp)*sp=0;return out;}
 static char *gpm_hash_data(const char *data,const char *algorithm){char path[]="/tmp/goscript-hash-XXXXXX";int fd=mkstemp(path);if(fd<0)return strdup("");const char*p=nz(data);size_t len=strlen(p),off=0;while(off<len){ssize_t n=write(fd,p+off,len-off);if(n<=0){close(fd);unlink(path);return strdup("");}off+=(size_t)n;}close(fd);char*out=gpm_hash_file(path,algorithm);unlink(path);return out;}
@@ -209,7 +231,7 @@ static int gpm_process_background(const char*program){if(!program||!*program)ret
 
 void register_gpm_functions(Environment *env){
 #define R(name,fn,ret,n,...) register_c_function(env,name,(void*)fn,ret,n,##__VA_ARGS__)
- R("gpm_http_get",gpm_http_get,"string",2,"string","string");R("gpm_http_post_json",gpm_http_post_json,"string",3,"string","string","string");
+ R("gpm_http_get",gpm_http_get,"string",2,"string","string");R("gpm_http_get_response",gpm_http_get_response,"string",2,"string","string");R("gpm_http_post_json",gpm_http_post_json,"string",3,"string","string","string");
  R("gpm_http_download",gpm_http_download,"int",3,"string","string","string");R("gpm_http_upload",gpm_http_upload,"int",7,"string","string","string","string","string","string","string");
  R("gpm_json_get",gpm_json_get,"string",2,"string","string");R("gpm_sha256_file",gpm_sha256_file,"string",1,"string");R("gpm_archive_extract",gpm_archive_extract,"int",2,"string","string");R("gpm_archive_build",gpm_archive_build,"int",2,"string","string");
  R("gpm_mkdirs",gpm_mkdirs,"int",1,"string");R("gpm_remove_tree",gpm_remove_tree,"int",1,"string");R("gpm_home",gpm_home,"string",0);R("gpm_read_file",gpm_read_file,"string",1,"string");R("gpm_write_file",gpm_write_file,"int",2,"string","string");
@@ -218,6 +240,9 @@ void register_gpm_functions(Environment *env){
  R("gpm_prompt_secret",gpm_prompt_secret,"string",1,"string");
  R("gpm_manifest_dependencies",gpm_manifest_dependencies,"string",1,"string");R("gpm_list_packages",gpm_list_packages,"string",1,"string");
  R("gpm_json_quote",gpm_json_quote,"string",1,"string");
+ R("gpm_url_encode",gpm_url_encode,"string",1,"string");
+ R("gpm_tui_repeat",gpm_tui_repeat,"string",2,"string","int");R("gpm_tui_width",gpm_tui_width,"int",0);R("gpm_tui_rgb",gpm_tui_rgb,"string",4,"int","int","int","string");R("gpm_tui_bg_rgb",gpm_tui_bg_rgb,"string",4,"int","int","int","string");R("gpm_tui_truncate",gpm_tui_truncate,"string",2,"string","int");
+ R("gpm_tui_number",gpm_tui_number,"string",1,"int");
  R("gpm_write_secret",gpm_write_secret,"int",2,"string","string");
  R("gs_fs_read",gpm_read_file,"string",1,"string");R("gs_fs_write",gpm_write_file,"int",2,"string","string");R("gs_fs_append",gpm_append_file,"int",2,"string","string");
  R("gs_fs_exists",gpm_path_exists,"int",1,"string");R("gs_fs_size",gpm_file_size,"int",1,"string");R("gs_fs_mkdir",gpm_mkdir,"int",1,"string");R("gs_fs_remove",gpm_file_remove,"int",1,"string");

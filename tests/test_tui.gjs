@@ -1,0 +1,16 @@
+import .lib.tui as tui
+
+print("=== Tests Terminal UI ===")
+lt colored = tui::rgb(88, 166, 255, "Goscript")
+lt progress = tui::progress(72, "Downloading")
+lt panel = tui::panel("Status", "All services are available")
+lt table = tui::table("Name|Version|Status", "openv|0.1.1|ready\nbase|0.1.0|ready")
+lt markdown = tui::markdown("# Golem\n- One package\n- Safe versions")
+lt terminal_width = tui::width()
+print(colored)
+print(progress)
+print(panel)
+print(table)
+print(markdown)
+print(gpm_tui_number(terminal_width))
+print("=== Fin tests Terminal UI ===")

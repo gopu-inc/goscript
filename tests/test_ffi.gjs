@@ -88,4 +88,13 @@ if ver != "SQLite non disponible" {
     print("    WARN SQLite non disponible")
 }
 
+// Test 8 : URL encoding for registry search and version queries
+print("[8] URL encoding ...")
+let encoded_query = gpm_url_encode("openv package+test")
+if encoded_query == "openv%20package%2Btest" {
+    print("    OK  query encoded safely")
+} else {
+    print("    FAIL URL encoding returned " + encoded_query)
+}
+
 print("=== Fin tests FFI ===")

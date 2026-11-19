@@ -164,7 +164,7 @@ standard-packages: $(TARGET)
 
 publish-standard-packages: standard-packages
 	@set -e; \
-	for package in b64 config crypto db error fmt fs gcsv gsql http httplib io json math net nn os random s256 sqlite std strings tar tensor time ui urllib xzip; do \
+	for package in b64 config crypto db error fmt fs gcsv gsql http httplib io json math net nn os random s256 sqlite std strings tar tensor time tui ui urllib xzip; do \
 		printf 'Publishing standard package %s\n' "$$package"; \
 		(cd "packages/stdlib/$$package" && PATH="$(CURDIR)/$(BIN_DIR):$$PATH" "$(CURDIR)/golem" publish); \
 	done

@@ -41,6 +41,7 @@ clone ni ne télécharge le dépôt source. `update.sh` utilise l'installateur s
 ./golem build
 ./golem login mon-compte
 ./golem publish
+./golem logout
 ./golem list
 ./golem remove http
 ./golem update
@@ -51,6 +52,13 @@ clone ni ne télécharge le dépôt source. `update.sh` utilise l'installateur s
 `./golem install nom [version]` installe un paquet du registre. Les dépendances
 des paquets sont chargées depuis leur Manifest.toml, avec une profondeur
 maximale de 12.
+
+`golem search` accepte plusieurs mots et `golem info <nom> [version] [scope]`
+affiche les métadonnées et les versions publiées. Avant l'envoi, `golem publish`
+vérifie la disponibilité du registre, le propriétaire du nom et l'existence de
+la version. Seul le propriétaire peut publier de nouvelles versions; une version
+existante est immuable. Une republication identique est traitée comme une
+opération sans changement. `golem logout` supprime le jeton et le compte local.
 
 ## Manifeste
 
@@ -86,8 +94,9 @@ les chemins de l'archive avant extraction. Les fichiers sont installés dans
 modules/. Golem prépare la nouvelle version dans un dossier temporaire puis
 remplace le paquet installé en conservant une sauvegarde en cas d'échec.
 
-`golem login` demande le mot de passe sans l'afficher. Le jeton est conservé
-dans `~/.config/golem/token` avec des permissions limitées à l'utilisateur.
+`golem login` demande le mot de passe sans l'afficher. Le jeton et le nom du
+compte sont conservés dans `~/.config/golem/` avec des permissions limitées à
+l'utilisateur.
 `golem publish` publie l'archive du projet selon metadata.scope, qui vaut
 `public` par défaut.
 

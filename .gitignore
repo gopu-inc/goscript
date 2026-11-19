@@ -45,3 +45,5 @@ temp/
 *.temp
 gpm.local.conf
 .gpmrc
+server/
+server/*

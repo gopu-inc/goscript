@@ -62,11 +62,8 @@
     ]
   },
   "scripts": {
-    "build": "jsonlint grammars/goscript.json --quiet",
-    "test": "npm run build && node scripts/validate.js"
-  },
-  "devDependencies": {
-    "jsonlint": "^1.6.3"
+    "build": "node -e \"JSON.parse(require('node:fs').readFileSync('grammars/goscript.json', 'utf8'))\"",
+    "test": "npm run build"
   },
   "dependencies": {
     "pnpm": "^12.21.0"

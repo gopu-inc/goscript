@@ -216,7 +216,7 @@ Features summary:
 
 Development:
 - Build: `make`
-- Grammar validation: `npm run build` (requires `jsonlint`)
+- Grammar validation: `npm run build` (uses Node.js's built-in JSON parser)
 - CI: GitHub Actions (see `.github/workflows/goscript-buil.yml`)
 
 Contributing & reporting bugs: open an issue or PR on GitHub.

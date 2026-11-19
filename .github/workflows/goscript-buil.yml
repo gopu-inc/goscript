@@ -21,6 +21,8 @@ on:
       - 'golem-cli.gjs'
       - 'install.sh'
       - 'update.sh'
+      - 'README.md'
+      - 'docs/**'
       - '.github/workflows/**'
   pull_request:
     branches: [ main, master ]
@@ -40,15 +42,16 @@ on:
       - 'golem-cli.gjs'
       - 'install.sh'
       - 'update.sh'
+      - 'README.md'
+      - 'docs/**'
       - '.github/workflows/**'
 
 env:
   GOSCRIPT_VERSION: "1.0.0"
-  GENV_VERSION: "2.0.0"
 
 jobs:
   # ============================================
-  # JOB 1: Build Goscript sur multiples plateformes
+  # JOB 1: Build Goscript + Golem sur multiples plateformes
   # ============================================
   build:
     name: Build on ${{ matrix.os }}
@@ -125,12 +128,31 @@ jobs:
         run: |
           ./build/bin/gd --version
 
+      - name: ✅ Smoke test installed Goscript and Golem
+        if: matrix.platform != 'windows'
+        run: |
+          STAGE="$RUNNER_TEMP/goscript-smoke"
+          make install PREFIX="$STAGE"
+          "$STAGE/bin/gd" --version
+          "$STAGE/bin/golem" help
+
       - name: ✅ Test Goscript on Windows
         if: matrix.platform == 'windows'
         shell: C:\cygwin\bin\bash.exe --login -o igncr -eo pipefail '{0}'
         run: |
           cd "$GITHUB_WORKSPACE"
           ./build/bin/gd.exe --version
+
+      - name: ✅ Smoke test installed Goscript and Golem on Windows
+        if: matrix.platform == 'windows'
+        shell: C:\cygwin\bin\bash.exe --login -o igncr -eo pipefail '{0}'
+        run: |
+          cd "$GITHUB_WORKSPACE"
+          STAGE="$(cygpath -u "$RUNNER_TEMP")/goscript-smoke"
+          make install PREFIX="$STAGE"
+          "$STAGE/bin/gd.exe" --version
+          mv "$STAGE/bin/golem" "$STAGE/bin/golem.sh"
+          "$STAGE/bin/golem.sh" help
 
       - name: 📦 Upload Linux test binary
         if: matrix.platform == 'linux' && matrix.arch == 'x86_64'
@@ -235,35 +257,7 @@ jobs:
           path: test-report.md
 
   # ============================================
-  # JOB 3: Test genv (Goscript Environment Manager)
-  # ============================================
-  test-genv:
-    name: Test genv
-    runs-on: ubuntu-latest
-    
-    steps:
-      - name: 📥 Checkout code
-        uses: actions/checkout@v4
-
-      - name: 🔧 Install genv
-        run: |
-          if [ -f "genv" ]; then
-            chmod +x genv
-            ./genv --version
-          fi
-
-      - name: 🧪 Test genv create
-        run: |
-          ./genv create testenv
-          ls -la ~/.genv/envs/testenv/
-
-      - name: 🧪 Test genv activate
-        run: |
-          source ~/.genv/envs/testenv/bin/activate
-          echo "GENV_ENV: $GENV_ENV"
-
-  # ============================================
-  # JOB 4: Analyse de code
+  # JOB 3: Analyse de code
   # ============================================
   analyze:
     name: Code Analysis

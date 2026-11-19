@@ -43,6 +43,11 @@ Dossier clés du dépôt
 
 ## 1) 🇫🇷 Installation & compilation (Linux / macOS)
 
+Le dépôt officiel du compilateur Goscript, de Golem, du script d'installation
+et de leurs releases est
+[`gopu-inc/goscript`](https://github.com/gopu-inc/goscript). Les instructions
+complètes sont dans [`docs/golem.md`](docs/golem.md).
+
 Prérequis (exemples pour Debian/Ubuntu) :
 ```bash
 sudo apt-get update
@@ -55,26 +60,18 @@ brew install flex bison libffi make
 
 Construire depuis la source :
 ```bash
-# à la racine du dépôt
+git clone https://github.com/gopu-inc/goscript.git
+cd goscript
 make
-# binaire produit: ./build/bin/gd
-# optionnel: installer
-sudo make install
+# compiler: ./build/bin/gd
+sudo make install PREFIX=/usr/local  # installe gd et golem
 ```
 
-Les objets C et les fichiers Flex/Bison générés sont rangés dans `build/obj/`
-et `build/generated/`. Les exécutables Goscript (`gd`, `gbc`, `gld`) sont dans
-`build/bin/`. Le gestionnaire GPM historique, s'il est nécessaire, se construit
-avec `make gpm` et place également son exécutable dans `build/bin/`.
-
-Alternative (script):
-```bash
-sh build-sh
-```
-
-Remarques:
-- Le Makefile utilise flex & bison pour générer scanner/parser.
-- L'artefact par défaut s'appelle `gd`.
+Pour éviter `sudo`, utilisez `make install PREFIX="$HOME/.local"` puis ajoutez
+`$HOME/.local/bin` au `PATH`. L'installateur officiel `install.sh` télécharge
+une release GitHub avec vérification SHA-256; si aucune archive n'est publiée
+pour la plateforme, il clone ce même dépôt et compile depuis les sources.
+Voir `docs/golem.md` pour les prérequis, les commandes de release et Golem.
 
 ---
 
@@ -170,8 +167,9 @@ CI: voir `.github/workflows/goscript-buil.yml` — compile sur Ubuntu & macOS, e
 ---
 
 ## 6) 🇫🇷 CI / Releases
-- GitHub Actions construit les binaires (`gd`) et publie artefacts.
-- Releases se basent sur les tags `v*` (voir workflow `release` dans .github).
+- Le workflow [`goscript-buil.yml`](.github/workflows/goscript-buil.yml) du dépôt officiel compile et teste les plateformes prévues.
+- Lors d'un tag `v*`, il prépare les archives installables de Goscript + Golem, publie leurs checksums et crée une GitHub Release sur `gopu-inc/goscript`.
+- Les chemins d'installation et les prérequis sont documentés dans [`docs/golem.md`](docs/golem.md).
 
 ---
 
@@ -195,14 +193,20 @@ Bugs / demandes: https://github.com/gopu-inc/goscript/issues
 
 Goscript is a compact, runtime-dynamic scripting language with strong shell integration and a small standard library. The main compiled binary is `gd`.
 
-Quick build (Linux/macOS):
+Build and install from the official repository (Linux/macOS):
 ```bash
-# prerequisites: flex bison gcc make libffi-dev libreadline-dev
+git clone https://github.com/gopu-inc/goscript.git
+cd goscript
+# prerequisites: gcc, make, flex, bison, libffi and zlib development files
 make
-# run
 ./build/bin/gd --version
-./build/bin/gd examples/hello.gjs
+sudo make install PREFIX=/usr/local
+golem help
 ```
+
+The official `install.sh` downloads and verifies a platform release from this
+repository, or builds from a temporary clone of this repository when a
+prebuilt release is unavailable. See [`docs/golem.md`](docs/golem.md).
 
 Features summary:
 - Dynamic typing, familiar syntax (`fn`, `struct`, `impl`, `match`, `async/await`)

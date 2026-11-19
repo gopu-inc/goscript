@@ -3,6 +3,88 @@
 Golem est le gestionnaire de paquets de Goscript. Le lanceur `golem` et le
 paquet `lib/golem/__self__.gjs` sont écrits en Goscript. `gd` exécute le
 lanceur; les primitives système de bas niveau sont fournies par l'interpréteur.
+Le dépôt canonique du compilateur, de Golem, de l'installateur et de la CI est
+[`gopu-inc/goscript`](https://github.com/gopu-inc/goscript). Les releases et le
+workflow cités ci-dessous viennent de ce dépôt; le serveur du registre ne
+construit ni ne distribue ces exécutables.
+
+## Construire et installer Goscript + Golem
+
+### Depuis les sources officielles
+
+Prérequis Linux (Debian/Ubuntu):
+
+```sh
+sudo apt-get update
+sudo apt-get install -y build-essential flex bison libffi-dev zlib1g-dev make
+```
+
+Sur macOS, installez Xcode Command Line Tools et Homebrew, puis:
+
+```sh
+brew install flex bison libffi make
+```
+
+Clonez le dépôt officiel, compilez `gd`, puis installez aussi le lanceur Golem
+et ses fichiers Goscript:
+
+```sh
+git clone https://github.com/gopu-inc/goscript.git
+cd goscript
+make
+./build/bin/gd --version
+sudo make install PREFIX=/usr/local
+golem help
+```
+
+`make` construit `build/bin/gd` ainsi que les alias `gbc` et `gld`.
+`make install` copie le compilateur et les alias dans `PREFIX/bin`, puis
+installe le lanceur `golem` et son code requis dans `PREFIX/share/goscript`.
+Pour une installation sans privilèges, utilisez un préfixe utilisateur et
+ajoutez son dossier `bin` au `PATH`:
+
+```sh
+make install PREFIX="$HOME/.local"
+export PATH="$HOME/.local/bin:$PATH"
+golem help
+```
+
+### Installateur et releases GitHub
+
+`install.sh` et `update.sh` sont maintenus dans le même dépôt officiel.
+L'installateur choisit le paquet précompilé pour Linux/macOS, le télécharge
+depuis les GitHub Releases de `gopu-inc/goscript`, vérifie son SHA-256, puis
+installe à `/usr/local` par défaut. Choisissez un autre emplacement avec
+`PREFIX`:
+
+```sh
+curl -fsSLO https://raw.githubusercontent.com/gopu-inc/goscript/main/install.sh
+less install.sh  # inspecter le script avant de l'exécuter
+sudo sh install.sh
+
+# Ou, sans sudo:
+PREFIX="$HOME/.local" sh install.sh
+```
+
+Sur les plateformes sans archive précompilée, l'installateur installe les
+outils de compilation disponibles, clone
+`https://github.com/gopu-inc/goscript.git` dans un répertoire temporaire,
+compile `gd` et exécute `make install`. Pour une version précise, définissez
+`GOSCRIPT_VERSION` sur le tag de release (par exemple `v1.0.0`). `update.sh`
+met à jour une installation existante via cet installateur; il ne change pas
+la source du projet.
+
+Sur Windows, téléchargez l'archive `goscript-windows-x86_64.zip` de la GitHub
+Release, extrayez-la dans un dossier permanent et ajoutez son sous-dossier
+`bin` au `PATH`. Elle contient `gd.exe`, `golem.cmd` et les fichiers partagés
+nécessaires; `install.sh` est un script POSIX, pas un installateur PowerShell.
+
+Les archives de release ne sont créées que par le workflow
+[`goscript-buil.yml`](https://github.com/gopu-inc/goscript/blob/main/.github/workflows/goscript-buil.yml)
+sur `gopu-inc/goscript`: il compile les plateformes prévues, installe dans un
+préfixe de staging, empaquette `bin/` et `share/`, génère les checksums, puis
+publie les fichiers sur GitHub lors d'un tag `v*`. Une compilation depuis les
+sources ne dépend pas de l'existence d'une release.
 
 ## Installation et bibliothèque standard
 

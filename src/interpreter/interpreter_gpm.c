@@ -309,6 +309,9 @@ static int gpm_process_background(const char*program){if(!program||!*program)ret
 
 void register_gpm_functions(Environment *env){
 #define R(name,fn,ret,n,...) register_c_function(env,name,(void*)fn,ret,n,##__VA_ARGS__)
+ R("gs_http_post_json",gpm_http_post_json,"string",3,"string","string","string");R("gs_http_post_multipart_file",gpm_http_upload,"int",7,"string","string","string","string","string","string","string");
+ R("gs_json_quote",gpm_json_quote,"string",1,"string");R("gs_archive_build",gpm_archive_build,"int",2,"string","string");R("gs_manifest_get",gpm_manifest_get,"string",2,"string","string");R("gs_manifest_dependencies",gpm_manifest_dependencies,"string",1,"string");
+ R("gs_fs_move",gpm_move,"int",2,"string","string");R("gs_fs_valid_component",gpm_valid_component,"int",1,"string");R("gs_fs_write_private",gpm_write_secret,"int",2,"string","string");R("gs_fs_list_dirs",gpm_list_packages,"string",1,"string");R("gs_prompt_secret",gpm_prompt_secret,"string",1,"string");
  R("gpm_http_get",gpm_http_get,"string",2,"string","string");R("gpm_http_get_response",gpm_http_get_response,"string",2,"string","string");R("gpm_http_post_json",gpm_http_post_json,"string",3,"string","string","string");
  R("gpm_http_download",gpm_http_download,"int",3,"string","string","string");R("gpm_http_upload",gpm_http_upload,"int",7,"string","string","string","string","string","string","string");
  R("gpm_json_get",gpm_json_get,"string",2,"string","string");R("gpm_json_array_item",gpm_json_array_item,"string",3,"string","string","int");R("gpm_sha256_file",gpm_sha256_file,"string",1,"string");R("gpm_archive_extract",gpm_archive_extract,"int",2,"string","string");R("gpm_archive_build",gpm_archive_build,"int",2,"string","string");

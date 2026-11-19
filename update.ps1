@@ -2,7 +2,7 @@ $ErrorActionPreference = 'Stop'
 $ScriptUrl = if ($env:GOSCRIPT_INSTALL_SCRIPT) {
     $env:GOSCRIPT_INSTALL_SCRIPT
 } else {
-    'https://gsql-badge.onrender.com/install.ps1'
+    'https://raw.githubusercontent.com/gopu-inc/goscript/refs/heads/main/install.ps1'
 }
 $Installer = Join-Path ([System.IO.Path]::GetTempPath()) 'goscript-install.ps1'
 try {

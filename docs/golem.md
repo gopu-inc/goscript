@@ -58,12 +58,26 @@ installe à `/usr/local` par défaut. Choisissez un autre emplacement avec
 `PREFIX`:
 
 ```sh
-curl -fsSLO https://raw.githubusercontent.com/gopu-inc/goscript/main/install.sh
+curl -fsSLO https://raw.githubusercontent.com/gopu-inc/goscript/refs/heads/main/install.sh
 less install.sh  # inspecter le script avant de l'exécuter
 sudo sh install.sh
 
 # Ou, sans sudo:
 PREFIX="$HOME/.local" sh install.sh
+```
+
+Le script de mise à jour et les scripts PowerShell sont également disponibles
+directement depuis le dépôt officiel :
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/gopu-inc/goscript/refs/heads/main/update.sh | sh
+```
+
+```powershell
+Invoke-WebRequest https://raw.githubusercontent.com/gopu-inc/goscript/refs/heads/main/install.ps1 -OutFile install.ps1
+.\install.ps1
+Invoke-WebRequest https://raw.githubusercontent.com/gopu-inc/goscript/refs/heads/main/update.ps1 -OutFile update.ps1
+.\update.ps1
 ```
 
 Sur les plateformes sans archive précompilée, l'installateur installe les
@@ -109,7 +123,8 @@ globaux `lib/` ou `modules/`; Golem installe les paquets standard dans le
 `install.sh` télécharge uniquement l'archive binaire de la release GitHub qui
 correspond au système, vérifie son SHA-256 et installe ces commandes. Il ne
 clone ni ne télécharge le dépôt source. `update.sh` utilise l'installateur servi
-à `https://gsql-badge.onrender.com/install.sh`.
+par GitHub Raw. Les routes historiques du registre redirigent également vers
+les scripts du dépôt officiel.
 
 ## Commandes
 

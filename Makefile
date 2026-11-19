@@ -43,7 +43,13 @@ ifneq ($(filter CYGWIN% MINGW% MSYS%,$(UNAME_S)),)
 endif
 
 ifeq ($(UNAME_S),Darwin)
-	LDFLAGS = -lm -lffi -lpthread -lz
+	LIBFFI_PREFIX := $(shell brew --prefix libffi 2>/dev/null)
+	ifneq ($(strip $(LIBFFI_PREFIX)),)
+		CFLAGS += -I$(LIBFFI_PREFIX)/include
+		LDFLAGS = -L$(LIBFFI_PREFIX)/lib -lm -lffi -lpthread -lz
+	else
+		LDFLAGS = -lm -lffi -lpthread -lz
+	endif
 else
 	LDFLAGS = -lm -ldl -lffi -lpthread -lz
 endif

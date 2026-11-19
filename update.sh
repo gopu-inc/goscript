@@ -2,7 +2,7 @@
 set -eu
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-INSTALL_SCRIPT=${GOSCRIPT_INSTALL_SCRIPT:-https://gsql-badge.onrender.com/install.sh}
+INSTALL_SCRIPT=${GOSCRIPT_INSTALL_SCRIPT:-https://raw.githubusercontent.com/gopu-inc/goscript/refs/heads/main/install.sh}
 
 if [ "${GOSCRIPT_UPDATE_FROM_SOURCE:-0}" = "1" ]; then
     exec "$SCRIPT_DIR/install.sh"

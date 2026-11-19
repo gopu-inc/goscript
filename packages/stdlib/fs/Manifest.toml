@@ -1,0 +1,11 @@
+[metadata]
+name = "fs"
+version = "0.2.0"
+release = "r0"
+arch = "x86_64"
+description = "Filesystem helpers for Goscript"
+author = "Goscript contributors"
+main = "__self__.gjs"
+files = ["__self__.gjs", "README.md"]
+
+[dependencies]

@@ -1,42 +1,11 @@
-golem get
+golem legacy_http
 
-pub fn Get(url: string) {
-    lt cmd = "curl -s '" + url + "'"
-    lt result = sysf(cmd)
-    ret result
-}
-
-// GET avec headers
-pub fn GetWithHeaders(url: string, headers: string) {
-    lt cmd = "curl -s -H '" + headers + "' '" + url + "'"
-    lt result = sysf(cmd)
-    ret result
-}
-
-// GET et pretty-print JSON
-pub fn GetJSON(url: string) {
-    lt cmd = "curl -s '" + url + "' | jq"
-    lt result = sysf(cmd)
-    ret result
-}
-
-// GET avec timeout
-/*
-pub fn GetTimeout(url: string, timeout: int) {
-    lt cmd = "curl -s --max-time " + timeout + " '" + url + "'"
-    lt result = sysf(cmd)
-    ret result
-}
-*/
-) {
-    lt cmd = "curl -s -X POST -F 'file=@" + file_path + "' '" + url + "'"
-    lt result = sysf(cmd)
-    ret result
-}
-
-// POST avec authentification
-pub fn PostAuth(url: string, data: string, username: string, password: string) {
-    lt cmd = "curl -s -X POST -u '" + username + ":" + password + "' -d '" + data + "' '" + url + "'"
-    lt result = sysf(cmd)
-    ret result
+pub fn Get(url: string): string { ret gs_http_get(url) }
+pub fn GetWithHeaders(url: string, headers: string): string { ret gs_http_get_headers(url, headers) }
+pub fn GetJSON(url: string): string { ret gs_http_get(url) }
+pub fn GetTimeout(url: string, timeout: int): string { ret gs_http_get_timeout(url, timeout) }
+pub fn Post(url: string, data: string): string { ret gs_http_post(url, data) }
+pub fn PostFile(url: string, file_path: string): string { ret gs_http_post_file(url, file_path) }
+pub fn PostAuth(url: string, data: string, username: string, password: string): string {
+    ret gs_http_post_auth(url, data, username, password)
 }

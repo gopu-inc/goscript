@@ -1,0 +1,11 @@
+[metadata]
+name = "io"
+version = "0.2.0"
+release = "r0"
+arch = "x86_64"
+description = "Goscript standard library module: io"
+author = "Goscript contributors"
+main = "__self__.gjs"
+files = ["README.md", "__self__.gjs"]
+
+[dependencies]

@@ -1,0 +1,12 @@
+[metadata]
+name = "gcsv"
+version = "0.1.0"
+release = "r0"
+arch = "x86_64"
+description = "Goscript standard library module: gcsv"
+author = "Goscript contributors"
+main = "__self__.gjs"
+files = ["README.md", "__self__.gjs"]
+
+[dependencies]
+fs = "0.2.0"

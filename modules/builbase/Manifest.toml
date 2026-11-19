@@ -1,7 +1,7 @@
 # Golem package manifest
 [metadata]
 name = "builbase"
-version = "0.1.0"
+version = "0.1.1"
 release = "r0"
 arch = "x86_64"
 description = "Small, consistent console helpers for Goscript build scripts"

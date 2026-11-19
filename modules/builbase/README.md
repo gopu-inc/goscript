@@ -8,7 +8,7 @@ Add the package to the `[dependencies]` section of `Manifest.toml`:
 
 ```toml
 [dependencies]
-builbase = "0.1.0"
+builbase = "0.1.1"
 ```
 
 Then run:

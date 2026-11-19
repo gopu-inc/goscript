@@ -10,7 +10,7 @@ CFLAGS = -Wall -g -O0 \
 	-I./src/hal \
 	-I./src/ffi
 
-LDFLAGS = -lm -ldl -lffi -lpthread
+LDFLAGS = -lm -ldl -lffi -lpthread -lz
 
 # Détection automatique de l'architecture
 UNAME_S := $(shell uname -s)
@@ -176,6 +176,9 @@ install:
 	cp -a modules/. $(INSTALL_ROOT)/lib/goscript/
 	install -m 644 lib/__builtin__.gjs $(INSTALL_ROOT)/lib/goscript/__builtin__.gjs
 
+standard-packages:
+	$(MAKE) -C packages/stdlib build
+
 # Afficher l'architecture détectée
 debug:
 	@echo "OS: $(UNAME_S)"
@@ -183,4 +186,4 @@ debug:
 	@echo "MARCH: $(MARCH)"
 	@echo "CFLAGS: $(CFLAGS)"
 
-.PHONY: all clean install debug gbc gld
+.PHONY: all clean install standard-packages debug gbc gld

@@ -11,6 +11,27 @@ void yyerror(const char* msg);
 int yylex(void);
 ASTNode* parse_f_string(char* template);
 ASTNode* program_root;
+
+static ASTNode* trailing_block_lambda(ASTNodeList* body) {
+    if (body && body->count == 1) {
+        ASTNode* fn = body->nodes[0];
+        if (fn && (fn->type == NODE_FUNCTION || fn->type == NODE_PUBLIC_FUNCTION))
+            return create_lambda_node(fn->function.params, fn->function.body);
+    }
+    return create_lambda_node(NULL, body);
+}
+
+static ASTNode* append_trailing_block(ASTNode* call, ASTNodeList* body) {
+    ASTNode* handler = trailing_block_lambda(body);
+    if (!call) return handler;
+    ASTNodeList** args = NULL;
+    if (call->type == NODE_CALL) args = &call->call.args;
+    else if (call->type == NODE_METHOD_CALL) args = &call->method_call.args;
+    if (!args) return call;
+    if (!*args) *args = create_arg_list();
+    add_arg(*args, handler);
+    return call;
+}
 %}
 
 %union {
@@ -198,6 +219,9 @@ statement:
 with_statement:
     TOKEN_WITH expression TOKEN_AS TOKEN_IDENTIFIER TOKEN_COLON statement {
         $$ = create_with_node($2, $4, $6);
+    }
+    | TOKEN_WITH expression TOKEN_AS TOKEN_IDENTIFIER TOKEN_LBRACE statement_list TOKEN_RBRACE {
+        $$ = create_with_node($2, $4, create_program_node($6));
     }
     ;
 sysf_expr:
@@ -1020,6 +1044,10 @@ member_access:
     ;
 
 call_expr:
+    call_expr TOKEN_LBRACE statement_list TOKEN_RBRACE {
+        $$ = append_trailing_block($1, $3);
+    }
+    |
     primary_expr TOKEN_LPAREN argument_list TOKEN_RPAREN {
         $$ = create_call_node($1, $3);
     }

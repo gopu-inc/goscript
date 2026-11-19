@@ -35,6 +35,53 @@ static int impl_capacity = 0;
  * (ret à l'intérieur d'un if, while, for…). */
 static Value g_return_value;
 
+static ASTNode* freeze_array_element(ASTNode* expression, Environment* env) {
+    Value value = evaluate_expr(expression, env);
+    switch (value.type) {
+        case 0:
+            return create_number_node(value.int_val);
+        case 1:
+            return create_float_node(value.float_val);
+        case 2:
+            return create_string_node(value.string_val ? value.string_val : "");
+        case 3:
+            return create_bool_node(value.bool_val);
+        case 8: {
+            ASTNodeList* elements = create_node_list();
+            if (value.array_val.elements) {
+                for (int i = 0; i < value.array_val.elements->count; i++) {
+                    add_to_node_list(elements, freeze_array_element(value.array_val.elements->nodes[i], env));
+                }
+            }
+            return create_array_node(elements);
+        }
+        default:
+            return expression;
+    }
+}
+
+static Value concatenate_arrays(Value left, Value right, Environment* env) {
+    Value result = {0};
+    result.type = 8;
+    result.array_val.elements = create_node_list();
+    result.array_val.count = 0;
+
+    if (left.array_val.elements) {
+        for (int i = 0; i < left.array_val.elements->count; i++) {
+            add_to_node_list(result.array_val.elements,
+                             freeze_array_element(left.array_val.elements->nodes[i], env));
+        }
+    }
+    if (right.array_val.elements) {
+        for (int i = 0; i < right.array_val.elements->count; i++) {
+            add_to_node_list(result.array_val.elements,
+                             freeze_array_element(right.array_val.elements->nodes[i], env));
+        }
+    }
+    result.array_val.count = result.array_val.elements->count;
+    return result;
+}
+
 typedef struct NnlContext {
     char* label;
     jmp_buf env;
@@ -1279,6 +1326,8 @@ Value evaluate_expr(ASTNode* node, Environment* env) {
                         if (current->type == 0 && right_val.type == 0) {
                             new_val.type = 0;
                             new_val.int_val = current->int_val + right_val.int_val;
+                        } else if (current->type == 8 && right_val.type == 8) {
+                            new_val = concatenate_arrays(*current, right_val, env);
                         }
                         break;
                     case OP_SUB_ASSIGN:
@@ -1478,6 +1527,8 @@ if (node->binary.op == OP_ASSIGN) {
             } else if (left.type == 1 && right.type == 1) {
                 result.type = 1;
                 result.float_val = left.float_val + right.float_val;
+            } else if (left.type == 8 && right.type == 8) {
+                result = concatenate_arrays(left, right, env);
             } else if (left.type == 2 || right.type == 2 || left.type == 8 || right.type == 8 || left.type == 10 || right.type == 10) {
                 char buf1[1024], buf2[1024];
                 char* left_str = "";
@@ -1495,7 +1546,7 @@ if (node->binary.op == OP_ASSIGN) {
                     ptr += sprintf(ptr, "[");
                     for (int i = 0; i < left.array_val.count; i++) {
                         if (i > 0) ptr += sprintf(ptr, ", ");
-                        Value elem = evaluate_expr(left.array_val.elements->nodes[i], NULL);
+                        Value elem = evaluate_expr(left.array_val.elements->nodes[i], env);
                         if (elem.type == 0) ptr += sprintf(ptr, "%d", elem.int_val);
                         else if (elem.type == 1) ptr += sprintf(ptr, "%f", elem.float_val);
                         else if (elem.type == 2) ptr += sprintf(ptr, "%s", elem.string_val);
@@ -1543,7 +1594,7 @@ if (node->binary.op == OP_ASSIGN) {
                     ptr += sprintf(ptr, "[");
                     for (int i = 0; i < right.array_val.count; i++) {
                         if (i > 0) ptr += sprintf(ptr, ", ");
-                        Value elem = evaluate_expr(right.array_val.elements->nodes[i], NULL);
+                        Value elem = evaluate_expr(right.array_val.elements->nodes[i], env);
                         if (elem.type == 0) ptr += sprintf(ptr, "%d", elem.int_val);
                         else if (elem.type == 1) ptr += sprintf(ptr, "%f", elem.float_val);
                         else if (elem.type == 2) ptr += sprintf(ptr, "%s", elem.string_val);
@@ -2176,6 +2227,59 @@ case NODE_LAMBDA: {
         // ==================== APPEL DE MÉTHODE ====================
         // ==================== APPEL DE MÉTHODE (VERSION COMPLÈTE) ====================
 case NODE_METHOD_CALL: {
+    /* Route DSL sugar: port::route.post(method=html, "/") { ... }
+     * lowers at runtime to strean::post_as(path, handler, format). */
+    ASTNode* route_target = node->method_call.object;
+    if (route_target && route_target->type == NODE_STATIC_ACCESS &&
+        route_target->static_access.member &&
+        strcmp(route_target->static_access.member, "route") == 0 &&
+        route_target->static_access.object &&
+        route_target->static_access.object->type == NODE_IDENTIFIER &&
+        strcmp(route_target->static_access.object->identifier.name, "port") == 0 &&
+        env_get(env, "port") && node->method_call.args &&
+        node->method_call.args->count >= 2 && env_get(env, "strean")) {
+        ASTNode* path_expr = NULL;
+        ASTNode* handler_expr = NULL;
+        char format[32] = "text";
+        for (int i = 0; i < node->method_call.args->count; i++) {
+            ASTNode* arg = node->method_call.args->nodes[i];
+            if (arg && arg->type == NODE_BINARY_OP && arg->binary.op == OP_ASSIGN &&
+                arg->binary.left && arg->binary.left->type == NODE_IDENTIFIER &&
+                strcmp(arg->binary.left->identifier.name, "method") == 0) {
+                ASTNode* mode = arg->binary.right;
+                if (mode && mode->type == NODE_IDENTIFIER &&
+                    (!strcmp(mode->identifier.name, "html") ||
+                     !strcmp(mode->identifier.name, "json") ||
+                     !strcmp(mode->identifier.name, "text") ||
+                     !strcmp(mode->identifier.name, "stream"))) {
+                    snprintf(format, sizeof(format), "%s", mode->identifier.name);
+                } else if (mode && mode->type == NODE_STRING) {
+                    snprintf(format, sizeof(format), "%s", mode->string_val.value);
+                }
+            } else if (!path_expr) {
+                path_expr = arg;
+            } else {
+                handler_expr = arg;
+            }
+        }
+        if (path_expr && handler_expr) {
+            ASTNode* callee = create_member_access(create_identifier_node("strean"),
+                                                   (char*)"post" );
+            char method_name[64];
+            const char* suffix = "_as";
+            snprintf(method_name, sizeof(method_name), "%s%s",
+                     node->method_call.method, suffix);
+            callee->member.member = strdup(method_name);
+            ASTNode synthetic_call = {0};
+            synthetic_call.type = NODE_CALL;
+            synthetic_call.call.callee = callee;
+            synthetic_call.call.args = create_arg_list();
+            add_arg(synthetic_call.call.args, path_expr);
+            add_arg(synthetic_call.call.args, handler_expr);
+            add_arg(synthetic_call.call.args, create_string_node(format));
+            return evaluate_expr(&synthetic_call, env);
+        }
+    }
     Value obj = evaluate_expr(node->method_call.object, env);
     char* method_name = node->method_call.method;
     
@@ -2775,8 +2879,8 @@ case NODE_METHOD_CALL: {
 
     /* open(path) reads and closes the file before returning its contents. */
     if (strcmp(func_name, "open") == 0) {
-        if (!node->call.args || node->call.args->count != 1) {
-            fprintf(stderr, "Error: open() expects exactly one path\n");
+        if (!node->call.args || (node->call.args->count != 1 && node->call.args->count != 2)) {
+            fprintf(stderr, "Error: open() expects a path and an optional read mode\n");
             result.type = 2;
             result.string_val = strdup("");
             return result;
@@ -2788,7 +2892,21 @@ case NODE_METHOD_CALL: {
             result.string_val = strdup("");
             return result;
         }
-        FILE* file = fopen(path.string_val, "rb");
+        const char* mode = "rb";
+        if (node->call.args->count == 2) {
+            Value requested_mode = evaluate_expr(node->call.args->nodes[1], env);
+            if (requested_mode.type != 2 || !requested_mode.string_val ||
+                (strcmp(requested_mode.string_val, "r") != 0 &&
+                 strcmp(requested_mode.string_val, "rt") != 0 &&
+                 strcmp(requested_mode.string_val, "rb") != 0)) {
+                fprintf(stderr, "Error: open() currently supports read-only modes: r, rt, rb\n");
+                result.type = 2;
+                result.string_val = strdup("");
+                return result;
+            }
+            mode = requested_mode.string_val;
+        }
+        FILE* file = fopen(path.string_val, mode);
         if (!file) {
             perror(path.string_val);
             result.type = 2;
@@ -2932,6 +3050,15 @@ case NODE_METHOD_CALL: {
 }
 int evaluate_statement(ASTNode* node, Environment* env, char* current_file) {
     switch (node->type) {
+        case NODE_PROGRAM: {
+            ASTNodeList* statements = node->program.statements;
+            if (!statements) return 0;
+            for (int i = 0; i < statements->count; i++) {
+                int status = evaluate_statement(statements->nodes[i], env, current_file);
+                if (status != 0) return status;
+            }
+            return 0;
+        }
         case NODE_WITH: {
             Value resource = evaluate_expr(node->with_stmt.resource, env);
             Environment* scope = create_env(env);

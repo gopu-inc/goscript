@@ -1,6 +1,6 @@
 golem builbase
 
-pub cn VERSION = "0.1.0"
+pub cn VERSION = "0.1.1"
 
 pub fn version(): string {
     ret VERSION

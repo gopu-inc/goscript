@@ -3,17 +3,18 @@
 
 [metadata]
 name = "openv"
-version = "0.1.0"
+version = "0.1.1"
 release = "r0"
 arch = "x86_64"
-description = "OPENV Framework - Environment variable manager for Goscript"
+description = "File-backed key-value configuration for Goscript"
 author = "Mauricio-100 <ceoseshell@gmail.com>"
 license = "MIT"
 homepage = "https://github.com/gopu-inc/openv"
-main = "test.gjs"
+main = "__self__.gjs"
+files = ["__self__.gjs", "get.gjs", "post.gjs", "set.gjs", "README.md"]
 
 [dependencies]
-httplib = ">=1.1.0"
+fs = "0.2.0"
 
 
 [scripts]

@@ -19,17 +19,23 @@ fn user(request: any): any {
     ret strean::json("{\"name\":\"" + strean::param(request, "name") + "\"}")
 }
 
+fn page_one(request: any): any {
+    with open("index.html", "r") as page {
+        ret strean::html(page)
+    }
+}
+
 fn main() {
     strean::get("/", home)
     strean::get("/users/:name", user)
-    with open("index.html") as page: strean::route("GET", "/page", page)
+    strean::route("GET", "/page", page_one)
     strean::run(8080)
 }
 ```
 
-`with open(path) as page: ...` reads and closes the file, then exposes its
-contents as a string in the body. Strean accepts that string as a static HTML
-response. The `with` form currently accepts one statement after `:`.
+`with` and `whith` accept either a braced block or the older one-statement
+colon form. `open(path, "r")` reads and closes the file, then exposes its
+contents as a string in the block.
 
 ## Package modules
 

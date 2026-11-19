@@ -9,6 +9,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
+#include <stdint.h>
+#include <limits.h>
 
 /* ============================================================
  *  NOMS DES OPCODES
@@ -231,6 +233,11 @@ static inline vm_Value vm_pop(VM* vm) {
 }
 
 static inline vm_Value vm_peek(VM* vm, int offset) {
+    if (offset < 0 || offset >= (int)(vm->sp - vm->stack)) {
+        snprintf(vm->error_msg, sizeof(vm->error_msg), "Stack underflow");
+        vm->status = VM_RUNTIME_ERROR;
+        return VM_MAKE_NIL();
+    }
     return *(vm->sp - 1 - offset);
 }
 
@@ -256,8 +263,12 @@ static void vm_print_value(vm_Value v) {
 
 /* ── Arithmétique ── */
 static inline vm_Value vm_add_values(VM* vm, vm_Value a, vm_Value b) {
-    if (VM_IS_INT(a) && VM_IS_INT(b))
-        return VM_MAKE_INT(VM_INT(a) + VM_INT(b));
+    if (VM_IS_INT(a) && VM_IS_INT(b)) {
+        /* Goscript integers are signed 32-bit values. Do the operation as
+         * unsigned arithmetic so overflow has defined wraparound behavior. */
+        uint32_t sum = (uint32_t)VM_INT(a) + (uint32_t)VM_INT(b);
+        return VM_MAKE_INT((int32_t)sum);
+    }
     if (VM_IS_OBJ(a) && VM_IS_OBJ(b)) {
         GCObject* oa = VM_OBJ(a);
         GCObject* ob = VM_OBJ(b);
@@ -272,10 +283,14 @@ static inline vm_Value vm_add_values(VM* vm, vm_Value a, vm_Value b) {
             return VM_MAKE_OBJ(obj);
         }
     }
-    double fa = VM_IS_FLOAT(a) ? VM_FLOAT(a) : (VM_IS_INT(a) ? (double)VM_INT(a) : 0.0);
-    double fb = VM_IS_FLOAT(b) ? VM_FLOAT(b) : (VM_IS_INT(b) ? (double)VM_INT(b) : 0.0);
-    return VM_MAKE_FLOAT(fa + fb);
-    (void)vm;
+    if ((VM_IS_FLOAT(a) || VM_IS_INT(a)) && (VM_IS_FLOAT(b) || VM_IS_INT(b))) {
+        double fa = VM_IS_FLOAT(a) ? VM_FLOAT(a) : (double)VM_INT(a);
+        double fb = VM_IS_FLOAT(b) ? VM_FLOAT(b) : (double)VM_INT(b);
+        return VM_MAKE_FLOAT(fa + fb);
+    }
+    snprintf(vm->error_msg, sizeof(vm->error_msg), "Unsupported operands for addition");
+    vm->status = VM_RUNTIME_ERROR;
+    return VM_MAKE_NIL();
 }
 
 static inline double to_double(vm_Value v) {
@@ -283,17 +298,45 @@ static inline double to_double(vm_Value v) {
 }
 
 static inline vm_Value vm_arith(VM* vm, uint8_t op, vm_Value a, vm_Value b) {
+    if (VM_IS_INT(a) && VM_IS_INT(b)) {
+        int32_t ia = VM_INT(a), ib = VM_INT(b);
+        switch (op) {
+            case VM_OP_SUB:
+                return VM_MAKE_INT((int32_t)((uint32_t)ia - (uint32_t)ib));
+            case VM_OP_MUL:
+                return VM_MAKE_INT((int32_t)((uint32_t)ia * (uint32_t)ib));
+            case VM_OP_DIV:
+                if (ib == 0) {
+                    snprintf(vm->error_msg, sizeof(vm->error_msg), "Division by zero");
+                    vm->status = VM_RUNTIME_ERROR;
+                    return VM_MAKE_NIL();
+                }
+                return VM_MAKE_INT(ia == INT32_MIN && ib == -1 ? INT32_MIN : ia / ib);
+            case VM_OP_MOD:
+                if (ib == 0) {
+                    snprintf(vm->error_msg, sizeof(vm->error_msg), "Modulo by zero");
+                    vm->status = VM_RUNTIME_ERROR;
+                    return VM_MAKE_NIL();
+                }
+                return VM_MAKE_INT(ia == INT32_MIN && ib == -1 ? 0 : ia % ib);
+        }
+    }
     double fa = to_double(a), fb = to_double(b);
     switch (op) {
-        case VM_OP_SUB: return VM_MAKE_FLOAT(fa - fb);
-        case VM_OP_MUL: return VM_MAKE_FLOAT(fa * fb);
+        case VM_OP_SUB:
+            if ((VM_IS_FLOAT(a) || VM_IS_INT(a)) && (VM_IS_FLOAT(b) || VM_IS_INT(b))) return VM_MAKE_FLOAT(fa - fb);
+            break;
+        case VM_OP_MUL:
+            if ((VM_IS_FLOAT(a) || VM_IS_INT(a)) && (VM_IS_FLOAT(b) || VM_IS_INT(b))) return VM_MAKE_FLOAT(fa * fb);
+            break;
         case VM_OP_DIV:
             if (fb == 0.0) {
                 snprintf(vm->error_msg, sizeof(vm->error_msg), "Division par zéro");
                 vm->status = VM_RUNTIME_ERROR;
                 return VM_MAKE_NIL();
             }
-            return VM_MAKE_FLOAT(fa / fb);
+            if ((VM_IS_FLOAT(a) || VM_IS_INT(a)) && (VM_IS_FLOAT(b) || VM_IS_INT(b))) return VM_MAKE_FLOAT(fa / fb);
+            break;
         case VM_OP_MOD: {
             int64_t ia = (int64_t)fa, ib = (int64_t)fb;
             if (ib == 0) {
@@ -309,6 +352,21 @@ static inline vm_Value vm_arith(VM* vm, uint8_t op, vm_Value a, vm_Value b) {
 }
 
 static inline vm_Value vm_compare(uint8_t op, vm_Value a, vm_Value b) {
+    if (VM_IS_OBJ(a) && VM_IS_OBJ(b)) {
+        GCObject* oa = VM_OBJ(a);
+        GCObject* ob = VM_OBJ(b);
+        if (oa && ob && oa->type == GC_TYPE_STRING && ob->type == GC_TYPE_STRING) {
+            int cmp = strcmp((const char*)GC_DATA(oa), (const char*)GC_DATA(ob));
+            switch (op) {
+                case VM_OP_EQ:         return VM_MAKE_BOOL(cmp == 0);
+                case VM_OP_NEQ:        return VM_MAKE_BOOL(cmp != 0);
+                case VM_OP_LESS:       return VM_MAKE_BOOL(cmp < 0);
+                case VM_OP_LESS_EQ:    return VM_MAKE_BOOL(cmp <= 0);
+                case VM_OP_GREATER:    return VM_MAKE_BOOL(cmp > 0);
+                case VM_OP_GREATER_EQ: return VM_MAKE_BOOL(cmp >= 0);
+            }
+        }
+    }
     if (VM_IS_INT(a) && VM_IS_INT(b)) {
         int32_t ia = VM_INT(a), ib = VM_INT(b);
         switch (op) {
@@ -429,6 +487,10 @@ VMResult vm_run(VM* vm, VMChunk* chunk) {
 
     #define DISPATCH() \
         do { if (ip >= ip_end || vm->status != VM_OK) goto L_HALT; \
+             if (ip->op >= VM_OP_COUNT) { \
+                 snprintf(vm->error_msg, sizeof(vm->error_msg), "Invalid opcode %u", ip->op); \
+                 vm->status = VM_RUNTIME_ERROR; goto L_HALT; \
+             } \
              goto *DT[ip->op]; } while(0)
     #define NEXT() do { ip++; DISPATCH(); } while(0)
 
@@ -497,7 +559,7 @@ VMResult vm_run(VM* vm, VMChunk* chunk) {
     L_MOD: { vm_Value b=vm_pop(vm); vm_Value a=vm_pop(vm); vm_push(vm,vm_arith(vm,VM_OP_MOD,a,b)); NEXT(); }
     L_POW: { vm_Value b=vm_pop(vm); vm_Value a=vm_pop(vm); vm_push(vm,vm_arith(vm,VM_OP_POW,a,b)); NEXT(); }
     L_NEG: { vm_Value a=vm_pop(vm);
-             vm_push(vm, VM_IS_INT(a) ? VM_MAKE_INT(-VM_INT(a)) : VM_MAKE_FLOAT(-to_double(a)));
+             vm_push(vm, VM_IS_INT(a) ? VM_MAKE_INT((int32_t)(0u - (uint32_t)VM_INT(a))) : VM_MAKE_FLOAT(-to_double(a)));
              NEXT(); }
 
     /* ── Comparaisons ── */

@@ -1,5 +1,6 @@
 #include "bytecode.h"
 #include <ctype.h>
+#include <limits.h>
 
 extern Value evaluate_expr(ASTNode* node, Environment* env);
 extern int evaluate_statement(ASTNode* node, Environment* env, char* current_file);
@@ -214,6 +215,32 @@ static ASTNode* bc_value_to_literal(Value v) {
 static Value bc_apply_binary(Value left, Value right, BCOpCode op) {
     Value result = bc_nil_value();
 
+    if ((op == BC_EQ || op == BC_NEQ) && left.type == 2 && right.type == 2) {
+        int equal = strcmp(left.string_val ? left.string_val : "",
+                           right.string_val ? right.string_val : "") == 0;
+        result.type = 3;
+        result.bool_val = op == BC_EQ ? equal : !equal;
+        return result;
+    }
+
+    if (op == BC_ADD && left.type == 8 && right.type == 8) {
+        ASTNodeList* elements = create_node_list();
+        if (left.array_val.elements) {
+            for (int i = 0; i < left.array_val.elements->count; i++) {
+                add_to_node_list(elements, left.array_val.elements->nodes[i]);
+            }
+        }
+        if (right.array_val.elements) {
+            for (int i = 0; i < right.array_val.elements->count; i++) {
+                add_to_node_list(elements, right.array_val.elements->nodes[i]);
+            }
+        }
+        result.type = 8;
+        result.array_val.elements = elements;
+        result.array_val.count = elements->count;
+        return result;
+    }
+
     if ((left.type == 0 || left.type == 1) && (right.type == 0 || right.type == 1)) {
         double a = (left.type == 1) ? left.float_val : (double)left.int_val;
         double b = (right.type == 1) ? right.float_val : (double)right.int_val;
@@ -223,8 +250,33 @@ static Value bc_apply_binary(Value left, Value right, BCOpCode op) {
             case BC_ADD: result.type = is_float ? 1 : 0; if (is_float) result.float_val = a + b; else result.int_val = (int)(a + b); break;
             case BC_SUB: result.type = is_float ? 1 : 0; if (is_float) result.float_val = a - b; else result.int_val = (int)(a - b); break;
             case BC_MUL: result.type = is_float ? 1 : 0; if (is_float) result.float_val = a * b; else result.int_val = (int)(a * b); break;
-            case BC_DIV: result.type = 1; result.float_val = b == 0 ? 0.0 : a / b; break;
-            case BC_MOD: result.type = 0; result.int_val = (int)a % (int)b; break;
+            case BC_DIV:
+                if (b == 0.0) {
+                    /* The tree evaluator leaves its initialized integer-zero
+                     * result in place for division by zero. Keep bytecode
+                     * behavior consistent and avoid manufacturing a float. */
+                    result.type = 0;
+                    result.int_val = 0;
+                } else if (left.type == 0 && right.type == 0) {
+                    result.type = 0;
+                    result.int_val = (int)((int64_t)left.int_val / (int64_t)right.int_val);
+                } else {
+                    result.type = 1;
+                    result.float_val = a / b;
+                }
+                break;
+            case BC_MOD: {
+                int divisor = (int)b;
+                result.type = 0;
+                if (divisor == 0) {
+                    result.int_val = 0;
+                } else if ((int)left.int_val == INT_MIN && divisor == -1) {
+                    result.int_val = 0;
+                } else {
+                    result.int_val = (int)a % divisor;
+                }
+                break;
+            }
             case BC_EQ: result.type = 3; result.bool_val = a == b; break;
             case BC_NEQ: result.type = 3; result.bool_val = a != b; break;
             case BC_LT: result.type = 3; result.bool_val = a < b; break;
@@ -470,6 +522,15 @@ static void bc_compile_expr(BCCompiler* c, ASTNode* node) {
             break;
         }
         case NODE_CALL: {
+            /* Keep the language's variadic output builtins on the shared
+             * evaluator path; BC_CALL currently handles Goscript functions
+             * and native values, but not these interpreter builtins. */
+            if (bc_is_ident(node->call.callee) &&
+                (strcmp(node->call.callee->identifier.name, "print") == 0 ||
+                 strcmp(node->call.callee->identifier.name, "println") == 0)) {
+                bc_emit_eval_expr(c, node);
+                break;
+            }
             bc_compile_expr(c, node->call.callee);
             if (node->call.args) {
                 for (int i = 0; i < node->call.args->count; i++) {

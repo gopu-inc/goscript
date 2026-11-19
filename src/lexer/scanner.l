@@ -56,6 +56,7 @@ void yyerror(const char* msg);
 
 "async"                 { return TOKEN_ASYNC; }
 "with"                  { return TOKEN_WITH; }
+"whith"                 { return TOKEN_WITH; }
 "use"                   { return TOKEN_USE; }
 "await"                 { return TOKEN_AWAIT; }
 "spawn"                 { return TOKEN_SPAWN; }

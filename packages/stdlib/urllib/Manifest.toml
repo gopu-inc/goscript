@@ -1,0 +1,11 @@
+[metadata]
+name = "urllib"
+version = "0.1.0"
+release = "r0"
+arch = "x86_64"
+description = "Goscript standard library module: urllib"
+author = "Goscript contributors"
+main = "__self__.gjs"
+files = ["README.md", "__self__.gjs", "request.gjs", "server.gjs"]
+
+[dependencies]

@@ -40,6 +40,12 @@
     #define TLS __thread
 #endif
 
+#if defined(__ANDROID__) && !defined(_WIN32)
+    #define TLS_ALIGNMENT __attribute__((aligned(64)))
+#else
+    #define TLS_ALIGNMENT
+#endif
+
 typedef struct {
 #ifndef _WIN32
     sigjmp_buf rescue_point;
@@ -48,7 +54,7 @@ typedef struct {
     int        caught_signal;
 } FFISandboxState;
 
-static TLS FFISandboxState ffi_state = {
+static TLS FFISandboxState ffi_state TLS_ALIGNMENT = {
 #ifndef _WIN32
     .rescue_point  = {},
 #endif

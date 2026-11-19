@@ -52,10 +52,10 @@ golem help
 ### Installateur et releases GitHub
 
 `install.sh` et `update.sh` sont maintenus dans le même dépôt officiel.
-L'installateur choisit le paquet précompilé pour Linux/macOS, le télécharge
-depuis les GitHub Releases de `gopu-inc/goscript`, vérifie son SHA-256, puis
-installe à `/usr/local` par défaut. Choisissez un autre emplacement avec
-`PREFIX`:
+L'installateur choisit le paquet précompilé pour Linux/macOS (hors Termux),
+le télécharge depuis les GitHub Releases de `gopu-inc/goscript`, vérifie son
+SHA-256, puis installe à `/usr/local` par défaut. Choisissez un autre
+emplacement avec `PREFIX`:
 
 ```sh
 curl -fsSLO https://raw.githubusercontent.com/gopu-inc/goscript/refs/heads/main/install.sh
@@ -87,6 +87,19 @@ compile `gd` et exécute `make install`. Pour une version précise, définissez
 `GOSCRIPT_VERSION` sur le tag de release (par exemple `v1.0.0`). `update.sh`
 met à jour une installation existante via cet installateur; il ne change pas
 la source du projet.
+
+Sur Termux/Android, aucune archive GNU/Linux n'est utilisée : l'installateur
+installe les outils requis avec `pkg`, compile avec Clang pour Bionic et fixe
+l'alignement TLS ARM64 requis par son chargeur. Après avoir installé cette
+version de Golem, le runtime peut aussi être installé ou mis à jour avec :
+
+```sh
+golem install goscript
+golem install goscript v1.0.0
+```
+
+Cette forme réservée appelle l'installateur officiel en réutilisant le préfixe
+de l'installation courante; les autres noms restent des paquets du registre.
 
 Sur Windows, téléchargez l'archive `goscript-windows-x86_64.zip` de la GitHub
 Release, extrayez-la dans un dossier permanent et ajoutez son sous-dossier
@@ -198,5 +211,6 @@ l'utilisateur.
 `public` par défaut.
 
 Le lanceur `golem` utilise `#!/bin/env gd`. Il est installé dans
-`/usr/local/bin` par `make install`, avec les modules Goscript du répertoire
-lib/. L'ancien point d'entrée `gpm.gjs` reste un alias de compatibilité.
+`/usr/local/bin` par `make install`, avec l'installateur et les modules
+Goscript requis dans `share/goscript`. L'ancien point d'entrée `gpm.gjs` reste
+un alias de compatibilité.

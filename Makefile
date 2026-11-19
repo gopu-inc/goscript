@@ -163,6 +163,7 @@ install: $(TARGET)
 	install -m 644 golem-cli.gjs $(INSTALL_ROOT)/share/goscript/golem-cli.gjs
 	install -m 644 lib/golem/__self__.gjs $(INSTALL_ROOT)/share/goscript/golem/__self__.gjs
 	install -m 644 lib/__builtin__.gjs $(INSTALL_ROOT)/share/goscript/__builtin__.gjs
+	install -m 755 install.sh $(INSTALL_ROOT)/share/goscript/install.sh
 
 standard-packages: $(TARGET)
 	$(MAKE) -C packages/stdlib build

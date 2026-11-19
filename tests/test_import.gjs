@@ -1,6 +1,6 @@
 /*
  * tests/test_import.gjs — Tests du système d'imports
- * Exécution : ./gd tests/test_import.gjs
+ * Exécution : ./build/bin/gd tests/test_import.gjs
  *
  * Syntaxe d'import Goscript :
  *   import module          -> cherche module.gjs dans ./lib/, ./modules/...

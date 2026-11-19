@@ -1,7 +1,6 @@
-
-
 CC = gcc
-CFLAGS = -Wall -g -O0 \
+CFLAGS ?= -Wall -g -O0
+CFLAGS += \
 	-I./src \
 	-I./src/ast \
 	-I./src/interpreter \
@@ -10,13 +9,9 @@ CFLAGS = -Wall -g -O0 \
 	-I./src/hal \
 	-I./src/ffi
 
-LDFLAGS = -lm -ldl -lffi -lpthread -lz
-
-# Détection automatique de l'architecture
 UNAME_S := $(shell uname -s)
 UNAME_M := $(shell uname -m)
 
-# Pas de -march par défaut, on laisse gcc choisir
 ifeq ($(UNAME_S),Linux)
 	ifeq ($(UNAME_M),x86_64)
 		MARCH = -march=x86-64
@@ -30,8 +25,6 @@ ifeq ($(UNAME_S),Linux)
 		MARCH = -march=armv7-a
 	else ifeq ($(UNAME_M),armv8l)
 		MARCH = -march=armv8-a
-	else
-		MARCH =
 	endif
 else ifeq ($(UNAME_S),Darwin)
 	ifeq ($(UNAME_M),arm64)
@@ -39,21 +32,33 @@ else ifeq ($(UNAME_S),Darwin)
 	else
 		MARCH = -arch x86_64
 	endif
-else
-	MARCH =
 endif
 
-# Ajouter MARCH aux CFLAGS s'il est défini
 ifneq ($(MARCH),)
 	CFLAGS += $(MARCH)
 endif
 
-# Sources
-SCANNER_C = scanner.c
-PARSER_C = parser.c
-PARSER_H = parser.h
+ifneq ($(filter CYGWIN% MINGW% MSYS%,$(UNAME_S)),)
+	EXEEXT = .exe
+endif
 
-SOURCES = $(SCANNER_C) $(PARSER_C) \
+ifeq ($(UNAME_S),Darwin)
+	LDFLAGS = -lm -lffi -lpthread -lz
+else
+	LDFLAGS = -lm -ldl -lffi -lpthread -lz
+endif
+
+BUILD_DIR = build
+OBJ_DIR = $(BUILD_DIR)/obj
+GEN_DIR = $(BUILD_DIR)/generated
+BIN_DIR = $(BUILD_DIR)/bin
+SCANNER_C = $(GEN_DIR)/scanner.c
+PARSER_C = $(GEN_DIR)/parser.c
+PARSER_H = $(GEN_DIR)/parser.h
+TARGET = $(BIN_DIR)/gd$(EXEEXT)
+ALIASES = $(BIN_DIR)/gbc$(EXEEXT) $(BIN_DIR)/gld$(EXEEXT)
+
+SOURCES = \
 	src/ast/ast.c \
 	src/bytecode/bytecode.c \
 	src/gc/gc.c \
@@ -70,120 +75,105 @@ SOURCES = $(SCANNER_C) $(PARSER_C) \
 	src/interpreter/interpreter_net.c \
 	src/interpreter/interpreter_gpm.c
 
-OBJECTS = scanner.o parser.o ast.o bytecode.o \
-	gc.o tensor.o nn.o vm.o hal.o ffi_sandbox.o \
-	main.o \
-	interpreter_env.o interpreter_import.o \
-	interpreter_ffi.o interpreter_eval.o interpreter_net.o interpreter_gpm.o
+OBJECTS = \
+	$(patsubst %.c,$(OBJ_DIR)/%.o,$(SOURCES)) \
+	$(OBJ_DIR)/scanner.o \
+	$(OBJ_DIR)/parser.o
 
-TARGET = gd
 PREFIX ?= /usr/local
 DESTDIR ?=
 INSTALL_ROOT = $(DESTDIR)$(PREFIX)
 
-all: $(SCANNER_C) $(PARSER_C) $(TARGET) gbc gld
+CFLAGS += -I$(GEN_DIR)
 
-gbc: $(TARGET)
-	ln -sf $(TARGET) gbc
+.PHONY: all all-binaries binaries gd gbc gld gpm test clean install standard-packages publish-standard-packages debug
 
-gld: $(TARGET)
-	ln -sf $(TARGET) gld
+all: binaries
 
-# Scanner - avec suppression du warning de règle non matchée
-$(SCANNER_C): src/lexer/scanner.l
-	flex -o $(SCANNER_C) src/lexer/scanner.l 2>&1 | grep -v "warning, rule cannot be matched" || true
+all-binaries: binaries gpm
 
-# Parser - avec gestion des conflits (acceptable pour l'instant)
-$(PARSER_C) $(PARSER_H): src/parser/parser.y
-	bison -d -o $(PARSER_C) src/parser/parser.y
+binaries: $(TARGET) $(ALIASES)
 
-# AST
-ast.o: src/ast/ast.c src/ast/ast.h
-	$(CC) $(CFLAGS) -c src/ast/ast.c -o ast.o
+# Keep `make gd` compatible with source installers without writing a root binary.
+gd: $(TARGET)
 
-# Bytecode
-bytecode.o: src/bytecode/bytecode.c src/bytecode/bytecode.h src/interpreter/interpreter.h src/ast/ast.h
-	$(CC) $(CFLAGS) -c src/bytecode/bytecode.c -o bytecode.o
+gbc: $(BIN_DIR)/gbc$(EXEEXT)
 
-# GC tri-couleur
-gc.o: src/gc/gc.c src/gc/gc.h
-	$(CC) $(CFLAGS) -c src/gc/gc.c -o gc.o
+gld: $(BIN_DIR)/gld$(EXEEXT)
 
-tensor.o: src/tensor.c src/tensor.h src/interpreter/interpreter.h
-	$(CC) $(CFLAGS) -c src/tensor.c -o tensor.o
+gpm:
+	$(MAKE) -C gpm
 
-nn.o: src/nn.c src/nn.h src/tensor.h
-	$(CC) $(CFLAGS) -c src/nn.c -o nn.o
+$(GEN_DIR) $(OBJ_DIR) $(BIN_DIR):
+	mkdir -p $@
 
-# Stack VM + NaN-boxing
-vm.o: src/vm/vm.c src/vm/vm.h src/gc/gc.h src/ast/ast.h
-	$(CC) $(CFLAGS) -c src/vm/vm.c -o vm.o
+$(GEN_DIR)/parser.stamp: src/parser/parser.y | $(GEN_DIR)
+	bison -d -o $(PARSER_C) $<
+	touch $@
 
-# HAL multiplateforme
-hal.o: src/hal/hal.c src/hal/hal.h
-	$(CC) $(CFLAGS) -c src/hal/hal.c -o hal.o
+$(PARSER_C) $(PARSER_H): src/parser/parser.y | $(GEN_DIR)/parser.stamp
+	@test -f $@ || { echo "Missing generated parser file: $@" >&2; exit 1; }
 
-# FFI sandbox
-ffi_sandbox.o: src/ffi/ffi_sandbox.c src/ffi/ffi_sandbox.h
-	$(CC) $(CFLAGS) -c src/ffi/ffi_sandbox.c -o ffi_sandbox.o
+$(SCANNER_C): src/lexer/scanner.l | $(GEN_DIR)
+	flex -o $@ $<
 
-# Main
-main.o: src/main.c
-	$(CC) $(CFLAGS) -c src/main.c -o main.o
+$(OBJ_DIR)/%.o: %.c | $(OBJ_DIR)
+	mkdir -p $(@D)
+	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 
-# Interpreter
-interpreter_env.o: src/interpreter/interpreter_env.c src/interpreter/interpreter.h
-	$(CC) $(CFLAGS) -c src/interpreter/interpreter_env.c -o interpreter_env.o
+$(OBJ_DIR)/scanner.o: $(SCANNER_C) $(PARSER_H) | $(OBJ_DIR)
+	$(CC) $(CFLAGS) -MMD -MP -c $(SCANNER_C) -o $@
 
-interpreter_import.o: src/interpreter/interpreter_import.c src/interpreter/interpreter.h
-	$(CC) $(CFLAGS) -c src/interpreter/interpreter_import.c -o interpreter_import.o
+$(OBJ_DIR)/parser.o: $(PARSER_C) $(PARSER_H) | $(OBJ_DIR)
+	$(CC) $(CFLAGS) -MMD -MP -c $(PARSER_C) -o $@
 
-interpreter_ffi.o: src/interpreter/interpreter_ffi.c src/interpreter/interpreter.h
-	$(CC) $(CFLAGS) -c src/interpreter/interpreter_ffi.c -o interpreter_ffi.o
+$(TARGET): $(OBJECTS) | $(BIN_DIR)
+	$(CC) $(CFLAGS) $(OBJECTS) -o $@ $(LDFLAGS)
 
-interpreter_eval.o: src/interpreter/interpreter_eval.c src/interpreter/interpreter.h
-	$(CC) $(CFLAGS) -c src/interpreter/interpreter_eval.c -o interpreter_eval.o
+$(BIN_DIR)/gbc$(EXEEXT): $(TARGET) | $(BIN_DIR)
+	ln -sf $(notdir $(TARGET)) $@
 
-interpreter_net.o: src/interpreter/interpreter_net.c src/interpreter/interpreter.h
-	$(CC) $(CFLAGS) -c src/interpreter/interpreter_net.c -o interpreter_net.o
+$(BIN_DIR)/gld$(EXEEXT): $(TARGET) | $(BIN_DIR)
+	ln -sf $(notdir $(TARGET)) $@
 
-interpreter_gpm.o: src/interpreter/interpreter_gpm.c src/interpreter/interpreter.h
-	$(CC) $(CFLAGS) -c src/interpreter/interpreter_gpm.c -o interpreter_gpm.o
-
-# Scanner et Parser objects
-scanner.o: $(SCANNER_C) $(PARSER_H)
-	$(CC) $(CFLAGS) -c $(SCANNER_C) -o scanner.o
-
-parser.o: $(PARSER_C) $(PARSER_H)
-	$(CC) $(CFLAGS) -c $(PARSER_C) -o parser.o
-
-# Link
-$(TARGET): $(OBJECTS)
-	$(CC) $(CFLAGS) $(OBJECTS) -o $(TARGET) $(LDFLAGS)
+test: $(TARGET)
+	GOSCRIPT_BIN="$(TARGET)" SKIP_BUILD=1 bash tests/run_tests.sh
 
 clean:
-	rm -f $(SCANNER_C) $(PARSER_C) $(PARSER_H)
-	rm -f $(OBJECTS)
-	rm -f $(TARGET)
-	rm -f gbc
-	rm -f gld
+	rm -rf $(OBJ_DIR) $(GEN_DIR)
+	rm -f $(TARGET) $(ALIASES)
+	rmdir $(BIN_DIR) 2>/dev/null || true
+	rm -f ast.o bytecode.o gc.o tensor.o nn.o vm.o hal.o ffi_sandbox.o \
+		main.o interpreter_env.o interpreter_import.o interpreter_ffi.o \
+		interpreter_eval.o interpreter_net.o interpreter_gpm.o scanner.o parser.o
+	$(MAKE) -C gpm clean
 
-install:
-	install -d $(INSTALL_ROOT)/bin $(INSTALL_ROOT)/lib/goscript
-	install -m 755 $(TARGET) $(INSTALL_ROOT)/bin/$(TARGET)
-	install -m 755 golem $(INSTALL_ROOT)/bin/golem
-	cp -a lib/. $(INSTALL_ROOT)/lib/goscript/
-	cp -a modules/. $(INSTALL_ROOT)/lib/goscript/
-	install -m 644 lib/__builtin__.gjs $(INSTALL_ROOT)/lib/goscript/__builtin__.gjs
+install: $(TARGET)
+	install -d $(INSTALL_ROOT)/bin $(INSTALL_ROOT)/share/goscript/golem
+	install -m 755 $(TARGET) $(INSTALL_ROOT)/bin/gd$(EXEEXT)
+	install -m 755 $(BIN_DIR)/gbc$(EXEEXT) $(INSTALL_ROOT)/bin/gbc$(EXEEXT)
+	install -m 755 $(BIN_DIR)/gld$(EXEEXT) $(INSTALL_ROOT)/bin/gld$(EXEEXT)
+	install -m 755 golem-launcher.sh $(INSTALL_ROOT)/bin/golem
+	install -m 644 golem-cli.gjs $(INSTALL_ROOT)/share/goscript/golem-cli.gjs
+	install -m 644 lib/golem/__self__.gjs $(INSTALL_ROOT)/share/goscript/golem/__self__.gjs
+	install -m 644 lib/__builtin__.gjs $(INSTALL_ROOT)/share/goscript/__builtin__.gjs
 
-standard-packages:
+standard-packages: $(TARGET)
 	$(MAKE) -C packages/stdlib build
+	cd packages/base && PATH="$(CURDIR)/$(BIN_DIR):$$PATH" ../../golem build
 
-# Afficher l'architecture détectée
+publish-standard-packages: standard-packages
+	@set -e; \
+	for package in b64 config crypto db error fmt fs gcsv gsql http httplib io json math net nn os random s256 sqlite std strings tar tensor time ui urllib xzip; do \
+		printf 'Publishing standard package %s\n' "$$package"; \
+		(cd "packages/stdlib/$$package" && PATH="$(CURDIR)/$(BIN_DIR):$$PATH" "$(CURDIR)/golem" publish); \
+	done
+	cd packages/base && PATH="$(CURDIR)/$(BIN_DIR):$$PATH" ../../golem publish
+
 debug:
 	@echo "OS: $(UNAME_S)"
 	@echo "Arch: $(UNAME_M)"
 	@echo "MARCH: $(MARCH)"
 	@echo "CFLAGS: $(CFLAGS)"
 
-.PHONY: all clean install standard-packages debug gbc gld
+-include $(OBJECTS:.o=.d)

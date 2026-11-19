@@ -4,6 +4,31 @@ Golem est le gestionnaire de paquets de Goscript. Le lanceur `golem` et le
 paquet `lib/golem/__self__.gjs` sont écrits en Goscript. `gd` exécute le
 lanceur; les primitives système de bas niveau sont fournies par l'interpréteur.
 
+## Installation et bibliothèque standard
+
+`make standard-packages` construit toutes les archives `.tar.bool` standard
+ainsi que le méta-package `base`. Une fois ces paquets publiés, un projet peut
+installer les bibliothèques standard avec :
+
+```sh
+golem install base
+```
+
+Pour publier l'ensemble dans le registre après `golem login`, lancer
+`make publish-standard-packages`. La cible publie d'abord les modules standards
+et `base` en dernier, car `base` dépend des versions standard listées dans son
+manifeste.
+
+`make install` installe `gd`, le lanceur Golem, le builtin Goscript et le code
+interne du gestionnaire sous `share/goscript`. Il ne crée pas de répertoires
+globaux `lib/` ou `modules/`; Golem installe les paquets standard dans le
+`modules/` du projet courant.
+
+`install.sh` télécharge uniquement l'archive binaire de la release GitHub qui
+correspond au système, vérifie son SHA-256 et installe ces commandes. Il ne
+clone ni ne télécharge le dépôt source. `update.sh` utilise l'installateur servi
+à `https://gsql-badge.onrender.com/install.sh`.
+
 ## Commandes
 
 ```sh

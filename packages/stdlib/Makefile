@@ -62,13 +62,13 @@ build: sync
 		mkdir -p "$$package/modules"; \
 		cp "$(ROOT)/lib/__builtin__.gjs" "$$package/modules/__builtin__.gjs"; \
 		printf 'Building standard package %s\n' "$$package"; \
-		(cd "$$package" && PATH="$(ROOT):$$PATH" "$(ROOT)/golem" build); \
+		(cd "$$package" && PATH="$(ROOT)/build/bin:$$PATH" "$(ROOT)/golem" build); \
 		rm -f "$$package/modules/__builtin__.gjs"; \
 		rmdir "$$package/modules" 2>/dev/null || true; \
 	done; \
 	mkdir -p "$(ROOT)/lib/openv/modules"; \
 	cp "$(ROOT)/lib/__builtin__.gjs" "$(ROOT)/lib/openv/modules/__builtin__.gjs"; \
 	printf 'Building add-on package openv\n'; \
-	(cd "$(ROOT)/lib/openv" && PATH="$(ROOT):$$PATH" "$(ROOT)/golem" build); \
+	(cd "$(ROOT)/lib/openv" && PATH="$(ROOT)/build/bin:$$PATH" "$(ROOT)/golem" build); \
 	rm -f "$(ROOT)/lib/openv/modules/__builtin__.gjs"; \
 	rmdir "$(ROOT)/lib/openv/modules" 2>/dev/null || true

@@ -1,6 +1,6 @@
 /*
  * tests/test_websocket.gjs — Tests du module net.websocket
- * Exécution : ./gd tests/test_websocket.gjs
+ * Exécution : ./build/bin/gd tests/test_websocket.gjs
  */
 
 import net.socket

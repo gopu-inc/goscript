@@ -1,6 +1,6 @@
 /*
  * tests/test_ffi.gjs — Tests des fonctions FFI (C natif)
- * Exécution : ./gd tests/test_ffi.gjs
+ * Exécution : ./build/bin/gd tests/test_ffi.gjs
  */
 
 print("=== Tests FFI (fonctions C natives) ===")

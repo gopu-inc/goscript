@@ -261,7 +261,9 @@ char* resolve_module_path(char* current_file, char* import_path) {
     module_name_to_path(import_path, module_path);
 
     // Chemins de recherche standards
+    const char* custom_share = getenv("GOSCRIPT_SHARE_DIR");
     const char* search_paths[] = {
+        custom_share,
         "./modules",
         "./lib",
         "../lib",
@@ -280,6 +282,9 @@ char* resolve_module_path(char* current_file, char* import_path) {
         "/usr/local/lib/goscript/std",
         "/usr/local/lib/goscript/net",
         "/usr/local/lib/goscript/db",
+        "/usr/local/share/goscript",
+        "/usr/local/share/goscript/std",
+        "/usr/share/goscript",
         "/usr/lib/goscript",
         ".",
         "..",
@@ -293,7 +298,8 @@ char* resolve_module_path(char* current_file, char* import_path) {
     // Cas spécial: __builtin__
     if (strcmp(import_path, "__builtin__") == 0) {
         /* Prefer the source tree's builtins; the installed copy may be stale. */
-        for (int i = 0; search_paths[i]; i++) {
+        for (size_t i = 0; i < sizeof(search_paths) / sizeof(search_paths[0]); i++) {
+            if (!search_paths[i] || !search_paths[i][0]) continue;
             char with_ext[PATH_MAX];
             snprintf(with_ext, PATH_MAX, "%s/__builtin__.gjs", search_paths[i]);
             if (access(with_ext, F_OK) == 0) {
@@ -306,6 +312,14 @@ char* resolve_module_path(char* current_file, char* import_path) {
 
         char special_path[PATH_MAX];
         snprintf(special_path, PATH_MAX, "/usr/local/lib/goscript/__builtin__.gjs");
+        if (access(special_path, F_OK) == 0) {
+            char real_path[PATH_MAX];
+            if (realpath(special_path, real_path)) {
+                return strdup(real_path);
+            }
+        }
+
+        snprintf(special_path, PATH_MAX, "/usr/local/share/goscript/__builtin__.gjs");
         if (access(special_path, F_OK) == 0) {
             char real_path[PATH_MAX];
             if (realpath(special_path, real_path)) {
@@ -402,7 +416,8 @@ char* resolve_module_path(char* current_file, char* import_path) {
     }
     
     // 3. Recherche dans les chemins standards
-    for (int i = 0; search_paths[i]; i++) {
+    for (size_t i = 0; i < sizeof(search_paths) / sizeof(search_paths[0]); i++) {
+        if (!search_paths[i] || !search_paths[i][0]) continue;
         char with_ext[PATH_MAX];
         
         // Fichier .gjs direct

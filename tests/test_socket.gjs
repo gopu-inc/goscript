@@ -1,6 +1,6 @@
 /*
  * tests/test_socket.gjs — Tests du module net.socket
- * Exécution : ./gd tests/test_socket.gjs
+ * Exécution : ./build/bin/gd tests/test_socket.gjs
  */
 
 import net.socket

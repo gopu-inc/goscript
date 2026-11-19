@@ -13,16 +13,11 @@ YLW="\033[0;33m"
 BLU="\033[0;34m"
 RST="\033[0m"
 
-GD="./gd"
+GD="${GOSCRIPT_BIN:-./build/bin/gd}"
 TESTS_DIR="./tests"
 PASS=0
 FAIL=0
 SKIP=0
-
-if [ ! -x "$GD" ]; then
-    echo -e "${RED}[ERREUR]${RST} Binaire '$GD' introuvable. Lancez 'make' d'abord."
-    exit 1
-fi
 
 echo ""
 echo -e "${BLU}╔══════════════════════════════════════════╗${RST}"
@@ -85,10 +80,17 @@ run_test() {
 # Compilation préalable
 # ──────────────────────────────────────────────
 echo -e "${BLU}► Compilation...${RST}"
-if make -s 2>&1; then
-    echo -e "  ${GRN}✓ Compilation OK${RST}"
-else
-    echo -e "  ${RED}✗ Compilation ÉCHOUÉE${RST}"
+if [ "${SKIP_BUILD:-0}" != "1" ]; then
+    if make -s; then
+        echo -e "  ${GRN}✓ Compilation OK${RST}"
+    else
+        echo -e "  ${RED}✗ Compilation ÉCHOUÉE${RST}"
+        exit 1
+    fi
+fi
+
+if [ ! -x "$GD" ]; then
+    echo -e "${RED}[ERREUR]${RST} Binaire '$GD' introuvable. Lancez 'make' d'abord."
     exit 1
 fi
 echo ""

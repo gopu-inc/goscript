@@ -67,5 +67,8 @@
   },
   "devDependencies": {
     "jsonlint": "^1.6.3"
+  },
+  "dependencies": {
+    "pnpm": "^12.21.0"
   }
 }

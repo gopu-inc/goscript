@@ -1,6 +1,7 @@
 # GPM - Goscript Package Manager
 *.o
 *.obj
+*.d
 *.exe
 *.out
 *.app
@@ -19,6 +20,9 @@ gpm.exe
 _cache/
 *.cache
 *.log
+.goscript_exec_*.gjs
+.goscript_gbc_*.c
+*.native.gbc
 .idea/
 .vscode/
 *.swp
@@ -27,6 +31,14 @@ _cache/
 .DS_Store
 Thumbs.db
 test_modules/
+dist/
+/build/bin/
+/build/generated/
+/build/gpm/
+/build/obj/
+/gpm/bin/
+/gpm/build/
+node_modules/
 tmp/
 temp/
 *.tmp

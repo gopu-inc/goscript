@@ -4,8 +4,8 @@ CFLAGS = -Wall -Wextra -O2 -I./include
 LDFLAGS = -lcurl -ljansson -lssl -lcrypto
 
 SRC_DIR = src
-BUILD_DIR = build
-BIN_DIR = bin
+BUILD_DIR = ../build/gpm/obj
+BIN_DIR = ../build/bin
 TARGET = $(BIN_DIR)/gpm
 
 SOURCES = $(SRC_DIR)/main.c \
@@ -61,7 +61,8 @@ debug: CFLAGS += -g -O0 -DDEBUG
 debug: all
 
 clean:
-	@rm -rf $(BUILD_DIR) $(BIN_DIR)
+	@rm -rf $(BUILD_DIR)
+	@rm -f $(TARGET)
 	@echo "✅ Nettoyé"
 
 -include $(DEPS)

@@ -57,10 +57,15 @@ Construire depuis la source :
 ```bash
 # à la racine du dépôt
 make
-# binaire produit: ./gd
+# binaire produit: ./build/bin/gd
 # optionnel: installer
 sudo make install
 ```
+
+Les objets C et les fichiers Flex/Bison générés sont rangés dans `build/obj/`
+et `build/generated/`. Les exécutables Goscript (`gd`, `gbc`, `gld`) sont dans
+`build/bin/`. Le gestionnaire GPM historique, s'il est nécessaire, se construit
+avec `make gpm` et place également son exécutable dans `build/bin/`.
 
 Alternative (script):
 ```bash
@@ -77,13 +82,13 @@ Remarques:
 
 Exécuter un script :
 ```bash
-./gd exemples/hello.gjs
+./build/bin/gd exemples/hello.gjs
 ```
 
 Options courantes (extrait du binaire):
 ```text
-./gd --version
-./gd <script.gjs> [args...]
+./build/bin/gd --version
+./build/bin/gd <script.gjs> [args...]
 ```
 
 Exécuter une commande shell depuis Goscript (exemples) :
@@ -113,7 +118,7 @@ Le dossier `exemples/` contient une grande collection de scripts de démonstrati
 
 Lancer un exemple spécifique :
 ```bash
-./gd exemples/test_http.gjs
+./build/bin/gd exemples/test_http.gjs
 ```
 
 ---
@@ -151,7 +156,7 @@ Rappels utiles pour contributeurs:
 
 Tests locaux (si présents):
 ```bash
-if [ -d tests ]; then for t in tests/*.gjs; do ./gd "$t"; done; fi
+if [ -d tests ]; then for t in tests/*.gjs; do ./build/bin/gd "$t"; done; fi
 ```
 
 Linter / validation grammar (VSCode ext):
@@ -195,8 +200,8 @@ Quick build (Linux/macOS):
 # prerequisites: flex bison gcc make libffi-dev libreadline-dev
 make
 # run
-./gd --version
-./gd examples/hello.gjs
+./build/bin/gd --version
+./build/bin/gd examples/hello.gjs
 ```
 
 Features summary:

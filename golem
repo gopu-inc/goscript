@@ -1,5 +1,5 @@
 #!/bin/env gd
-import .lib.golem as golem
+import golem
 
 fn main() {
     ret golem::run(ARGV)

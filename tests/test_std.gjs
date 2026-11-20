@@ -37,6 +37,18 @@ if total == 150 {
     print("    FAIL somme incorrecte = " + str(total))
 }
 
+// Test 4 : Valeurs capturées dans un tableau retourné par une fonction
+print("[4] Capture des valeurs dans les tableaux ...")
+fn make_array(value: string): array {
+    ret [value, [value]]
+}
+lt captured = make_array("curse")
+if captured[0] == "curse" && captured[1][0] == "curse" {
+    print("    OK  les valeurs locales restent accessibles")
+} else {
+    print("    FAIL valeur locale perdue dans un tableau")
+}
+
 // Test 4 : Dictionnaires — syntaxe Goscript : dict { "key" => val }
 print("[4] Dictionnaires ...")
 lt d = dict { "nom" => "Alice", "age" => 30 }

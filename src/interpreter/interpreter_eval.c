@@ -28,6 +28,42 @@ typedef struct {
 
 static ImplEntry* impl_table = NULL;
 static int impl_count = 0;
+
+static ASTNode* resolve_array_element_node(ASTNode* access, Environment* env) {
+    if (!access || access->type != NODE_ARRAY_ACCESS) return NULL;
+    ASTNode* base = access->array_access.array;
+    Value idx = evaluate_expr(access->array_access.index, env);
+    if (idx.type != 0) return NULL;
+    if (base && base->type == NODE_ARRAY_ACCESS) {
+        ASTNode* parent = resolve_array_element_node(base, env);
+        if (!parent || parent->type != NODE_ARRAY) return NULL;
+        if (idx.int_val < 0 || idx.int_val >= parent->array.elements->count) return NULL;
+        return parent->array.elements->nodes[idx.int_val];
+    }
+    Value container = evaluate_expr(base, env);
+    if (container.type != 8 || idx.int_val < 0 || idx.int_val >= container.array_val.count) return NULL;
+    return container.array_val.elements->nodes[idx.int_val];
+}
+
+static int set_array_element_node(ASTNode* element, Value right_val) {
+    if (!element) return 0;
+    if (right_val.type == 0) element->type = NODE_NIL;
+    else if (right_val.type == 2) {
+        element->type = NODE_STRING;
+        free(element->string_val.value);
+        element->string_val.value = right_val.string_val ? strdup(right_val.string_val) : strdup("");
+    } else if (right_val.type == 3) {
+        element->type = NODE_BOOL;
+        element->bool_val.value = right_val.bool_val;
+    } else if (right_val.type == 1) {
+        element->type = NODE_FLOAT;
+        element->float_val.value = right_val.float_val;
+    } else {
+        element->type = NODE_NUMBER;
+        element->number.value = right_val.int_val;
+    }
+    return 1;
+}
 static int impl_capacity = 0;
 
 /* Valeur de retour de la dernière instruction `ret` rencontrée.
@@ -1380,6 +1416,17 @@ if (node->binary.op == OP_ASSIGN) {
         Value container = evaluate_expr(array_access->array_access.array, env);
         Value idx = evaluate_expr(array_access->array_access.index, env);
         Value right_val = evaluate_expr(node->binary.right, env);
+
+        if (array_access->array_access.array &&
+            array_access->array_access.array->type == NODE_ARRAY_ACCESS) {
+            ASTNode* parent = resolve_array_element_node(array_access->array_access.array, env);
+            if (parent && parent->type == NODE_ARRAY &&
+                idx.type == 0 && idx.int_val >= 0 &&
+                idx.int_val < parent->array.elements->count) {
+                set_array_element_node(parent->array.elements->nodes[idx.int_val], right_val);
+                result = right_val;
+            }
+        }
         
         // Cas 2a: Tableau
         if (container.type == 8 && idx.type == 0) {
@@ -1999,8 +2046,14 @@ case NODE_DICT_ACCESS: {
 case NODE_ARRAY: {
     Value arr_val;
     arr_val.type = 8; // Type array
-    arr_val.array_val.elements = node->array.elements;
-    arr_val.array_val.count = node->array.elements ? node->array.elements->count : 0;
+    arr_val.array_val.elements = create_node_list();
+    if (node->array.elements) {
+        for (int i = 0; i < node->array.elements->count; i++) {
+            add_to_node_list(arr_val.array_val.elements,
+                             freeze_array_element(node->array.elements->nodes[i], env));
+        }
+    }
+    arr_val.array_val.count = arr_val.array_val.elements->count;
     return arr_val;
 }
 case NODE_SYSF:

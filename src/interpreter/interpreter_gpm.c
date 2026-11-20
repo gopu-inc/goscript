@@ -20,6 +20,7 @@
 #include <string.h>
 #include <strings.h>
 #include <sys/ioctl.h>
+#include <poll.h>
 #include <zlib.h>
 
 #define GPM_RESPONSE_LIMIT (16u * 1024u * 1024u)
@@ -173,6 +174,78 @@ static char *gpm_json_quote(const char *s){const unsigned char*p=(const unsigned
 static char *gpm_url_encode(const char *input){static const char hex[]="0123456789ABCDEF";const unsigned char*p=(const unsigned char*)nz(input);size_t len=strlen((const char*)p);if(len>(SIZE_MAX-1)/3)return strdup("");char*out=malloc(len*3+1);if(!out)return strdup("");size_t n=0;for(;*p;p++){if(isalnum(*p)||*p=='-'||*p=='_'||*p=='.'||*p=='~')out[n++]=(char)*p;else{out[n++]='%';out[n++]=hex[*p>>4];out[n++]=hex[*p&15];}}out[n]=0;return out;}
 static char *gpm_tui_repeat(const char *text,int count){text=nz(text);if(count<0||count>4096)return strdup("");size_t step=strlen(text);if(step==0||(size_t)count>(SIZE_MAX-1)/step)return strdup("");size_t len=step*(size_t)count;char*out=malloc(len+1);if(!out)return strdup("");for(size_t i=0;i<(size_t)count;i++)memcpy(out+i*step,text,step);out[len]=0;return out;}
 static int gpm_tui_width(void){struct winsize ws={0};if(ioctl(STDOUT_FILENO,TIOCGWINSZ,&ws)==0&&ws.ws_col>0)return (int)ws.ws_col;const char*columns=getenv("COLUMNS");if(columns){char*end=NULL;long value=strtol(columns,&end,10);if(end!=columns&&value>0&&value<=4096)return (int)value;}return 80;}
+static struct termios curse_saved_termios;
+static int curse_raw_mode_active;
+static void curse_restore_terminal_at_exit(void){
+    if(!curse_raw_mode_active)return;
+    static const char restore_screen[]="\033[0m\033[?25h\033[?1049l";
+    (void)write(STDOUT_FILENO,restore_screen,sizeof(restore_screen)-1);
+    if(tcsetattr(STDIN_FILENO,TCSAFLUSH,&curse_saved_termios)!=0){
+        fprintf(stderr,"curse: failed to restore terminal mode: %s\n",strerror(errno));
+        return;
+    }
+    curse_raw_mode_active=0;
+}
+static int curse_terminal_raw(int enabled){
+    if(enabled){
+        if(curse_raw_mode_active)return 1;
+        if(!isatty(STDIN_FILENO)||!isatty(STDOUT_FILENO))return 0;
+        struct termios current;
+        if(tcgetattr(STDIN_FILENO,&current)!=0)return 0;
+        curse_saved_termios=current;
+        current.c_iflag&=(tcflag_t)~(BRKINT|ICRNL|INPCK|ISTRIP|IXON);
+        current.c_cflag|=CS8;
+        current.c_lflag&=(tcflag_t)~(ECHO|ICANON|IEXTEN|ISIG);
+        current.c_cc[VMIN]=1;
+        current.c_cc[VTIME]=0;
+        if(tcsetattr(STDIN_FILENO,TCSAFLUSH,&current)!=0)return 0;
+        curse_raw_mode_active=1;
+        atexit(curse_restore_terminal_at_exit);
+        return 1;
+    }
+    if(!curse_raw_mode_active)return 1;
+    if(tcsetattr(STDIN_FILENO,TCSAFLUSH,&curse_saved_termios)!=0){
+        fprintf(stderr,"curse: failed to restore terminal mode: %s\n",strerror(errno));
+        return 0;
+    }
+    curse_raw_mode_active=0;
+    return 1;
+}
+static int curse_terminal_read_byte(int timeout_ms){
+    if(timeout_ms < -1)return -1;
+    struct pollfd descriptor={STDIN_FILENO,POLLIN,0};
+    int ready;
+    do{ready=poll(&descriptor,1,timeout_ms);}while(ready<0&&errno==EINTR);
+    if(ready==0)return -1;
+    if(ready<0||(descriptor.revents&(POLLERR|POLLNVAL)))return -2;
+    if(!(descriptor.revents&POLLIN))return (descriptor.revents&POLLHUP)?-2:-1;
+    unsigned char byte;
+    ssize_t count;
+    do{count=read(STDIN_FILENO,&byte,1);}while(count<0&&errno==EINTR);
+    return count==1?(int)byte:-2;
+}
+static int curse_terminal_dimension(int rows){
+    struct winsize size={0};
+    if(ioctl(STDOUT_FILENO,TIOCGWINSZ,&size)==0){
+        int value=rows?(int)size.ws_row:(int)size.ws_col;
+        if(value>0)return value;
+    }
+    const char*name=rows?"LINES":"COLUMNS";
+    const char*value=getenv(name);
+    if(value){
+        char*end=NULL;
+        long parsed=strtol(value,&end,10);
+        if(end!=value&&parsed>0&&parsed<=4096)return (int)parsed;
+    }
+    return rows?24:80;
+}
+static int curse_terminal_width(void){return curse_terminal_dimension(0);}
+static int curse_terminal_height(void){return curse_terminal_dimension(1);}
+static int curse_terminal_flush(void){
+    if(fflush(stdout)==0)return 1;
+    fprintf(stderr,"curse: failed to flush terminal output: %s\n",strerror(errno));
+    return 0;
+}
 static char *gpm_tui_rgb(int red,int green,int blue,const char *text){if(red<0||red>255||green<0||green>255||blue<0||blue>255)return strdup(nz(text));char prefix[32];snprintf(prefix,sizeof(prefix),"\033[38;2;%d;%d;%dm",red,green,blue);size_t n=strlen(prefix)+strlen(nz(text))+5;char*out=malloc(n);if(!out)return strdup(nz(text));snprintf(out,n,"%s%s\033[0m",prefix,nz(text));return out;}
 static int gpm_tui_color_enabled(int unused){(void)unused;const char*no_color=getenv("NO_COLOR");const char*term=getenv("TERM");return !no_color&&(!term||strcmp(term,"dumb"))&&isatty(STDOUT_FILENO);}
 static char *gpm_tui_bg_rgb(int red,int green,int blue,const char *text){if(red<0||red>255||green<0||green>255||blue<0||blue>255)return strdup(nz(text));char prefix[32];snprintf(prefix,sizeof(prefix),"\033[48;2;%d;%d;%dm",red,green,blue);size_t n=strlen(prefix)+strlen(nz(text))+5;char*out=malloc(n);if(!out)return strdup(nz(text));snprintf(out,n,"%s%s\033[0m",prefix,nz(text));return out;}
@@ -324,6 +397,7 @@ void register_gpm_functions(Environment *env){
  R("gpm_url_encode",gpm_url_encode,"string",1,"string");
  R("gpm_tui_repeat",gpm_tui_repeat,"string",2,"string","int");R("gpm_tui_width",gpm_tui_width,"int",0);R("gpm_tui_rgb",gpm_tui_rgb,"string",4,"int","int","int","string");R("gpm_tui_bg_rgb",gpm_tui_bg_rgb,"string",4,"int","int","int","string");R("gpm_tui_truncate",gpm_tui_truncate,"string",2,"string","int");R("gpm_tui_color_enabled",gpm_tui_color_enabled,"int",1,"int");
  R("gpm_tui_number",gpm_tui_number,"string",1,"int");
+ R("curse_host_raw",curse_terminal_raw,"int",1,"int");R("curse_host_read_byte",curse_terminal_read_byte,"int",1,"int");R("curse_host_width",curse_terminal_width,"int",0);R("curse_host_height",curse_terminal_height,"int",0);R("curse_host_flush",curse_terminal_flush,"int",0);
  R("gpm_write_secret",gpm_write_secret,"int",2,"string","string");
  R("gs_fs_read",gpm_read_file,"string",1,"string");R("gs_fs_write",gpm_write_file,"int",2,"string","string");R("gs_fs_append",gpm_append_file,"int",2,"string","string");
  R("gs_fs_exists",gpm_path_exists,"int",1,"string");R("gs_fs_size",gpm_file_size,"int",1,"string");R("gs_fs_mkdir",gpm_mkdir,"int",1,"string");R("gs_fs_remove",gpm_file_remove,"int",1,"string");

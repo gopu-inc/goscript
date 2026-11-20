@@ -16,7 +16,7 @@ typedef struct Value {
     int type;
     union {
         void* ptr_val;
-        int int_val;
+        long long int_val;
         double float_val;
         char* string_val;
         int bool_val;

@@ -51,7 +51,7 @@ complètes sont dans [`docs/golem.md`](docs/golem.md).
 Prérequis (exemples pour Debian/Ubuntu) :
 ```bash
 sudo apt-get update
-sudo apt-get install -y build-essential flex bison libffi-dev libreadline-dev make gcc
+sudo apt-get install -y build-essential flex bison libffi-dev zlib1g-dev libreadline-dev make gcc
 ```
 macOS (Homebrew) :
 ```bash

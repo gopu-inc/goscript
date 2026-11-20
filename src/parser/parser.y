@@ -35,7 +35,7 @@ static ASTNode* append_trailing_block(ASTNode* call, ASTNodeList* body) {
 %}
 
 %union {
-    int number;
+    long long number;
     double float_val;
     char* string;
     struct ASTNode* node;

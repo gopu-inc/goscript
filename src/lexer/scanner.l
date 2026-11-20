@@ -136,7 +136,7 @@ void yyerror(const char* msg);
  /* ============================================ */
 
 [0-9]+                  {
-    yylval.number = atoi(yytext);
+    yylval.number = strtoll(yytext, NULL, 10);
     return TOKEN_NUMBER;
 }
 
@@ -146,17 +146,17 @@ void yyerror(const char* msg);
 }
 
 0x[0-9a-fA-F]+          {
-    yylval.number = strtol(yytext, NULL, 16);
+    yylval.number = strtoll(yytext, NULL, 16);
     return TOKEN_NUMBER;
 }
 
 0[0-7]+                 {
-    yylval.number = strtol(yytext, NULL, 8);
+    yylval.number = strtoll(yytext, NULL, 8);
     return TOKEN_NUMBER;
 }
 
 0b[01]+                 {
-    yylval.number = strtol(yytext + 2, NULL, 2);
+    yylval.number = strtoll(yytext + 2, NULL, 2);
     return TOKEN_NUMBER;
 }
 

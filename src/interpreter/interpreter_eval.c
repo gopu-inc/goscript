@@ -168,6 +168,18 @@ typedef struct {
 
 static ExceptionContext* current_exception = NULL;
 
+/* Erreur d'exécution : levée comme exception (attrapable par try/catch),
+ * ou message + exit(1) si aucun try n'est actif. */
+static void runtime_throw(const char* msg) {
+    if (current_exception) {
+        current_exception->is_thrown = 1;
+        current_exception->error = (Value){.type = 2, .string_val = strdup(msg)};
+        longjmp(current_exception->env, 1);
+    }
+    fprintf(stderr, "Runtime error: %s\n", msg);
+    exit(1);
+}
+
 // Créer une promesse pour une commande shell
 Promise* create_promise(char* command) {
     Promise* p = malloc(sizeof(Promise));
@@ -570,7 +582,7 @@ Value call_putchar(Value* args, int arg_count) {
 
 void print_value(Value val, int newline) {
     switch (val.type) {
-        case 0: printf("%d", val.int_val); break;
+        case 0: printf("%lld", val.int_val); break;
         case 1: printf("%f", val.float_val); break;
         case 2: printf("%s", val.string_val); break;
         case 3: printf("%s", val.bool_val ? "true" : "false"); break;
@@ -1565,6 +1577,19 @@ if (node->binary.op == OP_ASSIGN) {
     // Opérations binaires standard
     Value left = evaluate_expr(node->binary.left, env);
     Value right = evaluate_expr(node->binary.right, env);
+
+    /* Promotion int -> float quand les deux côtés sont numériques mixtes */
+    if ((left.type == 0 && right.type == 1) || (left.type == 1 && right.type == 0)) {
+        switch (node->binary.op) {
+            case OP_ADD: case OP_SUB: case OP_MUL: case OP_DIV:
+            case OP_LT: case OP_GT: case OP_LTE: case OP_GTE:
+            case OP_EQ: case OP_NEQ:
+                if (left.type == 0) { left.float_val = (double)left.int_val; left.type = 1; }
+                else { right.float_val = (double)right.int_val; right.type = 1; }
+                break;
+            default: break;
+        }
+    }
     
     switch (node->binary.op) {
         case OP_ADD:
@@ -1583,7 +1608,7 @@ if (node->binary.op == OP_ASSIGN) {
                 int left_alloc = 0, right_alloc = 0;
                 
                 // Conversion de left
-                if (left.type == 0) { sprintf(buf1, "%d", left.int_val); left_str = buf1; }
+                if (left.type == 0) { sprintf(buf1, "%lld", left.int_val); left_str = buf1; }
                 else if (left.type == 1) { sprintf(buf1, "%f", left.float_val); left_str = buf1; }
                 else if (left.type == 2) left_str = left.string_val;
                 else if (left.type == 3) left_str = left.bool_val ? "true" : "false";
@@ -1594,7 +1619,7 @@ if (node->binary.op == OP_ASSIGN) {
                     for (int i = 0; i < left.array_val.count; i++) {
                         if (i > 0) ptr += sprintf(ptr, ", ");
                         Value elem = evaluate_expr(left.array_val.elements->nodes[i], env);
-                        if (elem.type == 0) ptr += sprintf(ptr, "%d", elem.int_val);
+                        if (elem.type == 0) ptr += sprintf(ptr, "%lld", elem.int_val);
                         else if (elem.type == 1) ptr += sprintf(ptr, "%f", elem.float_val);
                         else if (elem.type == 2) ptr += sprintf(ptr, "%s", elem.string_val);
                         else if (elem.type == 3) ptr += sprintf(ptr, "%s", elem.bool_val ? "true" : "false");
@@ -1613,12 +1638,12 @@ if (node->binary.op == OP_ASSIGN) {
                         if (i > 0) ptr += sprintf(ptr, ", ");
                         Value* k = left.dict_val.entries[i].key;
                         Value* v = left.dict_val.entries[i].value;
-                        if (k->type == 0) ptr += sprintf(ptr, "%d: ", k->int_val);
+                        if (k->type == 0) ptr += sprintf(ptr, "%lld: ", k->int_val);
                         else if (k->type == 1) ptr += sprintf(ptr, "%f: ", k->float_val);
                         else if (k->type == 2) ptr += sprintf(ptr, "%s: ", k->string_val);
                         else if (k->type == 3) ptr += sprintf(ptr, "%s: ", k->bool_val ? "true" : "false");
                         else ptr += sprintf(ptr, "?: ");
-                        if (v->type == 0) ptr += sprintf(ptr, "%d", v->int_val);
+                        if (v->type == 0) ptr += sprintf(ptr, "%lld", v->int_val);
                         else if (v->type == 1) ptr += sprintf(ptr, "%f", v->float_val);
                         else if (v->type == 2) ptr += sprintf(ptr, "%s", v->string_val);
                         else if (v->type == 3) ptr += sprintf(ptr, "%s", v->bool_val ? "true" : "false");
@@ -1631,7 +1656,7 @@ if (node->binary.op == OP_ASSIGN) {
                 }
                 
                 // Conversion de right
-                if (right.type == 0) { sprintf(buf2, "%d", right.int_val); right_str = buf2; }
+                if (right.type == 0) { sprintf(buf2, "%lld", right.int_val); right_str = buf2; }
                 else if (right.type == 1) { sprintf(buf2, "%f", right.float_val); right_str = buf2; }
                 else if (right.type == 2) right_str = right.string_val;
                 else if (right.type == 3) right_str = right.bool_val ? "true" : "false";
@@ -1642,7 +1667,7 @@ if (node->binary.op == OP_ASSIGN) {
                     for (int i = 0; i < right.array_val.count; i++) {
                         if (i > 0) ptr += sprintf(ptr, ", ");
                         Value elem = evaluate_expr(right.array_val.elements->nodes[i], env);
-                        if (elem.type == 0) ptr += sprintf(ptr, "%d", elem.int_val);
+                        if (elem.type == 0) ptr += sprintf(ptr, "%lld", elem.int_val);
                         else if (elem.type == 1) ptr += sprintf(ptr, "%f", elem.float_val);
                         else if (elem.type == 2) ptr += sprintf(ptr, "%s", elem.string_val);
                         else if (elem.type == 3) ptr += sprintf(ptr, "%s", elem.bool_val ? "true" : "false");
@@ -1661,12 +1686,12 @@ if (node->binary.op == OP_ASSIGN) {
                         if (i > 0) ptr += sprintf(ptr, ", ");
                         Value* k = right.dict_val.entries[i].key;
                         Value* v = right.dict_val.entries[i].value;
-                        if (k->type == 0) ptr += sprintf(ptr, "%d: ", k->int_val);
+                        if (k->type == 0) ptr += sprintf(ptr, "%lld: ", k->int_val);
                         else if (k->type == 1) ptr += sprintf(ptr, "%f: ", k->float_val);
                         else if (k->type == 2) ptr += sprintf(ptr, "%s: ", k->string_val);
                         else if (k->type == 3) ptr += sprintf(ptr, "%s: ", k->bool_val ? "true" : "false");
                         else ptr += sprintf(ptr, "?: ");
-                        if (v->type == 0) ptr += sprintf(ptr, "%d", v->int_val);
+                        if (v->type == 0) ptr += sprintf(ptr, "%lld", v->int_val);
                         else if (v->type == 1) ptr += sprintf(ptr, "%f", v->float_val);
                         else if (v->type == 2) ptr += sprintf(ptr, "%s", v->string_val);
                         else if (v->type == 3) ptr += sprintf(ptr, "%s", v->bool_val ? "true" : "false");
@@ -1709,6 +1734,10 @@ if (node->binary.op == OP_ASSIGN) {
             break;
             
         case OP_DIV:
+            if ((left.type == 0 && right.type == 0 && right.int_val == 0) ||
+                (left.type == 1 && right.type == 1 && right.float_val == 0)) {
+                runtime_throw("division par zero");
+            }
             if (left.type == 0 && right.type == 0 && right.int_val != 0) {
                 result.type = 0;
                 result.int_val = left.int_val / right.int_val;
@@ -1719,6 +1748,9 @@ if (node->binary.op == OP_ASSIGN) {
             break;
             
         case OP_MOD:
+            if (left.type == 0 && right.type == 0 && right.int_val == 0) {
+                runtime_throw("modulo par zero");
+            }
             if (left.type == 0 && right.type == 0 && right.int_val != 0) {
                 result.type = 0;
                 result.int_val = left.int_val % right.int_val;
@@ -1881,7 +1913,7 @@ case NODE_DICT_ACCESS: {
                 Value* val = env_get(env, trimmed);
                 if (val) {
                     if (val->type == 0) {
-                        sprintf(val_str, "%d", val->int_val);
+                        sprintf(val_str, "%lld", val->int_val);
                         evaluated = 1;
                     } else if (val->type == 1) {
                         sprintf(val_str, "%f", val->float_val);
@@ -2525,7 +2557,7 @@ case NODE_METHOD_CALL: {
                             char val_str[256] = "";
                             Value* v = obj.struct_val.fields[i].value;
                             if (v->type == 2) snprintf(val_str, 256, "\"%s\"", v->string_val);
-                            else if (v->type == 0) snprintf(val_str, 256, "%d", v->int_val);
+                            else if (v->type == 0) snprintf(val_str, 256, "%lld", v->int_val);
                             else if (v->type == 1) snprintf(val_str, 256, "%f", v->float_val);
                             else if (v->type == 3) snprintf(val_str, 256, "%s", v->bool_val ? "true" : "false");
                             else snprintf(val_str, 256, "?");

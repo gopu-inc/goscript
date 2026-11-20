@@ -509,7 +509,7 @@ ASTNode* create_assign_op_node(ASTNode* left, Operator op, ASTNode* right) {
     return node;
 }
 
-ASTNode* create_number_node(int value) {
+ASTNode* create_number_node(long long value) {
     ASTNode* node = malloc(sizeof(ASTNode));
     node->type = NODE_NUMBER;
     node->number.value = value;

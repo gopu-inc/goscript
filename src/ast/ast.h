@@ -401,7 +401,7 @@ struct {
         
         /* Valeurs littérales */
         struct {
-            int value;
+            long long value;
         } number;
         struct {
             double value;
@@ -657,7 +657,7 @@ ASTNode* create_assign_node(ASTNode* left, ASTNode* right);
 ASTNode* create_assign_op_node(ASTNode* left, Operator op, ASTNode* right);
 
 /* Valeurs littérales */
-ASTNode* create_number_node(int value);
+ASTNode* create_number_node(long long value);
 ASTNode* create_float_node(double value);
 ASTNode* create_string_node(char* value);
 ASTNode* create_bool_node(int value);

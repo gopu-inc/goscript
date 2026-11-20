@@ -67,6 +67,8 @@ typedef struct Environment {
     }* vars;
     int var_count;
     int var_capacity;
+    int* index;       /* table de hachage (indices dans vars), -1 = vide */
+    int index_cap;    /* puissance de 2, 0 = pas d'index (petits scopes) */
 } Environment;
 // Structure pour un module chargé
 #define VALUE_TYPE_DICT 10
@@ -178,6 +180,7 @@ LoadedModule* find_module(ModuleRegistry* reg, char* path);
 void free_module_registry(ModuleRegistry* reg);
 // Fonctions d'environnement
 Environment* create_env(Environment* parent);
+void env_free(Environment* env);
 void env_set(Environment* env, char* name, Value value);
 Value* env_get(Environment* env, char* name);
 

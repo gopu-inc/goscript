@@ -1283,7 +1283,7 @@ Value call_method(Value* obj, char* method_name, ASTNodeList* args, Environment*
         }
     }
     
-    free(method_env);
+    env_free(method_env);
     return result;
 }
 
@@ -2412,7 +2412,7 @@ case NODE_METHOD_CALL: {
                         evaluate_statement(stmt, method_env, NULL);
                     }
                 }
-                free(method_env);
+                env_free(method_env);
             }
         }
         
@@ -2463,7 +2463,7 @@ case NODE_METHOD_CALL: {
                             if (rv == 1) { result = g_return_value; break; }
                         }
                     }
-                    if (result.type != 9) free(func_env);
+                    if (result.type != 9) env_free(func_env);
                 }
                 // ============ LAMBDA (type 9) ============
                 else if (func->type == 9) {
@@ -2495,7 +2495,7 @@ case NODE_METHOD_CALL: {
                             evaluate_statement(stmt, lambda_env, NULL);
                         }
                     }
-                    free(lambda_env);
+                    env_free(lambda_env);
                 }
                 // ============ FONCTION C FFI (type 5) ============
                 else if (func->type == 5) {
@@ -2617,7 +2617,7 @@ case NODE_METHOD_CALL: {
                         if (rv == 1) { result = g_return_value; break; }
                     }
                 }
-                if (result.type != 9) free(func_env);
+                if (result.type != 9) env_free(func_env);
             }
             // ============ LAMBDA (type 9) ============
             else if (func->type == 9) {
@@ -2643,7 +2643,7 @@ case NODE_METHOD_CALL: {
                         evaluate_statement(stmt, lambda_env, NULL);
                     }
                 }
-                free(lambda_env);
+                env_free(lambda_env);
             }
             // ============ FONCTION C FFI (type 5) ============
             else if (func->type == 5) {
@@ -2715,7 +2715,7 @@ case NODE_METHOD_CALL: {
                         if (rv == 1) { result = g_return_value; break; }
                     }
                 }
-                if (result.type != 9) free(func_env);
+                if (result.type != 9) env_free(func_env);
             }
             // ============ LAMBDA (type 9) ============
             else if (func->type == 9) {
@@ -2746,7 +2746,7 @@ case NODE_METHOD_CALL: {
                         evaluate_statement(stmt, lambda_env, NULL);
                     }
                 }
-                free(lambda_env);
+                env_free(lambda_env);
             }
             // ============ FONCTION C FFI (type 5) ============
             else if (func->type == 5) {
@@ -3053,7 +3053,7 @@ case NODE_METHOD_CALL: {
             }
         }
         /* Ne pas libérer func_env si une lambda est retournée : elle capture cet env */
-        if (result.type != 9) free(func_env);
+        if (result.type != 9) env_free(func_env);
     } 
     else if (func && func->type == 5) {
         int arg_count = node->call.args ? node->call.args->count : 0;
@@ -3094,7 +3094,7 @@ case NODE_METHOD_CALL: {
                     if (rv == 1) { result = g_return_value; break; }
                 }
             }
-            free(lambda_env);
+            env_free(lambda_env);
         } else {
             fprintf(stderr, "Error: Lambda value corrupted\n");
             result.type = 0;
@@ -3149,7 +3149,7 @@ int evaluate_statement(ASTNode* node, Environment* env, char* current_file) {
             Environment* scope = create_env(env);
             env_set(scope, node->with_stmt.name, resource);
             int status = evaluate_statement(node->with_stmt.body, scope, current_file);
-            free(scope);
+            env_free(scope);
             return status;
         }
         case NODE_LET:
@@ -3389,11 +3389,11 @@ case NODE_FOR_IN: {
             int should_break = 0;
             for (int i = 0; i < node->for_in.body->count; i++) {
                 int ret = evaluate_statement(node->for_in.body->nodes[i], loop_env, current_file);
-                if (ret == 1) { free(loop_env); return 1; }
+                if (ret == 1) { env_free(loop_env); return 1; }
                 if (ret == 2) break;      // continue
                 if (ret == 3) { should_break = 1; break; }  // break
             }
-            free(loop_env);
+            env_free(loop_env);
             if (should_break) break;
         }
     }
@@ -3408,11 +3408,11 @@ case NODE_FOR_IN: {
             int should_break = 0;
             for (int i = 0; i < node->for_in.body->count; i++) {
                 int ret = evaluate_statement(node->for_in.body->nodes[i], loop_env, current_file);
-                if (ret == 1) { free(loop_env); return 1; }
+                if (ret == 1) { env_free(loop_env); return 1; }
                 if (ret == 2) break;
                 if (ret == 3) { should_break = 1; break; }
             }
-            free(loop_env);
+            env_free(loop_env);
             if (should_break) break;
         }
     }
@@ -3431,12 +3431,12 @@ case NODE_FOR_IN: {
             int should_break = 0;
             for (int i = 0; i < node->for_in.body->count; i++) {
                 int ret = evaluate_statement(node->for_in.body->nodes[i], loop_env, current_file);
-                if (ret == 1) { free(char_val.string_val); free(loop_env); return 1; }
+                if (ret == 1) { free(char_val.string_val); env_free(loop_env); return 1; }
                 if (ret == 2) break;
                 if (ret == 3) { should_break = 1; break; }
             }
             free(char_val.string_val);
-            free(loop_env);
+            env_free(loop_env);
             if (should_break) break;
         }
     }
@@ -3464,12 +3464,12 @@ case NODE_MATCH: {
                     evaluate_statement(block->nodes[j], match_env, current_file);
                 }
                 
-                free(match_env);
+                env_free(match_env);
                 return 0; // On quitte le match après la première correspondance
             }
             
             // Si ça ne matche pas, on détruit l'environnement temporaire
-            free(match_env);
+            env_free(match_env);
         }
     }
     return 0;

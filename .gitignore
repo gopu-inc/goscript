@@ -47,3 +47,5 @@ gpm.local.conf
 .gpmrc
 server/
 server/*
+__pycache__/
+.nvimlog

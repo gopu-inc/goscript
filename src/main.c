@@ -1080,7 +1080,7 @@ void print_ast(ASTNode* node, int depth) {
             break;
             
         case NODE_NUMBER:
-            printf("%d", node->number.value);
+            printf("%lld", node->number.value);
             break;
             
         case NODE_FLOAT:

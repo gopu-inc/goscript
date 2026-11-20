@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS ?= -Wall -g -O0
+CFLAGS ?= -Wall -g -O2
 CFLAGS += \
 	-I./src \
 	-I./src/ast \

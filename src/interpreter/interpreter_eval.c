@@ -47,8 +47,7 @@ static ASTNode* resolve_array_element_node(ASTNode* access, Environment* env) {
 
 static int set_array_element_node(ASTNode* element, Value right_val) {
     if (!element) return 0;
-    if (right_val.type == 0) element->type = NODE_NIL;
-    else if (right_val.type == 2) {
+    if (right_val.type == 2) {
         element->type = NODE_STRING;
         free(element->string_val.value);
         element->string_val.value = right_val.string_val ? strdup(right_val.string_val) : strdup("");

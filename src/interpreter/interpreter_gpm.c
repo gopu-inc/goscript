@@ -1,5 +1,6 @@
 /* Safe process and filesystem primitives used by the Goscript package manager. */
 #define _POSIX_C_SOURCE 200809L
+#define _XOPEN_SOURCE 700
 #include "interpreter.h"
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -10,6 +11,7 @@
 #include <errno.h>
 #include <ctype.h>
 #include <termios.h>
+#include <signal.h>
 #include <time.h>
 #include <limits.h>
 #include <math.h>
@@ -21,6 +23,10 @@
 #include <strings.h>
 #include <sys/ioctl.h>
 #include <poll.h>
+#include <locale.h>
+#include <langinfo.h>
+#include <wchar.h>
+#include <wctype.h>
 #include <zlib.h>
 
 #define GPM_RESPONSE_LIMIT (16u * 1024u * 1024u)
@@ -176,15 +182,82 @@ static char *gpm_tui_repeat(const char *text,int count){text=nz(text);if(count<0
 static int gpm_tui_width(void){struct winsize ws={0};if(ioctl(STDOUT_FILENO,TIOCGWINSZ,&ws)==0&&ws.ws_col>0)return (int)ws.ws_col;const char*columns=getenv("COLUMNS");if(columns){char*end=NULL;long value=strtol(columns,&end,10);if(end!=columns&&value>0&&value<=4096)return (int)value;}return 80;}
 static struct termios curse_saved_termios;
 static int curse_raw_mode_active;
-static void curse_restore_terminal_at_exit(void){
-    if(!curse_raw_mode_active)return;
-    static const char restore_screen[]="\033[0m\033[?25h\033[?1049l";
-    (void)write(STDOUT_FILENO,restore_screen,sizeof(restore_screen)-1);
-    if(tcsetattr(STDIN_FILENO,TCSAFLUSH,&curse_saved_termios)!=0){
-        fprintf(stderr,"curse: failed to restore terminal mode: %s\n",strerror(errno));
-        return;
+static int curse_alternate_screen_active;
+static volatile sig_atomic_t curse_resize_pending;
+static int curse_handlers_installed;
+static int curse_locale_initialized;
+static const int curse_exit_signals[] = {SIGHUP, SIGINT, SIGQUIT, SIGTERM};
+static struct sigaction curse_old_exit_actions[4];
+static struct sigaction curse_old_winch_action;
+
+static void curse_restore_terminal(void){
+    if(curse_alternate_screen_active){
+        static const char restore_screen[]="\033[0m\033[?25h\033[?2004l\033[?1006l\033[?1000l\033[?1049l";
+        (void)write(STDOUT_FILENO,restore_screen,sizeof(restore_screen)-1);
+        curse_alternate_screen_active=0;
     }
-    curse_raw_mode_active=0;
+    if(curse_raw_mode_active){
+        (void)tcsetattr(STDIN_FILENO,TCSAFLUSH,&curse_saved_termios);
+        curse_raw_mode_active=0;
+    }
+    if(curse_handlers_installed){
+        for(size_t i=0;i<sizeof(curse_exit_signals)/sizeof(curse_exit_signals[0]);i++)
+            (void)sigaction(curse_exit_signals[i],&curse_old_exit_actions[i],NULL);
+        (void)sigaction(SIGWINCH,&curse_old_winch_action,NULL);
+        curse_handlers_installed=0;
+    }
+}
+
+static void curse_exit_signal_handler(int signal_number){
+    curse_restore_terminal();
+    _exit(128+signal_number);
+}
+
+static void curse_winch_signal_handler(int signal_number){
+    (void)signal_number;
+    curse_resize_pending=1;
+}
+
+static int curse_install_signal_handlers(void){
+    if(curse_handlers_installed)return 1;
+    struct sigaction exit_action;
+    memset(&exit_action,0,sizeof(exit_action));
+    exit_action.sa_handler=curse_exit_signal_handler;
+    sigemptyset(&exit_action.sa_mask);
+    struct sigaction resize_action;
+    memset(&resize_action,0,sizeof(resize_action));
+    resize_action.sa_handler=curse_winch_signal_handler;
+    sigemptyset(&resize_action.sa_mask);
+    size_t installed=0;
+    for(;installed<sizeof(curse_exit_signals)/sizeof(curse_exit_signals[0]);installed++){
+        if(sigaction(curse_exit_signals[installed],&exit_action,&curse_old_exit_actions[installed])!=0)
+            break;
+    }
+    if(installed==sizeof(curse_exit_signals)/sizeof(curse_exit_signals[0])&&
+       sigaction(SIGWINCH,&resize_action,&curse_old_winch_action)==0){
+        curse_handlers_installed=1;
+        return 1;
+    }
+    while(installed>0){
+        installed--;
+        (void)sigaction(curse_exit_signals[installed],&curse_old_exit_actions[installed],NULL);
+    }
+    return 0;
+}
+
+static int curse_terminal_write_once(const char *text){
+    if(!text)return 1;
+    size_t length=strlen(text);
+    if(length==0)return 1;
+    ssize_t written=write(STDOUT_FILENO,text,length);
+    if(written==(ssize_t)length)return 1;
+    int saved_errno=written<0?errno:EIO;
+    fprintf(stderr,"curse: terminal frame write failed: %s\n",strerror(saved_errno));
+    return 0;
+}
+
+static void curse_restore_terminal_at_exit(void){
+    curse_restore_terminal();
 }
 static int curse_terminal_raw(int enabled){
     if(enabled){
@@ -200,16 +273,37 @@ static int curse_terminal_raw(int enabled){
         current.c_cc[VTIME]=0;
         if(tcsetattr(STDIN_FILENO,TCSAFLUSH,&current)!=0)return 0;
         curse_raw_mode_active=1;
+        if(!curse_install_signal_handlers()){
+            (void)tcsetattr(STDIN_FILENO,TCSAFLUSH,&curse_saved_termios);
+            curse_raw_mode_active=0;
+            return 0;
+        }
         atexit(curse_restore_terminal_at_exit);
         return 1;
     }
     if(!curse_raw_mode_active)return 1;
-    if(tcsetattr(STDIN_FILENO,TCSAFLUSH,&curse_saved_termios)!=0){
-        fprintf(stderr,"curse: failed to restore terminal mode: %s\n",strerror(errno));
+    curse_restore_terminal();
+    return 1;
+}
+static int curse_terminal_start(void){
+    static const char enter_screen[]="\033[?1049h\033[?25l\033[2J\033[H";
+    if(!curse_terminal_raw(1))return 0;
+    if(!curse_terminal_write_once(enter_screen)){
+        (void)curse_terminal_raw(0);
         return 0;
     }
-    curse_raw_mode_active=0;
+    curse_alternate_screen_active=1;
     return 1;
+}
+static int curse_terminal_stop(void){
+    curse_restore_terminal();
+    return 1;
+}
+static int curse_terminal_write_frame(const char *frame){return curse_terminal_write_once(frame);}
+static int curse_terminal_take_resize(void){
+    sig_atomic_t pending=curse_resize_pending;
+    curse_resize_pending=0;
+    return pending?1:0;
 }
 static int curse_terminal_read_byte(int timeout_ms){
     if(timeout_ms < -1)return -1;
@@ -241,6 +335,54 @@ static int curse_terminal_dimension(int rows){
 }
 static int curse_terminal_width(void){return curse_terminal_dimension(0);}
 static int curse_terminal_height(void){return curse_terminal_dimension(1);}
+static int curse_terminal_capability(int capability){
+    const char*term=getenv("TERM");
+    const char*color=getenv("COLORTERM");
+    if(capability==0)
+        return color&&(!strcasecmp(color,"truecolor")||!strcasecmp(color,"24bit"));
+    if(capability==1)
+        return curse_terminal_capability(0)||(term&&strstr(term,"256color"));
+    if(capability==2){
+        if(!isatty(STDOUT_FILENO)||(term&&!strcmp(term,"dumb")))return 0;
+        const char*locale_name=setlocale(LC_CTYPE,"");
+        curse_locale_initialized=1;
+        const char*codeset=nl_langinfo(CODESET);
+        return locale_name&&codeset&&!strcasecmp(codeset,"UTF-8");
+    }
+    return 0;
+}
+static int curse_terminal_utf8_length(const char*text,int offset){
+    if(!text||offset<0)return 0;
+    if(!curse_locale_initialized){
+        (void)setlocale(LC_CTYPE,"");
+        curse_locale_initialized=1;
+    }
+    size_t length=strlen(text);
+    if((size_t)offset>=length)return 0;
+    mbstate_t state;
+    memset(&state,0,sizeof(state));
+    wchar_t character;
+    size_t count=mbrtowc(&character,text+offset,length-(size_t)offset,&state);
+    if(count==(size_t)-1||count==(size_t)-2||count==0)return 1;
+    return count>INT_MAX?0:(int)count;
+}
+static int curse_terminal_unicode_width(const char*text,int offset){
+    if(!text||offset<0)return 0;
+    if(!curse_locale_initialized){
+        (void)setlocale(LC_CTYPE,"");
+        curse_locale_initialized=1;
+    }
+    size_t length=strlen(text);
+    if((size_t)offset>=length)return 0;
+    mbstate_t state;
+    memset(&state,0,sizeof(state));
+    wchar_t character;
+    size_t count=mbrtowc(&character,text+offset,length-(size_t)offset,&state);
+    if(count==(size_t)-1||count==(size_t)-2)return 1;
+    if(count==0)return 0;
+    int width=wcwidth(character);
+    return width<0?1:width;
+}
 static int curse_terminal_flush(void){
     if(fflush(stdout)==0)return 1;
     fprintf(stderr,"curse: failed to flush terminal output: %s\n",strerror(errno));
@@ -397,7 +539,7 @@ void register_gpm_functions(Environment *env){
  R("gpm_url_encode",gpm_url_encode,"string",1,"string");
  R("gpm_tui_repeat",gpm_tui_repeat,"string",2,"string","int");R("gpm_tui_width",gpm_tui_width,"int",0);R("gpm_tui_rgb",gpm_tui_rgb,"string",4,"int","int","int","string");R("gpm_tui_bg_rgb",gpm_tui_bg_rgb,"string",4,"int","int","int","string");R("gpm_tui_truncate",gpm_tui_truncate,"string",2,"string","int");R("gpm_tui_color_enabled",gpm_tui_color_enabled,"int",1,"int");
  R("gpm_tui_number",gpm_tui_number,"string",1,"int");
- R("curse_host_raw",curse_terminal_raw,"int",1,"int");R("curse_host_read_byte",curse_terminal_read_byte,"int",1,"int");R("curse_host_width",curse_terminal_width,"int",0);R("curse_host_height",curse_terminal_height,"int",0);R("curse_host_flush",curse_terminal_flush,"int",0);
+ R("curse_host_raw",curse_terminal_raw,"int",1,"int");R("curse_host_start",curse_terminal_start,"int",0);R("curse_host_stop",curse_terminal_stop,"int",0);R("curse_host_read_byte",curse_terminal_read_byte,"int",1,"int");R("curse_host_write_frame",curse_terminal_write_frame,"int",1,"string");R("curse_host_take_resize",curse_terminal_take_resize,"int",0);R("curse_host_width",curse_terminal_width,"int",0);R("curse_host_height",curse_terminal_height,"int",0);R("curse_host_capability",curse_terminal_capability,"int",1,"int");R("curse_host_utf8_length",curse_terminal_utf8_length,"int",2,"string","int");R("curse_host_unicode_width",curse_terminal_unicode_width,"int",2,"string","int");R("curse_host_flush",curse_terminal_flush,"int",0);
  R("gpm_write_secret",gpm_write_secret,"int",2,"string","string");
  R("gs_fs_read",gpm_read_file,"string",1,"string");R("gs_fs_write",gpm_write_file,"int",2,"string","string");R("gs_fs_append",gpm_append_file,"int",2,"string","string");
  R("gs_fs_exists",gpm_path_exists,"int",1,"string");R("gs_fs_size",gpm_file_size,"int",1,"string");R("gs_fs_mkdir",gpm_mkdir,"int",1,"string");R("gs_fs_remove",gpm_file_remove,"int",1,"string");

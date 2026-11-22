@@ -49,3 +49,16 @@ server/
 server/*
 __pycache__/
 .nvimlog
+
+# Binaires et fichiers générés à la racine (le build écrit dans build/)
+/gd
+/app
+/native_exec
+/parser.c
+/parser.h
+/scanner.c
+/*.gbc
+src/parser/parser.java
+src/parser/parser.tab.*
+backup_lib.tar.gz
+model.gsm

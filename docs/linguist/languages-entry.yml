@@ -1,0 +1,15 @@
+# Entrée à ajouter dans lib/linguist/languages.yml (github-linguist/linguist),
+# à sa place alphabétique. language_id : laisser le mainteneur le générer
+# (script/update-ids) lors de la PR.
+Goscript:
+  type: programming
+  color: "#00ADD8"        # à ajuster : choisir une couleur libre dans languages.yml
+  extensions:
+  - ".gos"
+  - ".gjs"                # attention : ".gjs" est déjà pris par Glimmer JS
+  aliases:
+  - gs
+  tm_scope: source.goscript
+  ace_mode: text
+  interpreters:
+  - gd

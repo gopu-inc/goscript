@@ -1,5 +1,6 @@
 {
   "files.associations": {
+    "*.gos": "goscript",
     "*.gjs": "goscript"
   },
   "linguist.language": "goscript",

@@ -277,8 +277,8 @@ jobs:
 
       - name: 🔍 Lint Goscript files
         run: |
-          echo "Linting .gjs files..."
-          find . -name "*.gjs" -type f | while read file; do
+          echo "Linting .gos / .gjs files..."
+          find . \( -name "*.gos" -o -name "*.gjs" \) -type f | while read file; do
             echo "Checking: $file"
             # Basic syntax check
             grep -n "fn " "$file" | head -5 || true

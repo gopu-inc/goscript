@@ -1,0 +1,34 @@
+/*
+ * tests/test_gos.gos — Support de l'extension .gos
+ * Ce fichier est lui-même un .gos ; il importe un module .gos, un package
+ * (__self__.gos) et un module .gjs hérité.
+ */
+
+import .tests.fixtures.gos_helper as helper
+import .tests.fixtures.gos_pkg as pkg
+import .tests.fixtures.gjs_legacy as legacy
+
+print("=== Tests extension .gos ===")
+
+print("[1] Module .gos ...")
+if helper::double(21) == 42 {
+    print("    OK  gos_helper.gos chargé")
+} else {
+    print("    FAIL double(21) = " + str(helper::double(21)))
+}
+
+print("[2] Package avec __self__.gos ...")
+if pkg::triple(5) == 15 {
+    print("    OK  gos_pkg/__self__.gos chargé")
+} else {
+    print("    FAIL triple(5) = " + str(pkg::triple(5)))
+}
+
+print("[3] Module .gjs hérité ...")
+if legacy::plus_one(1) == 2 {
+    print("    OK  gjs_legacy.gjs toujours accepté")
+} else {
+    print("    FAIL plus_one(1) = " + str(legacy::plus_one(1)))
+}
+
+print("=== Fin tests extension .gos ===")

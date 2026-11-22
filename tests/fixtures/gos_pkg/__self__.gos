@@ -1,0 +1,2 @@
+// Package de test : dossier avec __self__.gos
+pub fn triple(x: int): int { ret x * 3 }

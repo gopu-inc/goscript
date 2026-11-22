@@ -9,7 +9,7 @@ Français ↔ English — ce README est bilingue. Les sections FR puis EN prése
 
 ## 🇫🇷 Présentation rapide
 
-Goscript (extension `.gjs`) est un langage de scripting moderne et léger développé par la communauté GOPU. Conçu pour l'automatisation, l'intégration système (exécution de commandes shell), et l'extension via des modules, Goscript vise un bon compromis entre expressivité et performance.
+Goscript (extension `.gos`, `.gjs` reste accepté) est un langage de scripting moderne et léger développé par la communauté GOPU. Conçu pour l'automatisation, l'intégration système (exécution de commandes shell), et l'extension via des modules, Goscript vise un bon compromis entre expressivité et performance.
 
 Binaire principal compilé: `gd` (généré par `make`).
 
@@ -22,7 +22,7 @@ Principales caractéristiques
 
 Dossier clés du dépôt
 - `src/` : code C (parser, interpreter, AST)
-- `lib/` : librairie standard et modules `.gjs`
+- `lib/` : librairie standard et modules (`.gos` / `.gjs`)
 - `exemples/` : scripts d'exemple
 - `lib/golem/` : gestionnaire de paquets Goscript
 - `grammars/`, `vim/`, `syntaxes/` : intégration éditeurs
@@ -85,7 +85,7 @@ Exécuter un script :
 Options courantes (extrait du binaire):
 ```text
 ./build/bin/gd --version
-./build/bin/gd <script.gjs> [args...]
+./build/bin/gd <script.gos|script.gjs> [args...]
 ```
 
 Exécuter une commande shell depuis Goscript (exemples) :
@@ -109,6 +109,11 @@ fn main() {
 ```
 
 ---
+
+### Extensions de fichier
+- **`.gos`** est l'extension recommandée pour les nouveaux fichiers.
+- **`.gjs`** reste accepté (ancien projet, aucun fichier à renommer).
+- Pour `import mon.module`, l'interpréteur cherche `mon/module.gos` puis `mon/module.gjs`, et pour un dossier `__self__.gos` puis `__self__.gjs`. Si les deux existent, `.gos` est pris.
 
 ## 3) 🇫🇷 Exemples
 Le dossier `exemples/` contient une grande collection de scripts de démonstration: I/O, réseau, struct, modules, tests unitaires simples, etc.

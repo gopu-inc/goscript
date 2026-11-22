@@ -1,0 +1,2 @@
+// Module de test écrit en .gos (résolu via `import .tests.fixtures.gos_helper`, depuis la racine du dépôt)
+pub fn double(x: int): int { ret x * 2 }

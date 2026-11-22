@@ -260,7 +260,7 @@ GoscriptOptions parse_options(int argc, char** argv) {
 void show_help(const char* program_name) {
     printf("Goscript - A modern scripting language\n");
     printf("Version: 0.2.0\n\n");
-    printf("Usage: %s [options] <script.gjs> [script-args...]\n\n", program_name);
+    printf("Usage: %s [options] <script.gos|script.gjs> [script-args...]\n\n", program_name);
     printf("Options:\n");
     printf("  -d, --debug         Show AST before execution\n");
     printf("  -b, --bytecode       Run through the bytecode VM\n");
@@ -273,7 +273,7 @@ void show_help(const char* program_name) {
     printf("  -v, --version        Show version information\n");
     printf("  --                 End of GD options, start of script arguments\n\n");
     printf("Examples:\n");
-    printf("  %s script.gjs\n", program_name);
+    printf("  %s script.gos\n", program_name);
     printf("  %s -d script.gjs --server 8080\n", program_name);
     printf("  %s script.gjs --input file.txt --output result.txt\n", program_name);
     printf("  %s script.gjs -- --server 8080 --debug\n", program_name);
@@ -321,7 +321,7 @@ int main(int argc, char** argv) {
             printf("REPL mode with file preload: %s\n", opts.filename);
         }
         printf("REPL mode coming soon!\n");
-        printf("Please provide a file: %s <file.gjs>\n", argv[0]);
+        printf("Please provide a file: %s <file.gos>\n", argv[0]);
         return 1;
     }
 

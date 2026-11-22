@@ -6,6 +6,7 @@
   ],
   "settings": {
     "file_extensions": {
+      "gos": "goscript",
       "gjs": "goscript"
     }
   }

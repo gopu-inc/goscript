@@ -8,6 +8,26 @@
 #include <limits.h>
 #include <dirent.h>
 #include <errno.h>
+#include <stdarg.h>
+
+/* Extensions des sources Goscript, par ordre de préférence. `.gjs` reste
+ * accepté pour que les projets existants continuent de fonctionner. */
+static const char* const SOURCE_EXTS[] = { ".gos", ".gjs" };
+
+/* Construit "<fmt><ext>" pour chaque extension et copie dans `out` le
+ * premier chemin qui existe. Renvoie 1 si un fichier a été trouvé. */
+static int find_src(char* out, size_t n, const char* fmt, ...) {
+    char base[PATH_MAX];
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(base, sizeof(base), fmt, ap);
+    va_end(ap);
+    for (size_t i = 0; i < sizeof(SOURCE_EXTS) / sizeof(SOURCE_EXTS[0]); i++) {
+        snprintf(out, n, "%s%s", base, SOURCE_EXTS[i]);
+        if (access(out, F_OK) == 0) return 1;
+    }
+    return 0;
+}
 
 extern ASTNode* program_root;
 extern int yyparse(void);
@@ -301,8 +321,7 @@ char* resolve_module_path(char* current_file, char* import_path) {
         for (size_t i = 0; i < sizeof(search_paths) / sizeof(search_paths[0]); i++) {
             if (!search_paths[i] || !search_paths[i][0]) continue;
             char with_ext[PATH_MAX];
-            snprintf(with_ext, PATH_MAX, "%s/__builtin__.gjs", search_paths[i]);
-            if (access(with_ext, F_OK) == 0) {
+            if (find_src(with_ext, PATH_MAX, "%s/__builtin__", search_paths[i])) {
                 char real_path[PATH_MAX];
                 if (realpath(with_ext, real_path)) {
                     return strdup(real_path);
@@ -311,30 +330,29 @@ char* resolve_module_path(char* current_file, char* import_path) {
         }
 
         char special_path[PATH_MAX];
-        snprintf(special_path, PATH_MAX, "/usr/local/lib/goscript/__builtin__.gjs");
-        if (access(special_path, F_OK) == 0) {
+        if (find_src(special_path, PATH_MAX, "/usr/local/lib/goscript/__builtin__")) {
             char real_path[PATH_MAX];
             if (realpath(special_path, real_path)) {
                 return strdup(real_path);
             }
         }
 
-        snprintf(special_path, PATH_MAX, "/usr/local/share/goscript/__builtin__.gjs");
-        if (access(special_path, F_OK) == 0) {
+        if (find_src(special_path, PATH_MAX, "/usr/local/share/goscript/__builtin__")) {
             char real_path[PATH_MAX];
             if (realpath(special_path, real_path)) {
                 return strdup(real_path);
             }
         }
         
-        if (access("__builtin__.gjs", F_OK) == 0) {
+        char local_builtin[PATH_MAX];
+        if (find_src(local_builtin, PATH_MAX, "__builtin__")) {
             char real_path[PATH_MAX];
-            if (realpath("__builtin__.gjs", real_path)) {
+            if (realpath(local_builtin, real_path)) {
                 return strdup(real_path);
             }
         }
         
-        fprintf(stderr, "[Goscript] Warning: __builtin__.gjs not found\n");
+        fprintf(stderr, "[Goscript] Warning: __builtin__.gos/.gjs not found\n");
         return NULL;
     }
     
@@ -343,16 +361,14 @@ char* resolve_module_path(char* current_file, char* import_path) {
         snprintf(resolved, PATH_MAX, "%s", import_path);
         
         char with_ext[PATH_MAX];
-        snprintf(with_ext, PATH_MAX, "%s.gjs", resolved);
-        if (access(with_ext, F_OK) == 0) {
+        if (find_src(with_ext, PATH_MAX, "%s", resolved)) {
             char real_path[PATH_MAX];
             if (realpath(with_ext, real_path)) {
                 return strdup(real_path);
             }
         }
         
-        snprintf(with_ext, PATH_MAX, "%s/__self__.gjs", resolved);
-        if (access(with_ext, F_OK) == 0) {
+        if (find_src(with_ext, PATH_MAX, "%s/__self__", resolved)) {
             char real_path[PATH_MAX];
             if (realpath(with_ext, real_path)) {
                 return strdup(real_path);
@@ -390,16 +406,14 @@ char* resolve_module_path(char* current_file, char* import_path) {
         }
         
         char with_ext[PATH_MAX];
-        snprintf(with_ext, PATH_MAX, "%s.gjs", resolved);
-        if (access(with_ext, F_OK) == 0) {
+        if (find_src(with_ext, PATH_MAX, "%s", resolved)) {
             char real_path[PATH_MAX];
             if (realpath(with_ext, real_path)) {
                 return strdup(real_path);
             }
         }
         
-        snprintf(with_ext, PATH_MAX, "%s/__self__.gjs", resolved);
-        if (access(with_ext, F_OK) == 0) {
+        if (find_src(with_ext, PATH_MAX, "%s/__self__", resolved)) {
             char real_path[PATH_MAX];
             if (realpath(with_ext, real_path)) {
                 return strdup(real_path);
@@ -420,18 +434,16 @@ char* resolve_module_path(char* current_file, char* import_path) {
         if (!search_paths[i] || !search_paths[i][0]) continue;
         char with_ext[PATH_MAX];
         
-        // Fichier .gjs direct
-        snprintf(with_ext, PATH_MAX, "%s/%s.gjs", search_paths[i], module_path);
-        if (access(with_ext, F_OK) == 0) {
+        // Fichier .gos / .gjs direct
+        if (find_src(with_ext, PATH_MAX, "%s/%s", search_paths[i], module_path)) {
             char real_path[PATH_MAX];
             if (realpath(with_ext, real_path)) {
                 return strdup(real_path);
             }
         }
         
-        // Dossier avec __self__.gjs
-        snprintf(with_ext, PATH_MAX, "%s/%s/__self__.gjs", search_paths[i], module_path);
-        if (access(with_ext, F_OK) == 0) {
+        // Dossier avec __self__.gos / __self__.gjs
+        if (find_src(with_ext, PATH_MAX, "%s/%s/__self__", search_paths[i], module_path)) {
             char real_path[PATH_MAX];
             if (realpath(with_ext, real_path)) {
                 return strdup(real_path);
@@ -707,14 +719,14 @@ static LoadedModule* load_package_module(const char* dir_path, const char* modul
         return existing;
     }
     
-    // Vérifier si __self__.gjs existe
+    // Vérifier si __self__.gos / __self__.gjs existe
     char self_path[PATH_MAX];
-    snprintf(self_path, PATH_MAX, "%s/__self__.gjs", dir_path);
+    int has_self = find_src(self_path, PATH_MAX, "%s/__self__", dir_path);
     
     LoadedModule* mod = NULL;
     
-    if (access(self_path, F_OK) == 0) {
-        // Charger __self__.gjs comme module principal du package
+    if (has_self) {
+        // Charger __self__.gos (ou __self__.gjs) comme module principal du package
         mod = load_file_module(self_path, module_name, alias);
         if (mod) {
             mod->type = MODULE_TYPE_PACKAGE;
@@ -723,7 +735,7 @@ static LoadedModule* load_package_module(const char* dir_path, const char* modul
             mod->module_path = strdup(dir_path);
         }
     } else {
-        // Pas de __self__.gjs, créer un package vide (namespace)
+        // Pas de __self__, créer un package vide (namespace)
         mod = create_module(dir_path, module_name, alias, MODULE_TYPE_PACKAGE);
         if (mod) {
             mod->status = MODULE_STATUS_LOADED;

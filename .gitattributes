@@ -1,62 +1,49 @@
-*.gjs linguist-language=Goscript
-*.gos linguist-language=Goscript
+# ============================================================
+# Goscript — reconnaissance du langage par GitHub Linguist
+# ============================================================
+# "Goscript" n'existe pas encore dans la base de Linguist : tant qu'il n'y est
+# pas ajouté (voir docs/linguist/README.md), GitHub ignore ces fichiers dans
+# la barre des langages. Ces lignes sont déjà au bon format : elles
+# deviendront actives dès que Linguist connaîtra le langage.
+*.gjs linguist-language=Goscript linguist-detectable
+*.gos linguist-language=Goscript linguist-detectable
 
-*.gjs linguist-detectable=true
-*.gos linguist-detectable=true
+# ============================================================
+# Fichiers générés ou tiers : exclus des statistiques et des diffs
+# ============================================================
+build/**            linguist-generated
+packages/**/build/** linguist-generated
+*.o                 linguist-generated
+*.a                 linguist-generated
+*.so                linguist-generated
+*.dylib             linguist-generated
+parser.c            linguist-generated
+parser.h            linguist-generated
+scanner.c           linguist-generated
+parser.tab.*        linguist-generated
 
+# Outils, scripts et configuration : pas du code du langage
+*.sh                linguist-vendored
+*.py                linguist-vendored
+*.pl                linguist-vendored
+*.rb                linguist-vendored
+*.mk                linguist-vendored
+Makefile            linguist-vendored
+*.vim               linguist-vendored
+*.snippets          linguist-vendored
+genv/genv           linguist-vendored
 
-
-*.c diff=cpp
-*.h diff=cpp
-*.gjs diff=goscript
-*.gos diff=goscript
-*.py diff=python
-*.md diff=markdown
+# ============================================================
+# Diffs et fins de ligne
+# ============================================================
+*.c    diff=cpp
+*.h    diff=cpp
+*.gjs  diff=goscript
+*.gos  diff=goscript
+*.py   diff=python
+*.md   diff=markdown
 *.json diff=json
 *.yaml diff=yaml
-*.yml diff=yaml
-*.sh diff=shell
+*.yml  diff=yaml
+*.sh   diff=shell
 golem-launcher.sh text eol=lf
-
-# ============================================
-# COMPILER SOURCE - Vendored (excluded from stats)
-# ============================================
-
-*.h linguist-vendored
-*.l linguist-vendored
-*.y linguist-vendored
-*.o linguist-generated
-*.so linguist-generated
-*.a linguist-generated
-*.dylib linguist-generated
-*.sh linguist-vendored
-genv/genv linguist-vendored
-*/*.sh linguist-vendored
-
-# Parser generated files
-parser.c linguist-generated
-parser.h linguist-generated
-scanner.c linguist-generated
-
-# ============================================
-# SCRIPTS AND TOOLS - Vendored
-# ============================================
-
-*.sh linguist-vendored
-*.py linguist-vendored
-Makefile linguist-vendored
-*.mk linguist-vendored
-*.pl linguist-vendored
-*.rb linguist-vendored
-
-# ============================================
-# VIM CONFIGURATION - Vendored
-# ============================================
-
-*.vim linguist-vendored
-*.vimrc linguist-vendored
-*.snippets linguist-vendored
-
-
-
-

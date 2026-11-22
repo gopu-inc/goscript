@@ -34,6 +34,9 @@ static ASTNode* append_trailing_block(ASTNode* call, ASTNodeList* body) {
 }
 %}
 
+/* La grammaire n'a plus aucun conflit : tout nouveau conflit est une erreur. */
+%expect 0
+
 %union {
     long long number;
     double float_val;
@@ -76,7 +79,7 @@ static ASTNode* append_trailing_block(ASTNode* call, ASTNodeList* body) {
 %token TOKEN_ARROW TOKEN_FAT_ARROW TOKEN_PIPE_FORWARD
 %token TOKEN_OPTIONAL TOKEN_COALESCE
 %token TOKEN_RANGE TOKEN_RANGE_INC TOKEN_MUTS
-%token TOKEN_SYSF TOKEN_SH
+%token TOKEN_SYSF TOKEN_SH TOKEN_SYSF_CALL TOKEN_SH_CALL
 
 
 
@@ -93,8 +96,22 @@ static ASTNode* append_trailing_block(ASTNode* call, ASTNodeList* body) {
 %token <string> TOKEN_STRING
 %token TOKEN_F_STRING
 
-/* Précédence des opérateurs (du plus faible au plus fort) */
+/* Précédence (du plus faible au plus fort).
+ *
+ * LOWEST est un niveau fictif plus faible que tout. Les règles qui finissent
+ * par une expression ou un nom (ret, throw, jmp, sysf, sh, import, une
+ * expression-instruction...) le portent via %prec : devant un jeton qui peut
+ * prolonger ce qui vient d'être lu, on DÉCALE (on continue l'expression).
+ * C'est le comportement historique de la grammaire (décalage par défaut de
+ * Bison), maintenant explicite au lieu d'être un conflit silencieux.
+ *
+ * Le niveau suivant regroupe les jetons qui commencent ou prolongent une
+ * expression sans être des opérateurs.
+ */
+%nonassoc LOWEST
+%nonassoc TOKEN_DICT TOKEN_MAP TOKEN_TRUE TOKEN_FALSE TOKEN_NIL TOKEN_NEW TOKEN_AWAIT TOKEN_SPAWN TOKEN_LAMBDA TOKEN_SYSF TOKEN_SH TOKEN_SYSF_CALL TOKEN_SH_CALL TOKEN_LBRACE TOKEN_LBRACKET TOKEN_LPAREN TOKEN_IDENTIFIER TOKEN_NUMBER TOKEN_FLOAT TOKEN_STRING TOKEN_F_STRING TOKEN_DOUBLE_COLON TOKEN_ARROW
 %right TOKEN_ASSIGN TOKEN_PLUS_ASSIGN TOKEN_MINUS_ASSIGN TOKEN_MULTIPLY_ASSIGN TOKEN_DIVIDE_ASSIGN TOKEN_MODULO_ASSIGN
+%right TOKEN_OPTIONAL
 %left TOKEN_OR
 %left TOKEN_AND
 %left TOKEN_EQ TOKEN_NEQ
@@ -102,6 +119,7 @@ static ASTNode* append_trailing_block(ASTNode* call, ASTNodeList* body) {
 %left TOKEN_PLUS TOKEN_MINUS
 %left TOKEN_MULTIPLY TOKEN_DIVIDE TOKEN_MODULO
 %right TOKEN_NOT
+%left TOKEN_DOT
 
 
 /* Non-terminals */
@@ -114,7 +132,7 @@ static ASTNode* append_trailing_block(ASTNode* call, ASTNodeList* body) {
 %type <node_list> array_patterns
 %type <node> sysf_expr sh_expr
 %type <node> bracket_access
-%type <node> import_constraints import_options
+%type <node> import_constraints import_options import_option
 %type <node_list> name_list export_list import_impl_list
 %type <node> export_item import_impl_item
 %type <node> dict_expr dict_type
@@ -151,7 +169,7 @@ switch_statement:
     }
     ;
 ternary_expr:
-    expression TOKEN_OPTIONAL expression TOKEN_COLON expression {
+    expression TOKEN_OPTIONAL expression TOKEN_COLON expression %prec TOKEN_OPTIONAL {
         // condition ? true_expr : false_expr
         $$ = create_ternary_node($1, $3, $5);
     }
@@ -212,7 +230,7 @@ statement:
     | match_statement
     | with_statement
     | return_statement
-    | expression {
+    | expression %prec LOWEST {
         $$ = create_expr_statement($1);
     }
     ;
@@ -225,10 +243,10 @@ with_statement:
     }
     ;
 sysf_expr:
-    TOKEN_SYSF TOKEN_LPAREN expression TOKEN_RPAREN {
+    TOKEN_SYSF_CALL TOKEN_LPAREN expression TOKEN_RPAREN {
         $$ = create_sysf_node($3);
     }
-    | TOKEN_SYSF expression {
+    | TOKEN_SYSF expression %prec LOWEST {
         $$ = create_sysf_node($2);
     }
     ;
@@ -263,10 +281,10 @@ use_path:
     ;
 
 sh_expr:
-    TOKEN_SH TOKEN_LPAREN expression TOKEN_RPAREN {
+    TOKEN_SH_CALL TOKEN_LPAREN expression TOKEN_RPAREN {
         $$ = create_sh_node($3);
     }
-    | TOKEN_SH expression {
+    | TOKEN_SH expression %prec LOWEST {
         $$ = create_sh_node($2);
     }
     ;
@@ -302,18 +320,18 @@ finally_block:
     ;
 
 throw_statement:
-    TOKEN_THROW expression {
+    TOKEN_THROW expression %prec LOWEST {
         $$ = create_throw_node($2);
     }
-    | TOKEN_RAISE expression {
+    | TOKEN_RAISE expression %prec LOWEST {
         $$ = create_throw_node($2);
     }
     ;
 jmp_statement:
-    TOKEN_JMP TOKEN_IDENTIFIER {
+    TOKEN_JMP TOKEN_IDENTIFIER %prec LOWEST {
         $$ = create_jmp_node($2, NULL);
     }
-    | TOKEN_JMP TOKEN_IDENTIFIER expression {
+    | TOKEN_JMP TOKEN_IDENTIFIER expression %prec LOWEST {
         $$ = create_jmp_node($2, $3);
     }
     ;
@@ -322,11 +340,11 @@ jmp_statement:
 
 import_statement:
     // import time
-    TOKEN_IMPORT import_path {
+    TOKEN_IMPORT import_path %prec LOWEST {
         $$ = create_import_node($2, NULL, NULL);
     }
     // import time as t
-    | TOKEN_IMPORT import_path TOKEN_AS TOKEN_IDENTIFIER {
+    | TOKEN_IMPORT import_path TOKEN_AS TOKEN_IDENTIFIER %prec LOWEST {
         $$ = create_import_node($2, $4, NULL);
     }
     // import time with constraints
@@ -389,11 +407,15 @@ import_constraints:
     ;
 
 import_options:
+    import_option
+    | import_option TOKEN_COMMA import_options {
+        $$ = merge_constraints($1, $3);
+    }
+    ;
+
+import_option:
     TOKEN_ONLY TOKEN_COLON TOKEN_LBRACKET name_list TOKEN_RBRACKET {
         $$ = create_constraints_node("only", $4);
-    }
-    | import_options TOKEN_COMMA import_options {
-        $$ = merge_constraints($1, $3);
     }
     ;
 
@@ -531,7 +553,7 @@ function_decl:
         node->function.is_public = 1;
         $$ = node;
     }
-    | TOKEN_FN TOKEN_IDENTIFIER TOKEN_LPAREN param_list TOKEN_RPAREN return_type TOKEN_ARROW expression {
+    | TOKEN_FN TOKEN_IDENTIFIER TOKEN_LPAREN param_list TOKEN_RPAREN return_type TOKEN_ARROW expression %prec LOWEST {
         ASTNodeList* body = create_node_list();
         ASTNode* return_stmt = create_return_node($8);
         add_to_node_list(body, return_stmt);
@@ -637,7 +659,7 @@ dict_type:
     ;
 
 return_type:
-    /* empty */ {
+    /* empty */ %prec LOWEST {
         $$ = NULL;
     }
     | TOKEN_COLON type {
@@ -820,17 +842,13 @@ struct_fields:
     /* empty */ {
         $$ = NULL;
     }
-    | struct_field {
-        $$ = create_node_list();
-        add_to_node_list($$, $1);
-    }
     | struct_fields TOKEN_COMMA struct_field {
-        add_to_node_list($1, $3);
-        $$ = $1;
+        $$ = $1 ? $1 : create_node_list();
+        add_to_node_list($$, $3);
     }
     | struct_fields struct_field {
-        add_to_node_list($1, $2);
-        $$ = $1;
+        $$ = $1 ? $1 : create_node_list();
+        add_to_node_list($$, $2);
     }
     ;
 
@@ -876,21 +894,17 @@ function_decl_list:
     /* empty */ {
         $$ = NULL;
     }
-    | function_decl {
-        $$ = create_node_list();
-        add_to_node_list($$, $1);
-    }
     | function_decl_list function_decl {
-        add_to_node_list($1, $2);
-        $$ = $1;
+        $$ = $1 ? $1 : create_node_list();
+        add_to_node_list($$, $2);
     }
     ;
 
 return_statement:
-    TOKEN_RETURN expression {
+    TOKEN_RETURN expression %prec LOWEST {
         $$ = create_return_node($2);
     }
-    | TOKEN_RETURN {
+    | TOKEN_RETURN %prec LOWEST {
         $$ = create_return_node(NULL);
     }
     ;
@@ -899,7 +913,7 @@ expression:
     binary_expr
     | unary_expr
     | ternary_expr
-    | primary_expr
+    | primary_expr %prec LOWEST
     | expression TOKEN_DOT TOKEN_IDENTIFIER TOKEN_LPAREN argument_list TOKEN_RPAREN {
         // 'expression' est l'objet ($1), 'TOKEN_IDENTIFIER' est la méthode ($3)
         // 'argument_list' est la liste des arguments ($5)
@@ -1008,13 +1022,13 @@ primary_expr:
     | TOKEN_NIL {
         $$ = create_nil_node();
     }
-    | TOKEN_IDENTIFIER {
+    | TOKEN_IDENTIFIER %prec LOWEST {
         $$ = create_identifier_node($1);
     }
     | TOKEN_LPAREN expression TOKEN_RPAREN {
         $$ = $2;
     }
-    | call_expr
+    | call_expr %prec LOWEST
     | bracket_access
     | dict_expr
     | array_expr
@@ -1038,7 +1052,7 @@ member_access:
     primary_expr TOKEN_DOT TOKEN_IDENTIFIER {
         $$ = create_member_access($1, $3);
     }
-    | primary_expr TOKEN_DOUBLE_COLON TOKEN_IDENTIFIER {
+    | primary_expr TOKEN_DOUBLE_COLON TOKEN_IDENTIFIER %prec LOWEST {
         $$ = create_static_access($1, $3);
     }
     ;
@@ -1086,7 +1100,7 @@ async_function_decl:
 
 /* Expression await */
 await_expr:
-    TOKEN_AWAIT primary_expr {
+    TOKEN_AWAIT primary_expr %prec LOWEST {
         $$ = create_await_node($2);
     }
     | TOKEN_AWAIT TOKEN_LBRACE statement_list TOKEN_RBRACE {
@@ -1096,7 +1110,7 @@ await_expr:
 
 /* Expression spawn (exécution parallèle) */
 spawn_expr:
-    TOKEN_SPAWN primary_expr {
+    TOKEN_SPAWN primary_expr %prec LOWEST {
         $$ = create_spawn_node($2);
     }
     ;

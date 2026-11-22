@@ -106,6 +106,7 @@ run_test "SQLite"                    "$TESTS_DIR/test_db.gjs"     15
 run_test "WebSocket"                 "$TESTS_DIR/test_websocket.gjs" 10
 run_test "Terminal UI"               "$TESTS_DIR/test_tui.gjs"     15
 run_test "Arithmétique"              "$TESTS_DIR/test_arith.gjs"   15
+run_test "Grammaire"                 "$TESTS_DIR/test_grammar.gjs" 15
 
 # ──────────────────────────────────────────────
 # Résumé

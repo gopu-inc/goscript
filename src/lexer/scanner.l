@@ -104,6 +104,8 @@ void yyerror(const char* msg);
 "muts"                  { return TOKEN_MUTS; }
 "unsafe"                { return TOKEN_UNSAFE; }
 "_"                     { return TOKEN_UNDERSCORE; }
+"sysf"/[ \t\r\n]*"("     { return TOKEN_SYSF_CALL; }
+"sh"/[ \t\r\n]*"("       { return TOKEN_SH_CALL; }
 "sysf"                  { return TOKEN_SYSF; }
 "sh"                    { return TOKEN_SH; }
 "switch"                { return TOKEN_SWITCH; }

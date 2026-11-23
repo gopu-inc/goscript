@@ -92,7 +92,7 @@ INSTALL_ROOT = $(DESTDIR)$(PREFIX)
 
 CFLAGS += -I$(GEN_DIR)
 
-.PHONY: all all-binaries binaries gd gbc gld gpm test clean install standard-packages publish-standard-packages debug
+.PHONY: all all-binaries binaries gd gbc gld gpm test clean install test-install standard-packages publish-standard-packages debug
 
 all: binaries
 
@@ -154,23 +154,45 @@ clean:
 		interpreter_eval.o interpreter_net.o interpreter_gpm.o scanner.o parser.o
 	$(MAKE) -C gpm clean
 
-install: $(TARGET)
-	install -d $(INSTALL_ROOT)/bin $(INSTALL_ROOT)/share/goscript/golem
+# Bibliothèque standard installée dans share/goscript : tout lib/ (modules .gjs et
+# sous-dossiers, y compris golem/ et __builtin__.gjs), sans les tests ni les exemples.
+SHARE_DIR = $(INSTALL_ROOT)/share/goscript
+STDLIB_FILES = $(shell find lib -type f -name '*.gjs' ! -name 'test*.gjs' ! -path 'lib/flout/examples/*' | sort)
+
+# `install` dépend de `binaries` (et pas seulement de gd) : gbc et gld sont installés aussi.
+install: binaries
+	install -d $(INSTALL_ROOT)/bin $(SHARE_DIR)
 	install -m 755 $(TARGET) $(INSTALL_ROOT)/bin/gd$(EXEEXT)
 	install -m 755 $(BIN_DIR)/gbc$(EXEEXT) $(INSTALL_ROOT)/bin/gbc$(EXEEXT)
 	install -m 755 $(BIN_DIR)/gld$(EXEEXT) $(INSTALL_ROOT)/bin/gld$(EXEEXT)
 	install -m 755 golem-launcher.sh $(INSTALL_ROOT)/bin/golem
-	install -m 644 golem-cli.gjs $(INSTALL_ROOT)/share/goscript/golem-cli.gjs
-	install -m 755 install.sh $(INSTALL_ROOT)/share/goscript/install.sh
-	@# Bibliothèque standard : l'interpréteur résout les modules (fs, json, os, net/…)
-	@# dans share/goscript. On copie l'arborescence lib/ en conservant les sous-dossiers,
-	@# sans les tests ni les exemples.
-	@find lib -type f -name '*.gjs' ! -name 'test*.gjs' ! -path 'lib/flout/examples/*' | sort | \
-	while IFS= read -r f; do \
+	install -m 755 golem-launcher.sh $(SHARE_DIR)/golem-launcher.sh
+	install -m 644 golem-cli.gjs $(SHARE_DIR)/golem-cli.gjs
+	install -m 755 install.sh $(SHARE_DIR)/install.sh
+	@set -e; count=0; for f in $(STDLIB_FILES); do \
 		rel=$${f#lib/}; \
-		install -d "$(INSTALL_ROOT)/share/goscript/$$(dirname "$$rel")"; \
-		install -m 644 "$$f" "$(INSTALL_ROOT)/share/goscript/$$rel"; \
-	done
+		install -d "$(SHARE_DIR)/$$(dirname "$$rel")"; \
+		install -m 644 "$$f" "$(SHARE_DIR)/$$rel"; \
+		count=$$((count + 1)); \
+	done; \
+	echo "Bibliothèque standard : $$count fichiers installés dans $(SHARE_DIR)"
+
+# Installe dans un préfixe temporaire puis vérifie, hors du dépôt, que le lanceur golem
+# et les modules de la bibliothèque standard se chargent depuis l'installation.
+test-install: binaries
+	@set -e; tmp=$$(mktemp -d); trap 'rm -rf "$$tmp"' EXIT; \
+	$(MAKE) --no-print-directory install DESTDIR="$$tmp" PREFIX=/usr/local >/dev/null; \
+	share="$$tmp/usr/local/share/goscript"; gd="$$tmp/usr/local/bin/gd$(EXEEXT)"; \
+	for f in golem-cli.gjs golem-launcher.sh install.sh __builtin__.gjs golem/__self__.gjs math.gjs json.gjs fs.gjs os/env.gjs net/__self__.gjs; do \
+		test -f "$$share/$$f" || { echo "FAIL: $$f manquant dans l'installation"; exit 1; }; \
+	done; \
+	work=$$(mktemp -d); trap 'rm -rf "$$tmp" "$$work"' EXIT; \
+	printf 'import math\nimport json\nimport os.env\nprintln(math::sqrt(16.0))\n' > "$$work/t.gjs"; \
+	out=$$(cd "$$work" && env -u GOSCRIPT_LIB GOSCRIPT_SHARE_DIR="$$share" "$$gd" t.gjs 2>&1); \
+	case "$$out" in 4*) ;; *) echo "FAIL: import de la bibliothèque standard : $$out"; exit 1;; esac; \
+	(cd "$$work" && GOSCRIPT_SHARE_DIR="$$share" "$$tmp/usr/local/bin/golem" help >/dev/null) \
+		|| { echo "FAIL: golem help"; exit 1; }; \
+	echo "OK: installation vérifiée ($$(find "$$share" -type f | wc -l) fichiers)"
 
 standard-packages: $(TARGET)
 	$(MAKE) -C packages/stdlib build

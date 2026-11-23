@@ -38,8 +38,13 @@ golem help
 ```
 
 `make` construit `build/bin/gd` ainsi que les alias `gbc` et `gld`.
-`make install` copie le compilateur et les alias dans `PREFIX/bin`, puis
-installe le lanceur `golem` et son code requis dans `PREFIX/share/goscript`.
+`make install` construit les binaires si nécessaire, copie le compilateur et les
+alias (`gd`, `gbc`, `gld`) ainsi que le lanceur `golem` dans `PREFIX/bin`, puis
+installe dans `PREFIX/share/goscript` : `golem-cli.gjs`, `golem-launcher.sh`,
+`install.sh` et toute la bibliothèque standard de `lib/` (`__builtin__.gjs`,
+`golem/`, `fs`, `json`, `os/`, `net/`…, sans les fichiers `test*.gjs` ni les
+exemples). `make test-install` vérifie cette installation dans un préfixe
+temporaire.
 Pour une installation sans privilèges, utilisez un préfixe utilisateur et
 ajoutez son dossier `bin` au `PATH`:
 

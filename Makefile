@@ -161,9 +161,16 @@ install: $(TARGET)
 	install -m 755 $(BIN_DIR)/gld$(EXEEXT) $(INSTALL_ROOT)/bin/gld$(EXEEXT)
 	install -m 755 golem-launcher.sh $(INSTALL_ROOT)/bin/golem
 	install -m 644 golem-cli.gjs $(INSTALL_ROOT)/share/goscript/golem-cli.gjs
-	install -m 644 lib/golem/__self__.gjs $(INSTALL_ROOT)/share/goscript/golem/__self__.gjs
-	install -m 644 lib/__builtin__.gjs $(INSTALL_ROOT)/share/goscript/__builtin__.gjs
 	install -m 755 install.sh $(INSTALL_ROOT)/share/goscript/install.sh
+	@# Bibliothèque standard : l'interpréteur résout les modules (fs, json, os, net/…)
+	@# dans share/goscript. On copie l'arborescence lib/ en conservant les sous-dossiers,
+	@# sans les tests ni les exemples.
+	@find lib -type f -name '*.gjs' ! -name 'test*.gjs' ! -path 'lib/flout/examples/*' | sort | \
+	while IFS= read -r f; do \
+		rel=$${f#lib/}; \
+		install -d "$(INSTALL_ROOT)/share/goscript/$$(dirname "$$rel")"; \
+		install -m 644 "$$f" "$(INSTALL_ROOT)/share/goscript/$$rel"; \
+	done
 
 standard-packages: $(TARGET)
 	$(MAKE) -C packages/stdlib build

@@ -1,0 +1,5 @@
+# Goscript file(1) signatures
+0 string GJSCACHE Goscript lexer token cache
+>8 lelong 1 , format version 1
+0 string GBC1 Goscript GBC1 source/bytecode container
+>4 lelong 1 , format version 1

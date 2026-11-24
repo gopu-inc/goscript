@@ -249,11 +249,18 @@ static int curse_terminal_write_once(const char *text){
     if(!text)return 1;
     size_t length=strlen(text);
     if(length==0)return 1;
-    ssize_t written=write(STDOUT_FILENO,text,length);
-    if(written==(ssize_t)length)return 1;
-    int saved_errno=written<0?errno:EIO;
-    fprintf(stderr,"curse: terminal frame write failed: %s\n",strerror(saved_errno));
-    return 0;
+    size_t offset=0;
+    while(offset<length){
+        ssize_t written=write(STDOUT_FILENO,text+offset,length-offset);
+        if(written<0&&errno==EINTR)continue;
+        if(written<=0){
+            int saved_errno=written<0?errno:EIO;
+            fprintf(stderr,"curse: terminal frame write failed: %s\n",strerror(saved_errno));
+            return 0;
+        }
+        offset+=(size_t)written;
+    }
+    return 1;
 }
 
 static void curse_restore_terminal_at_exit(void){
@@ -317,6 +324,29 @@ static int curse_terminal_read_byte(int timeout_ms){
     ssize_t count;
     do{count=read(STDIN_FILENO,&byte,1);}while(count<0&&errno==EINTR);
     return count==1?(int)byte:-2;
+}
+static char *curse_terminal_read_utf8_char(int first_byte,int timeout_ms){
+    static const char replacement[]="\xEF\xBF\xBD";
+    unsigned char bytes[5]={0};
+    if(first_byte<0x80||first_byte>0xF4)return strdup(replacement);
+    int expected=first_byte<=0xDF?2:first_byte<=0xEF?3:4;
+    if(first_byte<0xC2)return strdup(replacement);
+    bytes[0]=(unsigned char)first_byte;
+    for(int i=1;i<expected;i++){
+        int next=curse_terminal_read_byte(timeout_ms);
+        if(next<0||(next&0xC0)!=0x80)return strdup(replacement);
+        bytes[i]=(unsigned char)next;
+    }
+    if((bytes[0]==0xE0&&bytes[1]<0xA0)||(bytes[0]==0xED&&bytes[1]>=0xA0)||
+       (bytes[0]==0xF0&&bytes[1]<0x90)||(bytes[0]==0xF4&&bytes[1]>0x8F))
+        return strdup(replacement);
+    bytes[expected]=0;
+    return strdup((const char*)bytes);
+}
+static int curse_terminal_monotonic_ms(void){
+    struct timespec now;
+    if(clock_gettime(CLOCK_MONOTONIC,&now)!=0)return 0;
+    return (int)((now.tv_sec%2000000)*1000+now.tv_nsec/1000000);
 }
 static int curse_terminal_dimension(int rows){
     struct winsize size={0};
@@ -423,6 +453,25 @@ static char *gpm_json_format(const char*data){const char*s=nz(data);size_t len=s
 static int gpm_mkdirs(const char *path){if(!path||!*path)return 0;char *s=strdup(path);if(!s)return 0;for(char*p=s+1;*p;p++)if(*p=='/'){*p=0;if(mkdir(s,0755)&&errno!=EEXIST){free(s);return 0;}*p='/';}int ok=(mkdir(s,0755)==0||errno==EEXIST);free(s);return ok;}
 static int unsafe_archive_name(const char *s){if(!s||!*s||*s=='/')return 1;const char*p=s;while(*p){while(*p=='/')p++;const char*b=p;while(*p&&*p!='/')p++;size_t n=(size_t)(p-b);if(n==2&&b[0]=='.'&&b[1]=='.')return 1;}return 0;}
 static char *gpm_manifest_files_list(const char *text){char*copy=strdup(nz(text));if(!copy)return strdup("");char section[128]="";char*save=NULL;for(char*line=strtok_r(copy,"\n",&save);line;line=strtok_r(NULL,"\n",&save)){while(isspace((unsigned char)*line))line++;if(*line=='['){char*e=strchr(line,']');if(e){*e=0;snprintf(section,sizeof(section),"%s",line+1);}continue;}if(strcmp(section,"metadata"))continue;char*eq=strchr(line,'=');if(!eq)continue;*eq=0;char*k=line;while(isspace((unsigned char)*k))k++;char*e=k+strlen(k);while(e>k&&isspace((unsigned char)e[-1]))*--e=0;if(!strcmp(k,"files")){char*out=strdup(eq+1);free(copy);return out?out:strdup("");}}free(copy);return strdup("");}
+static int gpm_is_cache_path(const char *relative){
+    const char *p=nz(relative);
+    while(*p){const char *end=strchr(p,'/');size_t n=end?(size_t)(end-p):strlen(p);if(n==11&&!memcmp(p,"__gocache__",11))return 1;if(!end)break;p=end+1;}
+    return 0;
+}
+static int gpm_add_package_path(const char *root,const char *relative,char ***files,size_t *count,size_t *cap){
+    if(gpm_is_cache_path(relative))return 1;
+    if(unsafe_archive_name(relative)||strchr(relative,'\\'))return 0;
+    size_t n=strlen(root)+strlen(relative)+2;char *full=malloc(n);if(!full)return 0;snprintf(full,n,"%s/%s",root,relative);
+    struct stat st;if(lstat(full,&st)!=0){free(full);return 0;}
+    if(S_ISREG(st.st_mode)){
+        if(*count==*cap){size_t next=*cap?*cap*2:32;char **grown=realloc(*files,next*sizeof(char*));if(!grown){free(full);return 0;}*files=grown;*cap=next;}
+        (*files)[(*count)++]=strdup(relative);free(full);return (*files)[*count-1]!=NULL;
+    }
+    if(!S_ISDIR(st.st_mode)){free(full);return 0;}
+    DIR *dir=opendir(full);if(!dir){free(full);return 0;}int ok=1;struct dirent *entry;
+    while(ok&&(entry=readdir(dir))){if(!strcmp(entry->d_name,".")||!strcmp(entry->d_name,".."))continue;size_t rn=strlen(relative)+strlen(entry->d_name)+2;char *child=malloc(rn);if(!child){ok=0;break;}snprintf(child,rn,"%s/%s",relative,entry->d_name);ok=gpm_add_package_path(root,child,files,count,cap);free(child);}
+    closedir(dir);free(full);return ok;
+}
 static int gpm_archive_extract(const char *archive,const char *dest){
     char *listv[]={"tar","-tf",(char*)nz(archive),NULL};int st=0;char*list=run_capture(listv,&st);if(st||!list){free(list);return 0;}
     char *save=NULL;for(char*line=strtok_r(list,"\n",&save);line;line=strtok_r(NULL,"\n",&save))if(unsafe_archive_name(line)){free(list);return 0;}free(list);if(!gpm_mkdirs(dest))return 0;
@@ -435,7 +484,15 @@ static int gpm_archive_build(const char *root,const char *output){
     size_t cap=32,count=0;char **files=calloc(cap,sizeof(char*));if(!files){free(manifest);return 0;}
     files[count++]=strdup("Manifest.toml");
     char *f=gpm_manifest_files_list(manifest);
-    if(f){char *lb=strchr(f,'['),*rb=lb?strchr(lb,']'):NULL;if(lb&&rb){for(char*p=lb+1;p<rb;){while(p<rb&&(*p==','||isspace((unsigned char)*p)))p++;if(p>=rb)break;if(*p!='\"'&&*p!='\''){free(f);free(manifest);for(size_t i=0;i<count;i++)free(files[i]);free(files);return 0;}char q=*p++;char*e=p;while(e<rb&&*e!=q)e++;if(e==rb)break;char*item=strndup(p,(size_t)(e-p));if(unsafe_archive_name(item)||strchr(item,'\\')){free(item);free(f);free(manifest);for(size_t i=0;i<count;i++)free(files[i]);free(files);return 0;}size_t plen=strlen(root)+strlen(item)+2;char*full=malloc(plen);if(!full){free(item);break;}snprintf(full,plen,"%s/%s",root,item);struct stat fst;int regular=lstat(full,&fst)==0&&S_ISREG(fst.st_mode);free(full);if(!regular){free(item);free(f);free(manifest);for(size_t i=0;i<count;i++)free(files[i]);free(files);return 0;}if(count==cap){cap*=2;char**nf=realloc(files,cap*sizeof(char*));if(!nf){free(item);break;}files=nf;}files[count++]=item;p=e+1;}}free(f);}
+    if(f){char *lb=strchr(f,'['),*rb=lb?strchr(lb,']'):NULL;if(lb&&rb){for(char*p=lb+1;p<rb;){while(p<rb&&(*p==','||isspace((unsigned char)*p)))p++;if(p>=rb)break;if(*p!='\"'&&*p!='\''){free(f);free(manifest);for(size_t i=0;i<count;i++)free(files[i]);free(files);return 0;}char q=*p++;char*e=p;while(e<rb&&*e!=q)e++;if(e==rb)break;char*item=strndup(p,(size_t)(e-p));if(item){size_t item_len=strlen(item);while(item_len>0&&item[item_len-1]=='/')item[--item_len]=0;}if(!item||!gpm_add_package_path(root,item,&files,&count,&cap)){free(item);free(f);free(manifest);for(size_t i=0;i<count;i++)free(files[i]);free(files);return 0;}free(item);p=e+1;}}free(f);}
+    char vendor_path[PATH_MAX];
+    snprintf(vendor_path,sizeof(vendor_path),"%s/vendor",root);
+    struct stat vendor_stat;
+    int vendor_listed=0;
+    for(size_t i=0;i<count;i++)if(!strcmp(files[i],"vendor"))vendor_listed=1;
+    if(!vendor_listed&&stat(vendor_path,&vendor_stat)==0&&S_ISDIR(vendor_stat.st_mode)){
+        if(!gpm_add_package_path(root,"vendor",&files,&count,&cap)){free(manifest);for(size_t i=0;i<count;i++)free(files[i]);free(files);return 0;}
+    }
     free(manifest);
     /* Without an explicit allowlist, package only root-level Goscript sources and common docs. */
     if(count==1){DIR*d=opendir(root);if(d){struct dirent*e;while((e=readdir(d))){size_t n=strlen(e->d_name);int include=(n>4&&!strcmp(e->d_name+n-4,".gjs"))||!strcmp(e->d_name,"README.md")||!strcmp(e->d_name,"LICENSE");if(!include||unsafe_archive_name(e->d_name))continue;if(count==cap){cap*=2;char**nf=realloc(files,cap*sizeof(char*));if(!nf)break;files=nf;}files[count++]=strdup(e->d_name);}closedir(d);}}
@@ -496,6 +553,38 @@ static int gpm_random_bytes(unsigned char *out,size_t count){FILE*f=fopen("/dev/
 static char *gpm_random_string(int length){if(length<0||length>4096)return strdup("");static const char alphabet[]="abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";unsigned char*bytes=malloc((size_t)length+1);char*out=malloc((size_t)length+1);if(!bytes||!out){free(bytes);free(out);return strdup("");}gpm_random_bytes(bytes,(size_t)length);for(int i=0;i<length;i++)out[i]=alphabet[bytes[i]%(sizeof(alphabet)-1)];out[length]=0;free(bytes);return out;}
 static char *gpm_uuid(void){unsigned char b[16];gpm_random_bytes(b,sizeof(b));b[6]=(unsigned char)((b[6]&0x0f)|0x40);b[8]=(unsigned char)((b[8]&0x3f)|0x80);char*out=malloc(37);if(!out)return strdup("");snprintf(out,37,"%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x",b[0],b[1],b[2],b[3],b[4],b[5],b[6],b[7],b[8],b[9],b[10],b[11],b[12],b[13],b[14],b[15]);return out;}
 static int gpm_write_secret(const char *path,const char *content){if(!gpm_write_file(path,content))return 0;return chmod(path,0600)==0;}
+static int gpm_copy_node(const char *source,const char *destination){
+    struct stat st;
+    if(lstat(source,&st)!=0||S_ISLNK(st.st_mode))return 0;
+    if(S_ISDIR(st.st_mode)){
+        if(!gpm_mkdirs(destination))return 0;
+        DIR *dir=opendir(source);if(!dir)return 0;
+        int ok=1;struct dirent *entry;
+        while(ok&&(entry=readdir(dir))){
+            if(!strcmp(entry->d_name,".")||!strcmp(entry->d_name,".."))continue;
+            size_t src_len=strlen(source)+strlen(entry->d_name)+2;
+            size_t dst_len=strlen(destination)+strlen(entry->d_name)+2;
+            char *src=malloc(src_len),*dst=malloc(dst_len);
+            if(!src||!dst){free(src);free(dst);ok=0;break;}
+            snprintf(src,src_len,"%s/%s",source,entry->d_name);
+            snprintf(dst,dst_len,"%s/%s",destination,entry->d_name);
+            ok=gpm_copy_node(src,dst);free(src);free(dst);
+        }
+        closedir(dir);return ok;
+    }
+    if(!S_ISREG(st.st_mode))return 0;
+    FILE *in=fopen(source,"rb");if(!in)return 0;
+    FILE *out=fopen(destination,"wb");if(!out){fclose(in);return 0;}
+    char buffer[16384];int ok=1;size_t count;
+    while((count=fread(buffer,1,sizeof(buffer),in))>0)if(fwrite(buffer,1,count,out)!=count){ok=0;break;}
+    if(ferror(in))ok=0;
+    if(fclose(in)!=0)ok=0;
+    if(fclose(out)!=0)ok=0;
+    if(ok&&chmod(destination,0644)!=0)ok=0;
+    return ok;
+}
+static int gpm_copy_tree(const char *source,const char *destination){return gpm_copy_node(nz(source),nz(destination));}
+static int gpm_make_executable(const char *path){return chmod(nz(path),0755)==0;}
 static int gpm_move(const char *from,const char *to){return rename(nz(from),nz(to))==0;}
 static int gpm_path_exists(const char *path){struct stat st;return path&&*path&&lstat(path,&st)==0;}
 static int gpm_valid_component(const char *s){if(!s||!*s||!strcmp(s,".")||!strcmp(s,".."))return 0;for(const unsigned char*p=(const unsigned char*)s;*p;p++)if(!(isalnum(*p)||*p=='-'||*p=='_'||*p=='.'||*p=='@'))return 0;return 1;}
@@ -526,7 +615,7 @@ void register_gpm_functions(Environment *env){
 #define R(name,fn,ret,n,...) register_c_function(env,name,(void*)fn,ret,n,##__VA_ARGS__)
  R("gs_http_post_json",gpm_http_post_json,"string",3,"string","string","string");R("gs_http_post_multipart_file",gpm_http_upload,"int",7,"string","string","string","string","string","string","string");
  R("gs_json_quote",gpm_json_quote,"string",1,"string");R("gs_archive_build",gpm_archive_build,"int",2,"string","string");R("gs_manifest_get",gpm_manifest_get,"string",2,"string","string");R("gs_manifest_dependencies",gpm_manifest_dependencies,"string",1,"string");
- R("gs_fs_move",gpm_move,"int",2,"string","string");R("gs_fs_valid_component",gpm_valid_component,"int",1,"string");R("gs_fs_write_private",gpm_write_secret,"int",2,"string","string");R("gs_fs_list_dirs",gpm_list_packages,"string",1,"string");R("gs_prompt_secret",gpm_prompt_secret,"string",1,"string");
+ R("gs_fs_copy_tree",gpm_copy_tree,"int",2,"string","string");R("gs_fs_executable",gpm_make_executable,"int",1,"string");R("gs_fs_move",gpm_move,"int",2,"string","string");R("gs_fs_valid_component",gpm_valid_component,"int",1,"string");R("gs_fs_write_private",gpm_write_secret,"int",2,"string","string");R("gs_fs_list_dirs",gpm_list_packages,"string",1,"string");R("gs_prompt_secret",gpm_prompt_secret,"string",1,"string");
  R("gpm_http_get",gpm_http_get,"string",2,"string","string");R("gpm_http_get_response",gpm_http_get_response,"string",2,"string","string");R("gpm_http_post_json",gpm_http_post_json,"string",3,"string","string","string");
  R("gpm_http_download",gpm_http_download,"int",3,"string","string","string");R("gpm_http_upload",gpm_http_upload,"int",7,"string","string","string","string","string","string","string");
  R("gpm_json_get",gpm_json_get,"string",2,"string","string");R("gpm_json_array_item",gpm_json_array_item,"string",3,"string","string","int");R("gpm_sha256_file",gpm_sha256_file,"string",1,"string");R("gpm_archive_extract",gpm_archive_extract,"int",2,"string","string");R("gpm_archive_build",gpm_archive_build,"int",2,"string","string");
@@ -539,7 +628,7 @@ void register_gpm_functions(Environment *env){
  R("gpm_url_encode",gpm_url_encode,"string",1,"string");
  R("gpm_tui_repeat",gpm_tui_repeat,"string",2,"string","int");R("gpm_tui_width",gpm_tui_width,"int",0);R("gpm_tui_rgb",gpm_tui_rgb,"string",4,"int","int","int","string");R("gpm_tui_bg_rgb",gpm_tui_bg_rgb,"string",4,"int","int","int","string");R("gpm_tui_truncate",gpm_tui_truncate,"string",2,"string","int");R("gpm_tui_color_enabled",gpm_tui_color_enabled,"int",1,"int");
  R("gpm_tui_number",gpm_tui_number,"string",1,"int");
- R("curse_host_raw",curse_terminal_raw,"int",1,"int");R("curse_host_start",curse_terminal_start,"int",0);R("curse_host_stop",curse_terminal_stop,"int",0);R("curse_host_read_byte",curse_terminal_read_byte,"int",1,"int");R("curse_host_write_frame",curse_terminal_write_frame,"int",1,"string");R("curse_host_take_resize",curse_terminal_take_resize,"int",0);R("curse_host_width",curse_terminal_width,"int",0);R("curse_host_height",curse_terminal_height,"int",0);R("curse_host_capability",curse_terminal_capability,"int",1,"int");R("curse_host_utf8_length",curse_terminal_utf8_length,"int",2,"string","int");R("curse_host_unicode_width",curse_terminal_unicode_width,"int",2,"string","int");R("curse_host_flush",curse_terminal_flush,"int",0);
+ R("curse_host_raw",curse_terminal_raw,"int",1,"int");R("curse_host_start",curse_terminal_start,"int",0);R("curse_host_stop",curse_terminal_stop,"int",0);R("curse_host_read_byte",curse_terminal_read_byte,"int",1,"int");R("curse_host_read_utf8_char",curse_terminal_read_utf8_char,"string",2,"int","int");R("curse_host_monotonic_ms",curse_terminal_monotonic_ms,"int",0);R("curse_host_write_frame",curse_terminal_write_frame,"int",1,"string");R("curse_host_take_resize",curse_terminal_take_resize,"int",0);R("curse_host_width",curse_terminal_width,"int",0);R("curse_host_height",curse_terminal_height,"int",0);R("curse_host_capability",curse_terminal_capability,"int",1,"int");R("curse_host_utf8_length",curse_terminal_utf8_length,"int",2,"string","int");R("curse_host_unicode_width",curse_terminal_unicode_width,"int",2,"string","int");R("curse_host_flush",curse_terminal_flush,"int",0);
  R("gpm_write_secret",gpm_write_secret,"int",2,"string","string");
  R("gs_fs_read",gpm_read_file,"string",1,"string");R("gs_fs_write",gpm_write_file,"int",2,"string","string");R("gs_fs_append",gpm_append_file,"int",2,"string","string");
  R("gs_fs_exists",gpm_path_exists,"int",1,"string");R("gs_fs_size",gpm_file_size,"int",1,"string");R("gs_fs_mkdir",gpm_mkdir,"int",1,"string");R("gs_fs_remove",gpm_file_remove,"int",1,"string");

@@ -18,6 +18,7 @@ extern Value evaluate_expr(ASTNode* node, Environment* env);
 extern int evaluate_statement(ASTNode* node, Environment* env, char* current_file);
 extern int goscript_argc;
 extern char** goscript_argv;
+extern char* goscript_current_file;
 /* static char* current_source_file = NULL; */
 // ======================== GESTION DES IMPLÉMENTATIONS ====================
 
@@ -3623,7 +3624,7 @@ void interpret_program(ASTNode* program) {
     for (int i = 0; i < program->program.statements->count; i++) {
         ASTNode* stmt = program->program.statements->nodes[i];
         if (stmt->type == NODE_IMPORT) {
-            evaluate_statement(stmt, global, NULL);
+            evaluate_statement(stmt, global, goscript_current_file);
         }
     }
     

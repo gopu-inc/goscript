@@ -99,6 +99,7 @@ typedef struct LoadedModule {
     struct {
         char** allowed_names;  // Noms autorisés (only)
         int allowed_count;
+        int allowed_capacity;
         int timeout_ms;        // Timeout en ms
         int sandbox;           // 1 = sandboxé
         int allow_ffi;         // 1 = FFI autorisé

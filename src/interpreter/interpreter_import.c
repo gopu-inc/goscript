@@ -1,4 +1,5 @@
 #include "interpreter.h"
+#include "../lexer/token_cache.h"
 #include <libgen.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -140,6 +141,7 @@ static LoadedModule* create_module(const char* path, const char* name,
     
     mod->constraints.allowed_names = NULL;
     mod->constraints.allowed_count = 0;
+    mod->constraints.allowed_capacity = 0;
     mod->constraints.timeout_ms = 0;
     mod->constraints.sandbox = 0;
     mod->constraints.allow_ffi = 1;
@@ -205,13 +207,19 @@ static void add_submodule(LoadedModule* parent, LoadedModule* child) {
 
 // ==================== ENREGISTREMENT DES EXPORTS ====================
 
+static int reserve_export_slot(LoadedModule* mod) {
+    if (!mod) return 0;
+    if (mod->constraints.allowed_count < mod->constraints.allowed_capacity) return 1;
+    int capacity = mod->constraints.allowed_capacity ? mod->constraints.allowed_capacity * 2 : 16;
+    char** names = realloc(mod->constraints.allowed_names, (size_t)capacity * sizeof(*names));
+    if (!names) return 0;
+    mod->constraints.allowed_names = names;
+    mod->constraints.allowed_capacity = capacity;
+    return 1;
+}
+
 static void register_export(LoadedModule* mod, const char* symbol, const char* alias) {
     if (!mod || !symbol) return;
-    
-    if (!mod->constraints.allowed_names) {
-        mod->constraints.allowed_names = malloc(32 * sizeof(char*));
-        mod->constraints.allowed_count = 0;
-    }
     
     for (int i = 0; i < mod->constraints.allowed_count; i++) {
         if (mod->constraints.allowed_names[i] && 
@@ -221,7 +229,9 @@ static void register_export(LoadedModule* mod, const char* symbol, const char* a
     }
     
     const char* export_name = alias ? alias : symbol;
+    if (!reserve_export_slot(mod)) return;
     mod->constraints.allowed_names[mod->constraints.allowed_count] = strdup(export_name);
+    if (!mod->constraints.allowed_names[mod->constraints.allowed_count]) return;
     mod->constraints.allowed_count++;
 }
 
@@ -231,11 +241,6 @@ static void register_export_impl(LoadedModule* mod, const char* impl_name) {
     if (!mod || !impl_name) return;
     
     // Utiliser la même liste allowed_names mais avec un préfixe pour les impl
-    if (!mod->constraints.allowed_names) {
-        mod->constraints.allowed_names = malloc(32 * sizeof(char*));
-        mod->constraints.allowed_count = 0;
-    }
-    
     // Vérifier que l'impl n'est pas déjà enregistrée
     char impl_marker[256];
     snprintf(impl_marker, sizeof(impl_marker), "__impl:%s", impl_name);
@@ -247,7 +252,9 @@ static void register_export_impl(LoadedModule* mod, const char* impl_name) {
         }
     }
     
+    if (!reserve_export_slot(mod)) return;
     mod->constraints.allowed_names[mod->constraints.allowed_count] = strdup(impl_marker);
+    if (!mod->constraints.allowed_names[mod->constraints.allowed_count]) return;
     mod->constraints.allowed_count++;
 }
 
@@ -278,12 +285,15 @@ char* resolve_module_path(char* current_file, char* import_path) {
         "../../lib/net",
         "../../lib/db",
         "./src",
+        /* Prefer the active share tree over legacy /usr/local/lib copies. */
+        "/usr/local/share/goscript",
+        "/usr/local/share/goscript/std",
+        "/usr/local/share/goscript/net",
+        "/usr/local/share/goscript/db",
         "/usr/local/lib/goscript",
         "/usr/local/lib/goscript/std",
         "/usr/local/lib/goscript/net",
         "/usr/local/lib/goscript/db",
-        "/usr/local/share/goscript",
-        "/usr/local/share/goscript/std",
         "/usr/share/goscript",
         "/usr/lib/goscript",
         ".",
@@ -414,6 +424,41 @@ char* resolve_module_path(char* current_file, char* import_path) {
             }
         }
     }
+
+    /* Resolve package-private vendored dependencies before global modules.
+     * Walk upward from the importing file so nested source modules can still
+     * find the package root's vendor/ directory. */
+    if (current_file && current_file[0] && strcmp(current_file, "REPL") != 0) {
+        char ancestor[PATH_MAX];
+        if (strlen(current_file) < sizeof(ancestor)) {
+            strcpy(ancestor, current_file);
+            char* slash = strrchr(ancestor, '/');
+            if (slash) *slash = '\0'; else strcpy(ancestor, ".");
+            for (int depth = 0; depth < 32 && ancestor[0]; depth++) {
+                char candidate[PATH_MAX];
+                int n = snprintf(candidate, sizeof(candidate), "%s/vendor/%s.gjs", ancestor, module_path);
+                if (n > 0 && (size_t)n < sizeof(candidate) && access(candidate, R_OK) == 0) {
+                    char real_path[PATH_MAX];
+                    if (realpath(candidate, real_path)) return strdup(real_path);
+                }
+                n = snprintf(candidate, sizeof(candidate), "%s/vendor/%s/__self__.gjs", ancestor, module_path);
+                if (n > 0 && (size_t)n < sizeof(candidate) && access(candidate, R_OK) == 0) {
+                    char real_path[PATH_MAX];
+                    if (realpath(candidate, real_path)) return strdup(real_path);
+                }
+                n = snprintf(candidate, sizeof(candidate), "%s/vendor/%s", ancestor, module_path);
+                struct stat vendor_stat;
+                if (n > 0 && (size_t)n < sizeof(candidate) && stat(candidate, &vendor_stat) == 0 && S_ISDIR(vendor_stat.st_mode)) {
+                    char real_path[PATH_MAX];
+                    if (realpath(candidate, real_path)) return strdup(real_path);
+                }
+                char* parent = strrchr(ancestor, '/');
+                if (!parent) break;
+                if (parent == ancestor) { ancestor[1] = '\0'; if (depth > 0) break; }
+                else *parent = '\0';
+            }
+        }
+    }
     
     // 3. Recherche dans les chemins standards
     for (size_t i = 0; i < sizeof(search_paths) / sizeof(search_paths[0]); i++) {
@@ -515,7 +560,9 @@ static LoadedModule* load_file_module(const char* full_path, const char* module_
     
     yylineno = 1;
     program_root = NULL;  // <-- RÉINITIALISER POUR LE PARSER
+    gs_token_cache_prepare(full_path, source, (size_t)size);
     int parse_result = yyparse();
+    gs_token_cache_finish();
     fclose(yyin);
     
     yyin = old_yyin;

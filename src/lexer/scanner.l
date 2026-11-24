@@ -4,6 +4,9 @@
 #include <string.h>
 #include "parser.h"
 
+/* Keep the real scanner available to the persistent token-cache wrapper. */
+#define YY_DECL int goscript_scan_token(void)
+
 extern int yylineno;
 extern char* yytext;
 

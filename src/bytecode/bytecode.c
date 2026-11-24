@@ -13,6 +13,7 @@ extern void register_impl(char* struct_name, ASTNode* impl_node);
 
 extern int goscript_argc;
 extern char** goscript_argv;
+extern char* goscript_current_file;
 
 static BCChunk* bc_compile_statement_list(ASTNodeList* list, const char* name);
 
@@ -1113,7 +1114,7 @@ static void bc_setup_globals(Environment* global, ASTNode* program) {
         for (int i = 0; i < program->program.statements->count; i++) {
             ASTNode* stmt = program->program.statements->nodes[i];
             if (stmt->type == NODE_IMPORT) {
-                evaluate_statement(stmt, global, NULL);
+                evaluate_statement(stmt, global, goscript_current_file);
             }
         }
     }

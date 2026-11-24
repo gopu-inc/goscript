@@ -74,6 +74,7 @@ SOURCES = \
 	src/hal/hal.c \
 	src/ffi/ffi_sandbox.c \
 	src/main.c \
+	src/lexer/token_cache.c \
 	src/interpreter/interpreter_env.c \
 	src/interpreter/interpreter_import.c \
 	src/interpreter/interpreter_ffi.c \
@@ -130,6 +131,8 @@ $(OBJ_DIR)/%.o: %.c | $(OBJ_DIR)
 $(OBJ_DIR)/scanner.o: $(SCANNER_C) $(PARSER_H) | $(OBJ_DIR)
 	$(CC) $(CFLAGS) -MMD -MP -c $(SCANNER_C) -o $@
 
+$(OBJ_DIR)/src/lexer/token_cache.o: $(PARSER_H)
+
 $(OBJ_DIR)/parser.o: $(PARSER_C) $(PARSER_H) | $(OBJ_DIR)
 	$(CC) $(CFLAGS) -MMD -MP -c $(PARSER_C) -o $@
 
@@ -154,23 +157,31 @@ clean:
 		interpreter_eval.o interpreter_net.o interpreter_gpm.o scanner.o parser.o
 	$(MAKE) -C gpm clean
 
-install: $(TARGET)
-	install -d $(INSTALL_ROOT)/bin $(INSTALL_ROOT)/share/goscript/golem
+install: binaries
+	install -d $(INSTALL_ROOT)/bin $(INSTALL_ROOT)/lib/goscript $(INSTALL_ROOT)/share/goscript/golem
 	install -m 755 $(TARGET) $(INSTALL_ROOT)/bin/gd$(EXEEXT)
 	install -m 755 $(BIN_DIR)/gbc$(EXEEXT) $(INSTALL_ROOT)/bin/gbc$(EXEEXT)
 	install -m 755 $(BIN_DIR)/gld$(EXEEXT) $(INSTALL_ROOT)/bin/gld$(EXEEXT)
 	install -m 755 golem-launcher.sh $(INSTALL_ROOT)/bin/golem
 	install -m 644 golem-cli.gjs $(INSTALL_ROOT)/share/goscript/golem-cli.gjs
 	install -m 755 install.sh $(INSTALL_ROOT)/share/goscript/install.sh
-	@# Bibliothèque standard : l'interpréteur résout les modules (fs, json, os, net/…)
-	@# dans share/goscript. On copie l'arborescence lib/ en conservant les sous-dossiers,
-	@# sans les tests ni les exemples.
-	@find lib -type f -name '*.gjs' ! -name 'test*.gjs' ! -path 'lib/flout/examples/*' | sort | \
-	while IFS= read -r f; do \
-		rel=$${f#lib/}; \
-		install -d "$(INSTALL_ROOT)/share/goscript/$$(dirname "$$rel")"; \
-		install -m 644 "$$f" "$(INSTALL_ROOT)/share/goscript/$$rel"; \
-	done
+	install -m 644 LICENSE $(INSTALL_ROOT)/share/goscript/LICENSE
+	install -m 644 magic/goscript $(INSTALL_ROOT)/share/goscript/goscript.magic
+	@if [ -n "$(DESTDIR)" ] || [ "$(PREFIX)" = "/usr/local" ]; then \
+		magic_file="$(DESTDIR)/etc/magic"; \
+		install -d "$$(dirname "$$magic_file")"; \
+		if ! grep -Fq '# Goscript file(1) signatures' "$$magic_file" 2>/dev/null; then \
+			tmp_magic="$$magic_file.goscript.tmp"; \
+			{ if [ -f "$$magic_file" ]; then cat "$$magic_file"; fi; cat magic/goscript; } > "$$tmp_magic"; \
+			chmod 644 "$$tmp_magic"; mv "$$tmp_magic" "$$magic_file"; \
+		fi; \
+	fi
+	@# Retirer l'ancien sous-dossier installé : il entre en conflit avec lib/lib.
+	rm -rf "$(INSTALL_ROOT)/share/goscript/lib"
+	@# Copier tout le contenu de lib/ directement dans share/goscript/.
+	cp -R lib/. "$(INSTALL_ROOT)/share/goscript/"
+	@# Garder aussi la copie historique utilisée par les imports globaux.
+	cp -R lib/. "$(INSTALL_ROOT)/lib/goscript/"
 
 standard-packages: $(TARGET)
 	$(MAKE) -C packages/stdlib build

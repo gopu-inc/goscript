@@ -48,6 +48,7 @@ gpm.local.conf
 server/
 server/*
 __pycache__/
+__gocache__/
 .nvimlog
 
 # Binaires et fichiers générés à la racine (le build écrit dans build/)

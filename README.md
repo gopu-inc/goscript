@@ -86,7 +86,15 @@ Options courantes (extrait du binaire):
 ```text
 ./build/bin/gd --version
 ./build/bin/gd <script.gjs> [args...]
+./build/bin/gd --vm <script.gjs>
 ```
+
+Au lancement, `gd` génère automatiquement le cache lexical
+`__gocache__/<nom>.goscript.gbc` près du script et des modules importés. Ce
+cache peut aussi être exécuté directement avec `gd __gocache__/<nom>.goscript.gbc`.
+Il stocke les tokens, pas encore le bytecode du stack VM. Le format et ses limites
+actuelles sont décrits dans
+[docs/compiler-cache.md](docs/compiler-cache.md).
 
 Exécuter une commande shell depuis Goscript (exemples) :
 ```gjs

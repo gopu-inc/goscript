@@ -113,6 +113,38 @@ préfixe de staging, empaquette `bin/` et `share/`, génère les checksums, puis
 publie les fichiers sur GitHub lors d'un tag `v*`. Une compilation depuis les
 sources ne dépend pas de l'existence d'une release.
 
+## Installation locale d’un exécutable
+
+Pour installer le paquet du répertoire courant, ses dépendances et une
+commande exécutable à partir du manifeste :
+
+```sh
+sudo golem install --local .
+```
+
+Dans `[metadata]`, `entry` choisit le fichier Goscript lancé par `gd -c`, et
+`command` nomme le script créé dans `/usr/local/bin` :
+
+```toml
+[metadata]
+name = "curse"
+entry = "main.gjs"
+command = "curse"
+```
+
+Golem installe le paquet et les dépendances résolues dans
+`/usr/local/share/goscript`, puis crée `/usr/local/bin/curse`. Le lanceur
+exécute `gd -c curse` et transmet les arguments au programme. Pour une
+installation sans privilèges, définir `GOSCRIPT_MODULE_DIR` et
+`GOSCRIPT_BIN_DIR` vers des dossiers accessibles en écriture et ajouter le
+second au `PATH`.
+
+Les commandes `golem install <nom>` et `golem install` gardent leur rôle de
+résolution du registre ou des dépendances du projet dans `modules/`.
+Pour remplacer directement un paquet déjà installé par sa version courante du
+registre, utiliser `golem upgrade <nom>`; Golem télécharge et vérifie l’archive,
+installe le paquet puis résout ses dépendances.
+
 ## Installation et bibliothèque standard
 
 `make standard-packages` construit toutes les archives `.tar.bool` standard
@@ -128,10 +160,17 @@ Pour publier l'ensemble dans le registre après `golem login`, lancer
 et `base` en dernier, car `base` dépend des versions standard listées dans son
 manifeste.
 
+Avant de construire un paquet qui déclare des dépendances, Golem vérifie les
+modules installés dans `modules/` et les copie récursivement dans `vendor/`.
+L’archive contient ces copies; le chargeur Goscript cherche ensuite les imports
+dans le `vendor/` du paquet. Le paquet construit peut donc être déplacé ou lancé
+après suppression des dépendances installées séparément.
+
 `make install` installe `gd`, le lanceur Golem, le builtin Goscript et le code
 interne du gestionnaire sous `share/goscript`. Il ne crée pas de répertoires
 globaux `lib/` ou `modules/`; Golem installe les paquets standard dans le
-`modules/` du projet courant.
+`modules/` du projet courant, sauf `golem install --local .` qui installe
+explicitement le paquet et sa commande dans le préfixe partagé.
 
 `install.sh` télécharge uniquement l'archive binaire de la release GitHub qui
 correspond au système, vérifie son SHA-256 et installe ces commandes. Il ne

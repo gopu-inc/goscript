@@ -4,17 +4,23 @@
 #include <stdint.h>
 #include <unistd.h>
 #include <limits.h>
+#include <libgen.h>
+#include <sys/stat.h>
 #include "ast/ast.h"
 #include "bytecode/bytecode.h"
+#include "vm/vm.h"
+#include "lexer/token_cache.h"
 
 extern ASTNode* program_root;
 extern FILE* yyin;
 extern int yyparse(void);
 extern void interpret_program(ASTNode* program);
+extern char* resolve_module_path(char* current_file, char* import_path);
 
 // ========== VARIABLES GLOBALES POUR LES ARGUMENTS CLI ==========
 int goscript_argc = 0;
 char** goscript_argv = NULL;
+char* goscript_current_file = NULL;
 // ================================================================
 
 // ========== PROTOTYPES ==========
@@ -65,6 +71,9 @@ typedef struct {
     int repl_mode;          // -i, --interactive
     int show_help;          // -h, --help
     int show_version;       // -v, --version
+    int module_mode;        // -c, --module
+    int vm_mode;            // --vm (native stack VM)
+    char* module_name;
     char* output_file;      // -o, --output
     char* filename;         // Fichier à exécuter
     int script_args_start;  // Index où commencent les arguments du script
@@ -74,6 +83,26 @@ static int ends_with(const char* s, const char* suffix) {
     if (!s || !suffix) return 0;
     size_t sl = strlen(s), su = strlen(suffix);
     return sl >= su && strcmp(s + sl - su, suffix) == 0;
+}
+
+static char* token_cache_source_path(const char* cache_path) {
+    static const char suffix[] = ".goscript.gbc";
+    size_t path_len = cache_path ? strlen(cache_path) : 0;
+    size_t suffix_len = sizeof(suffix) - 1;
+    if (path_len <= suffix_len || strcmp(cache_path + path_len - suffix_len, suffix) != 0) return NULL;
+    char* base_copy = strdup(cache_path);
+    char* dir_copy = strdup(cache_path);
+    if (!base_copy || !dir_copy) { free(base_copy); free(dir_copy); return NULL; }
+    const char* base = basename(base_copy);
+    char* cache_dir = dirname(dir_copy);
+    char* project_dir = dirname(cache_dir);
+    size_t stem_len = strlen(base) - suffix_len;
+    size_t needed = strlen(project_dir) + stem_len + sizeof("/.gjs");
+    char* source_path = malloc(needed);
+    if (source_path) snprintf(source_path, needed, "%s/%.*s.gjs", project_dir, (int)stem_len, base);
+    free(base_copy);
+    free(dir_copy);
+    return source_path;
 }
 
 static char* read_file_text(const char* path, size_t* out_len) {
@@ -90,6 +119,85 @@ static char* read_file_text(const char* path, size_t* out_len) {
     if (out_len) *out_len = n;
     fclose(f);
     return buf;
+}
+
+static char* module_manifest_entry(const char* root) {
+    char path[PATH_MAX], line[PATH_MAX], section[64] = "";
+    int n = snprintf(path, sizeof(path), "%s/Manifest.toml", root);
+    if (n <= 0 || (size_t)n >= sizeof(path)) return NULL;
+    FILE* manifest = fopen(path, "rb");
+    if (!manifest) return NULL;
+    char main_entry[PATH_MAX] = "";
+    while (fgets(line, sizeof(line), manifest)) {
+        char* cursor = line;
+        while (*cursor == ' ' || *cursor == '\t' || *cursor == '\r') cursor++;
+        if (*cursor == '[') {
+            char* close = strchr(cursor, ']');
+            if (close) { *close = 0; snprintf(section, sizeof(section), "%s", cursor + 1); }
+            continue;
+        }
+        if (strcmp(section, "metadata") != 0) continue;
+        char* equals = strchr(cursor, '=');
+        if (!equals) continue;
+        *equals = 0;
+        char* key = cursor;
+        char* key_end = key + strlen(key);
+        while (key_end > key && (key_end[-1] == ' ' || key_end[-1] == '\t')) *--key_end = 0;
+        while (*key == ' ' || *key == '\t') key++;
+        char* field = equals + 1;
+        while (*field == ' ' || *field == '\t') field++;
+        if (*field != '"') continue;
+        field++;
+        char* quote = strchr(field, '"');
+        if (!quote) continue;
+        *quote = 0;
+        if (!strcmp(key, "entry") || !strcmp(key, "entrypoint")) {
+            fclose(manifest);
+            return strdup(field);
+        }
+        if (!strcmp(key, "main")) snprintf(main_entry, sizeof(main_entry), "%s", field);
+    }
+    fclose(manifest);
+    return main_entry[0] ? strdup(main_entry) : NULL;
+}
+
+static char* resolve_module_entry(char* module_name) {
+    if (!module_name || !*module_name) return NULL;
+    char* resolved = resolve_module_path(NULL, module_name);
+    if (!resolved) return NULL;
+    char root[PATH_MAX];
+    struct stat st;
+    int is_package_entry = 0;
+    if (ends_with(resolved, "/__self__.gjs")) {
+        snprintf(root, sizeof(root), "%s", resolved);
+        char* slash = strrchr(root, '/');
+        if (!slash) { free(resolved); return NULL; }
+        *slash = '\0';
+        is_package_entry = 1;
+    } else if (stat(resolved, &st) == 0 && S_ISDIR(st.st_mode)) {
+        snprintf(root, sizeof(root), "%s", resolved);
+        is_package_entry = 1;
+    }
+    if (!is_package_entry) return resolved;
+    char* entry = module_manifest_entry(root);
+    if (!entry) entry = strdup("main.gjs");
+    if (!entry || !*entry || entry[0] == '/' || strstr(entry, "..")) {
+        free(entry); free(resolved); return NULL;
+    }
+    char candidate[PATH_MAX];
+    int n = snprintf(candidate, sizeof(candidate), "%s/%s", root, entry);
+    free(entry);
+    if (n > 0 && (size_t)n < sizeof(candidate) && access(candidate, R_OK) == 0) {
+        free(resolved);
+        return strdup(candidate);
+    }
+    n = snprintf(candidate, sizeof(candidate), "%s/__main__.gjs", root);
+    if (n > 0 && (size_t)n < sizeof(candidate) && access(candidate, R_OK) == 0) {
+        free(resolved);
+        return strdup(candidate);
+    }
+    free(resolved);
+    return NULL;
 }
 
 static FILE* make_tmp_source(const char* source) {
@@ -206,6 +314,18 @@ GoscriptOptions parse_options(int argc, char** argv) {
     while (i < argc) {
         char* arg = argv[i];
         if (strcmp(arg, "--") == 0) { opts.script_args_start = i + 1; break; }
+        if (strcmp(arg, "-c") == 0 || strcmp(arg, "--module") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "Error: %s requires a module name\n", arg);
+                opts.show_help = 1;
+                break;
+            }
+            opts.module_mode = 1;
+            opts.module_name = argv[++i];
+            opts.filename = opts.module_name;
+            opts.script_args_start = i + 1;
+            break;
+        }
         if (arg[0] != '-' || strcmp(arg, "-") == 0) {
             if (!opts.filename) {
                 opts.filename = arg;
@@ -220,6 +340,7 @@ GoscriptOptions parse_options(int argc, char** argv) {
         if (strcmp(arg, "--debug") == 0) opts.debug_mode = 1;
         else if (strcmp(arg, "--interactive") == 0) opts.repl_mode = 1;
         else if (strcmp(arg, "--bytecode") == 0) opts.bytecode_mode = 1;
+        else if (strcmp(arg, "--vm") == 0) opts.vm_mode = 1;
         else if (strcmp(arg, "--dump-bytecode") == 0) { opts.dump_bytecode = 1; opts.bytecode_mode = 1; }
         else if (strcmp(arg, "--emit-gbc") == 0) opts.emit_gbc = 1;
         else if (strcmp(arg, "--emit-native-gbc") == 0 || strcmp(arg, "--emit-obj") == 0) opts.emit_native_gbc = 1;
@@ -261,9 +382,12 @@ void show_help(const char* program_name) {
     printf("Goscript - A modern scripting language\n");
     printf("Version: 0.2.0\n\n");
     printf("Usage: %s [options] <script.gjs> [script-args...]\n\n", program_name);
+    printf("       %s -c <module> [module-args...]\n\n", program_name);
     printf("Options:\n");
+    printf("  -c, --module NAME   Run a package's main.gjs (__main__.gjs fallback)\n");
     printf("  -d, --debug         Show AST before execution\n");
     printf("  -b, --bytecode       Run through the bytecode VM\n");
+    printf("      --vm             Run through the stack VM (supported subset)\n");
     printf("  -e, --emit-gbc       Emit .gbc package\n");
     printf("  -n, --emit-native-gbc Emit runtime-backed ELF launcher object\n");
     printf("  -o, --output FILE    Output package/object path\n");
@@ -294,6 +418,7 @@ void show_version(void) {
 int main(int argc, char** argv) {
     // Parser les options
     GoscriptOptions opts = parse_options(argc, argv);
+    int program_status = 0;
     const char* executable_name = strrchr(argv[0], '/');
     executable_name = executable_name ? executable_name + 1 : argv[0];
     if (executable_name && strcmp(executable_name, "gbc") == 0 &&
@@ -331,19 +456,56 @@ int main(int argc, char** argv) {
     // Charger le fichier source ou .gbc
     char* source_text = NULL;
     char* loaded_bc_dump = NULL;
+    char* cache_source = NULL;
+    int token_cache_input = 0;
     uint32_t gbc_flags = 0;
-    if (ends_with(opts.filename, ".gbc")) {
-        if (!read_gbc_file(opts.filename, &source_text, &loaded_bc_dump, &gbc_flags)) {
-            fprintf(stderr, "Error: Cannot open GBC '%s'\n", opts.filename);
+    char* module_entry = NULL;
+    if (opts.module_mode) {
+        module_entry = resolve_module_entry(opts.module_name);
+        if (!module_entry) {
+            fprintf(stderr, "Error: Cannot find module '%s' or its entry point\n", opts.module_name);
             free_script_args();
             return 1;
         }
-        opts.bytecode_mode = 1;
+        opts.filename = module_entry;
+    }
+    goscript_current_file = opts.filename;
+    if (ends_with(opts.filename, ".gbc")) {
+        if (!read_gbc_file(opts.filename, &source_text, &loaded_bc_dump, &gbc_flags)) {
+            if (!gs_token_cache_load_file(opts.filename)) {
+                fprintf(stderr, "Error: Cannot open GBC or Goscript token cache '%s'\n", opts.filename);
+                free_script_args();
+                free(module_entry);
+                return 1;
+            }
+            cache_source = token_cache_source_path(opts.filename);
+            if (!cache_source) {
+                fprintf(stderr, "Error: Cannot determine the source path for cache '%s'\n", opts.filename);
+                gs_token_cache_finish();
+                free_script_args();
+                free(module_entry);
+                return 1;
+            }
+            source_text = strdup("");
+            if (!source_text) {
+                gs_token_cache_finish();
+                free(cache_source);
+                free_script_args();
+                free(module_entry);
+                return 1;
+            }
+            opts.filename = cache_source;
+            goscript_current_file = cache_source;
+            token_cache_input = 1;
+        } else {
+            opts.bytecode_mode = 1;
+        }
     } else {
         source_text = read_file_text(opts.filename, NULL);
         if (!source_text) {
             fprintf(stderr, "Error: Cannot open '%s'\n", opts.filename);
             free_script_args();
+            free(module_entry);
             return 1;
         }
     }
@@ -354,18 +516,24 @@ int main(int argc, char** argv) {
         fprintf(stderr, "Error: Cannot create temp source\n");
         free(source_text);
         free(loaded_bc_dump);
+        free(cache_source);
         free_script_args();
+        free(module_entry);
         return 1;
     }
 
+    if (!token_cache_input) gs_token_cache_prepare(opts.filename, source_text, strlen(source_text));
     int parse_result = yyparse();
+    gs_token_cache_finish();
     fclose(yyin);
 
     if (parse_result != 0 || !program_root) {
         fprintf(stderr, "Error: Parsing failed\n");
         free(source_text);
         free(loaded_bc_dump);
+        free(cache_source);
         free_script_args();
+        free(module_entry);
         return 1;
     }
 
@@ -425,7 +593,15 @@ int main(int argc, char** argv) {
     }
 
     // Exécuter le programme
-    if (opts.bytecode_mode) {
+    if (opts.vm_mode) {
+        VMResult vm_result = vm_execute(program_root, NULL);
+        if (vm_result == VM_COMPILE_ERROR) {
+            fprintf(stderr, "Error: this program uses a construct not yet supported by --vm\n");
+            program_status = 1;
+        } else if (vm_result != VM_OK) {
+            program_status = 1;
+        }
+    } else if (opts.bytecode_mode) {
         interpret_program_bytecode(program_root, opts.dump_bytecode);
     } else {
         interpret_program(program_root);
@@ -435,8 +611,10 @@ cleanup:
     free_ast(program_root);
     free(source_text);
     free(loaded_bc_dump);
+    free(cache_source);
     free_script_args();
-    return 0;
+    free(module_entry);
+    return program_status;
 }
 
 // ========== FONCTION D'AFFICHAGE DE L'AST ==========
